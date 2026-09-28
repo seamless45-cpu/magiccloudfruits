@@ -33,6 +33,15 @@ as `HTTP 403 Blocked request. This host is not allowed.`
 
 ## Troubleshooting a blank screen
 
+**Symptom → cause**
+
+| What you see | What it means |
+| --- | --- |
+| **White screen** | The HTML loaded but the JavaScript never ran — the dev/preview server had stopped (the page was served from a cache or an "offline" shell), or JS is disabled. Reload once the server is up. |
+| Dark screen, "Booting arena…" forever | Same as above; the 12s watchdog then names the script it could not load. |
+| Dark screen, "3D ARENA FAILED TO START" | The script ran but WebGL2 or a rendering call failed — the red line gives the exact reason. |
+| HUD panels visible, 3D world black | GPU cannot render to half-float targets; handled automatically, otherwise lower the graphics preset. |
+
 The app now reports failures instead of showing an empty canvas:
 
 - **"3D ARENA FAILED TO START"** panel — shows a copyable diagnostic line naming the
