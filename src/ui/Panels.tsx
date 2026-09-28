@@ -1,0 +1,92 @@
+import { useRef, useState, type ReactNode } from 'react';
+import type { Game } from '../game/Game';
+import { PRESETS, MAX_ZOOM, MIN_ZOOM } from '../game/Game';
+import type { GraphicsSettings } from '../game/types';
+
+export function Inventory({ game, equipped }: { game: Game; equipped: number }) {
+  const keyLabel = (i: number) => (i < 9 ? String(i + 1) : i === 9 ? '0' : '-');
+  return (
+    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
+      <div className="flex gap-1 items-end">
+        {game.items.map((it, i) => (
+          <button key={it.id} className={`slot ${equipped === i ? 'eq' : ''}`} onClick={() => game.toggleEquip(i)} title={`${it.name} (${it.type})`}>
+            <span className="absolute top-0.5 left-1 text-[9px] font-orb text-cyan-200/70">{keyLabel(i)}</span>
+            <span className="absolute top-0.5 right-1 text-[7px] font-orb" style={{ color: it.type === 'fruit' ? '#9dffb0' : '#ffcf7a' }}>{it.type === 'fruit' ? 'FRT' : 'SWD'}</span>
+            <span className="block text-[22px] max-sm:text-[16px] leading-none mt-1" style={{ color: it.color, textShadow: `0 0 10px ${it.color}` }}>{it.glyph}</span>
+            <span className="absolute bottom-0.5 left-0 right-0 text-[8px] max-sm:text-[6px] font-semibold truncate px-0.5 text-cyan-50/90">{it.name.replace(' Fruit', '').replace(' (Thunder)', '').replace(' (Quake)', '')}</span>
+            {equipped === i && <span className="absolute -top-px left-2 right-2 h-[2px]" style={{ background: it.color, boxShadow: `0 0 8px ${it.color}` }} />}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return <label className="flex items-center justify-between gap-3 py-1 border-b border-cyan-300/10 text-[12px]"><span className="text-cyan-100/80">{label}</span><span className="flex items-center gap-2">{children}</span></label>;
+}
+
+export function Settings({ settings, onChange, onClose }: { settings: GraphicsSettings; onChange: (s: GraphicsSettings) => void; onClose: () => void }) {
+  const set = <K extends keyof GraphicsSettings>(k: K, v: GraphicsSettings[K]) => onChange({ ...settings, [k]: v });
+  const num = (k: keyof GraphicsSettings, min: number, max: number, step: number, fmt = (v: number) => v.toFixed(2)) => (
+    <><input type="range" min={min} max={max} step={step} value={settings[k] as number} onChange={e => set(k, +e.target.value as any)} className="w-28" /><span className="w-12 text-right font-orb text-[10px]">{fmt(settings[k] as number)}</span></>
+  );
+  const tog = (k: keyof GraphicsSettings) => <button className={`sf-btn px-2 text-[10px] font-orb ${settings[k] ? 'on' : ''}`} onClick={() => set(k, !settings[k] as any)}>{settings[k] ? 'ON' : 'OFF'}</button>;
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/40 pointer-events-auto z-50" onPointerDown={e => e.stopPropagation()}>
+      <div className="sf-panel w-[420px] max-w-[94vw] max-h-[88vh] overflow-y-auto p-4">
+        <div className="flex justify-between items-center mb-2"><h2 className="font-orb text-sm sf-glow text-cyan-200">ADVANCED GRAPHICS SETTINGS</h2><button className="sf-btn px-2 text-xs" onClick={onClose}>✕</button></div>
+        <div className="flex gap-1 mb-2">
+          {(['low', 'medium', 'high', 'ultra'] as const).map(p => <button key={p} className={`sf-btn flex-1 py-1 text-[10px] font-orb ${settings.preset === p ? 'on' : ''}`} onClick={() => onChange({ ...settings, ...PRESETS[p], preset: p })}>{p.toUpperCase()}</button>)}
+        </div>
+        <Row label="Render Resolution">{num('resolution', 0.4, 1.5, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
+        <Row label="Shadows">{tog('shadows')}</Row>
+        <Row label="Shadow Resolution"><select value={settings.shadowRes} onChange={e => set('shadowRes', +e.target.value)} className="text-[11px] px-1">{[512, 1024, 2048, 4096].map(v => <option key={v} value={v}>{v}</option>)}</select></Row>
+        <Row label="Bloom / Glow">{tog('bloom')}</Row>
+        <Row label="Bloom Strength">{num('bloomStrength', 0, 2.5, 0.05)}</Row>
+        <Row label="FXAA Anti-Aliasing">{tog('antialiasFxaa')}</Row>
+        <Row label="Particle Density">{num('particles', 0.1, 1, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
+        <Row label="Debris Density">{num('debris', 0.1, 1, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
+        <Row label="Cloud Detail">{num('clouds', 0.3, 1.5, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
+        <Row label="Max Lightning Bolts">{num('maxBolts', 20, 500, 10, v => `${v}`)}</Row>
+        <Row label="Draw Distance">{num('drawDistance', 5000, 60000, 1000, v => `${(v / 1000).toFixed(0)} km`)}</Row>
+        <Row label="Atmospheric Fog">{tog('fog')}</Row>
+        <Row label="Exposure">{num('exposure', 0.5, 2, 0.05)}</Row>
+        <Row label="Camera Shake (position only)">{num('shake', 0, 2, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
+        <Row label="Show FPS">{tog('showFps')}</Row>
+        <p className="text-[10px] text-cyan-200/50 mt-2">Settings apply instantly. Lightning segments re-rotate every 0.01s via GPU-expanded ribbons (no geometry rebuilds).</p>
+      </div>
+    </div>
+  );
+}
+
+export function MobileControls({ game }: { game: Game }) {
+  const base = useRef<HTMLDivElement>(null); const [knob, setKnob] = useState({ x: 0, y: 0 }); const id = useRef<number | null>(null);
+  const move = (cx: number, cy: number) => { const r = base.current!.getBoundingClientRect(); let x = (cx - (r.left + r.width / 2)) / (r.width / 2), y = (cy - (r.top + r.height / 2)) / (r.height / 2); const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } game.joy.x = x; game.joy.y = y; setKnob({ x, y }); };
+  const end = () => { id.current = null; game.joy.x = 0; game.joy.y = 0; setKnob({ x: 0, y: 0 }); };
+  return (
+    <>
+      <div ref={base} className="absolute left-5 bottom-24 w-32 h-32 rounded-full border border-cyan-300/40 bg-cyan-400/5 pointer-events-auto touch-none"
+        onPointerDown={e => { e.stopPropagation(); id.current = e.pointerId; (e.target as HTMLElement).setPointerCapture(e.pointerId); move(e.clientX, e.clientY); }}
+        onPointerMove={e => { if (id.current === e.pointerId) move(e.clientX, e.clientY); }} onPointerUp={end} onPointerCancel={end}>
+        <div className="absolute w-12 h-12 rounded-full bg-cyan-300/30 border border-cyan-200/70 shadow-[0_0_16px_rgba(51,224,255,.5)]" style={{ left: `calc(50% - 24px + ${knob.x * 40}px)`, top: `calc(50% - 24px + ${knob.y * 40}px)` }} />
+      </div>
+      <div className="absolute left-40 bottom-24 flex flex-col gap-2 pointer-events-auto">
+        <button className="sf-btn w-16 h-16 font-orb text-[11px]" onPointerDown={e => { e.stopPropagation(); game.doM1(); }}>ATK</button>
+        <button className="sf-btn w-16 h-10 font-orb text-[10px]" onPointerDown={e => { e.stopPropagation(); game.jump(); }}>JUMP</button>
+      </div>
+    </>
+  );
+}
+
+/** Zoom control usable on PC, laptop (touchpad), mobile, console & TV remotes (focusable buttons + slider). */
+export function ZoomControl({ game, zoom }: { game: Game; zoom: number }) {
+  return (
+    <div className="sf-panel absolute right-2 bottom-2 p-1.5 flex items-center gap-1 pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
+      <button className="sf-btn w-7 h-7 font-orb text-sm" onClick={() => game.zoomBy(-10)} aria-label="Zoom in">+</button>
+      <input type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={1} value={zoom} onChange={e => game.setZoom(+e.target.value)} className="w-20 max-sm:w-14" aria-label="Camera distance" />
+      <button className="sf-btn w-7 h-7 font-orb text-sm" onClick={() => game.zoomBy(10)} aria-label="Zoom out">−</button>
+      <span className="font-orb text-[9px] w-12 text-right text-cyan-100">{zoom.toFixed(0)}m</span>
+    </div>
+  );
+}
