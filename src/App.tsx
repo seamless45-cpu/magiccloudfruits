@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Game, defaultSettings } from './game/Game';
+import { Game, PRESETS, defaultSettings } from './game/Game';
 import type { GraphicsSettings } from './game/types';
 import { SkillBar } from './ui/SkillBar';
 import { Inventory, Settings, MobileControls, ZoomControl } from './ui/Panels';
@@ -7,11 +7,61 @@ import { Inventory, Settings, MobileControls, ZoomControl } from './ui/Panels';
 type Snap = ReturnType<Game['snapshot']>;
 const fmt = (n: number) => (n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n.toFixed(0));
 
+/** `?safe=1` starts with minimal graphics: a heavy preset can stall or fail to boot on weak GPUs. */
+const safeSettings = (): GraphicsSettings => ({ ...defaultSettings(), ...PRESETS.low, preset: 'low' });
+
+/** Stored settings are user-writable, so validate everything: NaN/out-of-range values would
+ *  otherwise be passed straight into pixel ratio, camera planes and shadow map sizes. */
+const clampSettings = (raw: unknown): GraphicsSettings => {
+  const d = defaultSettings();
+  const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<GraphicsSettings>;
+  const num = (v: unknown, lo: number, hi: number, fallback: number) =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
+  const bool = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback);
+  const preset = (['low', 'medium', 'high', 'ultra'] as const).includes(s.preset as GraphicsSettings['preset'])
+    ? (s.preset as GraphicsSettings['preset']) : d.preset;
+  return {
+    preset,
+    resolution: num(s.resolution, 0.4, 1.5, d.resolution),
+    shadows: bool(s.shadows, d.shadows),
+    shadowRes: [512, 1024, 2048, 4096].includes(s.shadowRes as number) ? (s.shadowRes as number) : d.shadowRes,
+    bloom: bool(s.bloom, d.bloom),
+    bloomStrength: num(s.bloomStrength, 0, 2.5, d.bloomStrength),
+    particles: num(s.particles, 0.1, 1, d.particles),
+    debris: num(s.debris, 0.1, 1, d.debris),
+    maxBolts: num(s.maxBolts, 20, 500, d.maxBolts),
+    fog: bool(s.fog, d.fog),
+    exposure: num(s.exposure, 0.5, 2, d.exposure),
+    shake: num(s.shake, 0, 2, d.shake),
+    showFps: bool(s.showFps, d.showFps),
+    antialiasFxaa: bool(s.antialiasFxaa, d.antialiasFxaa),
+    drawDistance: num(s.drawDistance, 1000, 60000, d.drawDistance),
+    clouds: num(s.clouds, 0.3, 1.5, d.clouds),
+  };
+};
+
+/** Weak devices (few cores / little memory) start on a lighter preset so booting stays quick. */
+const devicePreset = (): GraphicsSettings => {
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const weak = (nav.hardwareConcurrency || 8) <= 4 || (nav.deviceMemory !== undefined && nav.deviceMemory <= 4);
+  return weak ? { ...defaultSettings(), ...PRESETS.medium, preset: 'medium' } : defaultSettings();
+};
+
+const initialSettings = (): GraphicsSettings => {
+  try {
+    if (new URLSearchParams(location.search).has('safe')) return safeSettings();
+    const stored = localStorage.getItem('f1090gfx');
+    return stored ? clampSettings(JSON.parse(stored)) : devicePreset();
+  } catch {
+    return defaultSettings();
+  }
+};
+
 export default function App() {
   const host = useRef<HTMLDivElement>(null); const overlay = useRef<HTMLDivElement>(null);
   const [game, setGame] = useState<Game | null>(null);
   const [snap, setSnap] = useState<Snap | null>(null);
-  const [settings, setSettings] = useState<GraphicsSettings>(() => { try { return { ...defaultSettings(), ...JSON.parse(localStorage.getItem('f1090gfx') || '{}') }; } catch { return defaultSettings(); } });
+  const [settings, setSettings] = useState<GraphicsSettings>(initialSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [help, setHelp] = useState(true);
   const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
@@ -53,7 +103,7 @@ export default function App() {
     return () => { clearInterval(iv); cancelAnimationFrame(raf); window.removeEventListener('keydown', kd); window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej); g.dispose(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const changeSettings = (s: GraphicsSettings) => { setSettings(s); game?.applySettings(s); localStorage.setItem('f1090gfx', JSON.stringify(s)); };
+  const changeSettings = (s: GraphicsSettings) => { setSettings(clampSettings(s)); game?.applySettings(clampSettings(s)); localStorage.setItem('f1090gfx', JSON.stringify(clampSettings(s))); };
   const touch = game?.isTouch ?? false;
   const item = game && snap && snap.equipped >= 0 ? game.items[snap.equipped] : null;
 
@@ -68,7 +118,11 @@ export default function App() {
             <div className="text-cyan-300/70 mb-2">Diagnostic — copy this line if you report the problem:</div>
             <div className="font-orb text-[10px] text-rose-200/90 break-all mb-3 bg-black/30 p-2">{fatal}</div>
             <div className="mb-1">The 2D interface still works; only the 3D view could not start.</div>
-            <div className="text-cyan-300/70">Common causes: WebGL2 disabled or unsupported, blocklisted GPU driver, browser running in a restricted/headless mode, or a rendering error thrown after startup.</div>
+            <div className="text-cyan-300/70 mb-3">Common causes: WebGL2 disabled or unsupported, blocklisted GPU driver, browser running in a restricted/headless mode, or graphics settings that are too heavy.</div>
+            <div className="flex gap-2 pointer-events-auto">
+              <button className="sf-btn px-3 py-1 font-orb text-[10px]" onClick={() => location.reload()}>RETRY</button>
+              <button className="sf-btn px-3 py-1 font-orb text-[10px]" onClick={() => { try { localStorage.removeItem('f1090gfx'); } catch { /* ignore */ } location.href = location.pathname + '?safe=1'; }}>SAFE MODE</button>
+            </div>
           </div>
         </div>
       )}

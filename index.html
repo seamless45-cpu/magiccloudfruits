@@ -15,6 +15,11 @@
       #boot .hint { font-size: 12px; line-height: 1.6; color: #6f9ab0; margin-top: 10px; }
       #boot code { color: #ffd479; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; }
       .dots::after { content: ''; animation: d 1.2s steps(4, end) infinite; }
+      #boot .actions { display: none; justify-content: center; gap: 10px; margin-top: 16px; }
+      #boot .btn { font: inherit; font-size: 12px; letter-spacing: .12em; color: #bff3ff; cursor: pointer;
+        background: linear-gradient(180deg, rgba(40,200,255,.18), rgba(40,200,255,.05));
+        border: 1px solid rgba(80,220,255,.45); border-radius: 3px; padding: 7px 18px; }
+      #boot .btn:hover { background: rgba(51,224,255,.3); }
       @keyframes d { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -32,6 +37,10 @@
         <div class="title">1090 FRUITS // OPERATOR</div>
         <div class="msg" id="boot-msg">Booting arena<span class="dots"></span></div>
         <div class="hint" id="boot-hint"></div>
+        <div class="actions" id="boot-actions">
+          <button type="button" class="btn" onclick="location.reload()">RETRY</button>
+          <button type="button" class="btn" onclick="location.href = location.pathname + '?safe=1'">SAFE MODE</button>
+        </div>
         <noscript>
           <div class="msg" style="margin-top:14px">JavaScript is disabled in this browser.</div>
           <div class="hint">The 3D arena is rendered entirely by JavaScript, so it cannot start without it.
@@ -39,60 +48,61 @@
         </noscript>
       </div>
     </div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/main.tsx" onerror="window.__bootScriptFailed = true"></script>
     <script>
-      // Boot watchdog. Handles the two ways a page can "boot forever":
-      //  1. the browser is showing a stale cached copy whose script no longer exists -> reload once
-      //     with a cache-busting parameter (loop-proof: skipped if the URL already carries it);
-      //  2. the app really cannot start -> explain why, naming the script that failed.
+      // Boot watchdog.
+      //
+      // IMPORTANT: this must never reload the page on its own. An automatic reload can become an
+      // endless loop (a proxy that rewrites query strings defeats any cache-buster guard), which
+      // leaves the game unable to ever finish booting. Recovery is therefore offered as buttons
+      // the user presses - that is always loop-safe.
       (function () {
-        var mounted = function () {
-          var root = document.getElementById('root');
-          return !!(root && root.childElementCount > 0);
-        };
+        var root = function () { return document.getElementById('root'); };
+        var mounted = function () { return !!(root() && root().childElementCount > 0); };
         var started = function () { return !!(window.__appStarted || mounted()); };
-        var alreadyTried = new URLSearchParams(location.search).has('_boot');
+        var setMsg = function (html) {
+          var m = document.getElementById('boot-msg');
+          if (m && !mounted()) m.innerHTML = html;
+        };
 
-        // progress feedback while the bundle downloads and initialises
+        // Progress feedback: a slow first load must not look like a freeze.
         window.__bootTimer = setTimeout(function () {
-          if (started()) return;
-          var m = document.getElementById('boot-msg');
-          if (m) m.innerHTML = 'Downloading engine<span class="dots"></span>';
+          if (!started()) setMsg('Downloading engine<span class="dots"></span>');
         }, 1200);
-        // keeps the user informed instead of looking frozen while the game builds its world
         window.__bootSlowTimer = setTimeout(function () {
-          var root = document.getElementById('root');
-          if (root && root.childElementCount > 0) return;
-          var m = document.getElementById('boot-msg');
-          if (m) m.innerHTML = 'Building arena<span class="dots"></span>';
-        }, 3500);
-
-        setTimeout(function () {
-          if (started() || alreadyTried) return;
-          var u = new URL(location.href);
-          u.searchParams.set('_boot', Date.now().toString(36));
-          location.replace(u.toString());
-        }, 4500);
+          if (!mounted()) setMsg('Building arena<span class="dots"></span>');
+        }, 4000);
 
         setTimeout(function () {
           if (mounted()) return;
-          var msg = document.getElementById('boot-msg');
           var hint = document.getElementById('boot-hint');
-          if (!msg) return;
+          if (!hint) return;
+
           var scripts = document.querySelectorAll('script[src]');
           var list = [];
           for (var i = 0; i < scripts.length; i++) list.push(scripts[i].getAttribute('src'));
-          var cameUp = !!window.__appStarted;
-          msg.innerHTML = cameUp
-            ? 'The engine loaded but the arena did not appear.'
-            : 'The game script never ran.';
-          hint.innerHTML =
-            (cameUp
-              ? 'The script executed, so this is a rendering/setup failure.'
-              : 'The page loaded from cache or from the server, but its script could not be fetched — ' +
-                'usually because the dev/preview server stopped.') +
-            '<br>Requested scripts: <code>' + (list.join('</code>, <code>') || 'none') + '</code>' +
-            '<br>Restart it with <code>npm install &amp;&amp; npm run dev</code> (or <code>python3 serve.py</code>) and reload.';
+          var scriptFailed = !!window.__bootScriptFailed;
+          var cameUp = !!window.__appStarted;   // module executed but React never committed
+          var listed = list.length ? '<code>' + list.join('</code>, <code>') + '</code>' : 'its script';
+
+          if (scriptFailed) {
+            setMsg('The game script could not be loaded.');
+            hint.innerHTML = 'The page loaded, but ' + listed + ' was not fetched - usually the ' +
+              'dev/preview server has stopped. Start it again, then press RETRY:' +
+              '<br><code>npm install &amp;&amp; npm run dev</code> &nbsp;or&nbsp; <code>python3 serve.py</code>';
+          } else if (cameUp) {
+            setMsg('The engine loaded but the arena did not appear.');
+            hint.innerHTML = 'The game script ran, so this is a graphics or setup problem (low-end GPU, ' +
+              'slow shader compile, or graphics settings that are too heavy).' +
+              '<br>Press SAFE MODE to start with minimal graphics, or wait a little longer.';
+          } else {
+            setMsg('The game is taking longer than expected to start.');
+            hint.innerHTML = listed + ' is still loading - expected on a slow connection or slow machine.' +
+              '<br>Wait a little longer, or press RETRY to load it again.';
+          }
+
+          var actions = document.getElementById('boot-actions');
+          if (actions) actions.style.display = 'flex';
         }, 8000);
       })();
     </script>
