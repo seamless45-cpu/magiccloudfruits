@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+:root { --c: #33e0ff; --c2: #7a5cff; --bg: rgba(6, 14, 26, 0.72); --line: rgba(80, 220, 255, 0.35); }
+html, body, #root { margin: 0; height: 100%; overflow: hidden; background: #05070d; }
+body { font-family: 'Rajdhani', 'Segoe UI', system-ui, sans-serif; color: #dff6ff; user-select: none; -webkit-user-select: none; }
+.font-orb { font-family: 'Orbitron', 'Rajdhani', sans-serif; letter-spacing: 0.08em; }
+
+.sf-panel {
+  position: relative; background: linear-gradient(135deg, rgba(10, 26, 44, 0.82), rgba(6, 12, 24, 0.7));
+  border: 1px solid var(--line); backdrop-filter: blur(8px);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  box-shadow: inset 0 0 18px rgba(51, 224, 255, 0.08);
+}
+.sf-panel::before { content: ''; position: absolute; top: 0; left: 10px; width: 36px; height: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+.sf-panel::after { content: ''; position: absolute; bottom: 0; right: 10px; width: 36px; height: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+.sf-glow { text-shadow: 0 0 8px rgba(51, 224, 255, 0.7); }
+.sf-btn { background: linear-gradient(180deg, rgba(40, 200, 255, 0.18), rgba(40, 200, 255, 0.05)); border: 1px solid var(--line); color: #bff3ff; transition: all .15s; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+.sf-btn:hover { background: rgba(51, 224, 255, 0.28); box-shadow: 0 0 12px rgba(51, 224, 255, .4); }
+.sf-btn:active { transform: scale(0.96); }
+.sf-btn.on { background: rgba(51, 224, 255, 0.35); color: #fff; border-color: var(--c); }
+
+.skill-row { position: relative; overflow: hidden; border: 1px solid rgba(80, 220, 255, 0.22); background: rgba(8, 18, 32, 0.75); clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px); }
+.skill-fill { position: absolute; inset: 0; transform-origin: left center; background: linear-gradient(90deg, rgba(255, 60, 90, 0.55), rgba(255, 140, 60, 0.35)); pointer-events: none; }
+.skill-row.ready { border-color: rgba(80, 255, 200, 0.45); box-shadow: inset 0 0 10px rgba(60, 255, 190, 0.12); }
+
+.slot { width: 58px; height: 58px; position: relative; border: 1px solid rgba(80, 220, 255, 0.3); background: rgba(8, 18, 32, 0.78); clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); transition: all .12s; }
+.slot:hover { background: rgba(30, 60, 90, 0.85); }
+.slot.eq { border-color: var(--c); box-shadow: inset 0 0 16px rgba(51, 224, 255, 0.35); background: rgba(20, 60, 90, 0.85); }
+@media (max-width: 700px) { .slot { width: 44px; height: 44px; } }
+
+.hex-bar { height: 10px; background: rgba(255, 255, 255, 0.06); clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); overflow: hidden; }
+.toast-in { animation: tin .25s ease-out; }
+@keyframes tin { from { opacity: 0; transform: translateY(-8px) scale(.96); } to { opacity: 1; transform: none; } }
+input[type=range] { accent-color: #33e0ff; }
+select { background: #0a1626; color: #cff4ff; border: 1px solid var(--line); }
