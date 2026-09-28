@@ -41,25 +41,59 @@
     </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Watchdog: if the app has not mounted after 12s, say why instead of showing a blank page.
+      // Boot watchdog. Handles the two ways a page can "boot forever":
+      //  1. the browser is showing a stale cached copy whose script no longer exists -> reload once
+      //     with a cache-busting parameter (loop-proof: skipped if the URL already carries it);
+      //  2. the app really cannot start -> explain why, naming the script that failed.
       (function () {
-        var t = setTimeout(function () {
+        var mounted = function () {
           var root = document.getElementById('root');
-          if (root && root.childElementCount > 0) return; // mounted, boot screen already removed
+          return !!(root && root.childElementCount > 0);
+        };
+        var started = function () { return !!(window.__appStarted || mounted()); };
+        var alreadyTried = new URLSearchParams(location.search).has('_boot');
+
+        // progress feedback while the bundle downloads and initialises
+        window.__bootTimer = setTimeout(function () {
+          if (started()) return;
+          var m = document.getElementById('boot-msg');
+          if (m) m.innerHTML = 'Downloading engine<span class="dots"></span>';
+        }, 1200);
+        // keeps the user informed instead of looking frozen while the game builds its world
+        window.__bootSlowTimer = setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount > 0) return;
+          var m = document.getElementById('boot-msg');
+          if (m) m.innerHTML = 'Building arena<span class="dots"></span>';
+        }, 3500);
+
+        setTimeout(function () {
+          if (started() || alreadyTried) return;
+          var u = new URL(location.href);
+          u.searchParams.set('_boot', Date.now().toString(36));
+          location.replace(u.toString());
+        }, 4500);
+
+        setTimeout(function () {
+          if (mounted()) return;
           var msg = document.getElementById('boot-msg');
           var hint = document.getElementById('boot-hint');
           if (!msg) return;
-          msg.innerHTML = 'The 3D arena did not start loading.';
           var scripts = document.querySelectorAll('script[src]');
-          var failed = [];
-          for (var i = 0; i < scripts.length; i++) failed.push(scripts[i].getAttribute('src'));
+          var list = [];
+          for (var i = 0; i < scripts.length; i++) list.push(scripts[i].getAttribute('src'));
+          var cameUp = !!window.__appStarted;
+          msg.innerHTML = cameUp
+            ? 'The engine loaded but the arena did not appear.'
+            : 'The game script never ran.';
           hint.innerHTML =
-            'The page itself loaded, so the server is reachable, but the game script never ran.' +
-            '<br>Requested scripts: <code>' + (failed.join('</code>, <code>') || 'none') + '</code>' +
-            '<br>Usually this means the dev/preview server stopped or the script failed to load.' +
-            '<br>Restart it with <code>npm install &amp;&amp; npm run dev</code> and reload.';
-        }, 12000);
-        window.__bootTimer = t;
+            (cameUp
+              ? 'The script executed, so this is a rendering/setup failure.'
+              : 'The page loaded from cache or from the server, but its script could not be fetched — ' +
+                'usually because the dev/preview server stopped.') +
+            '<br>Requested scripts: <code>' + (list.join('</code>, <code>') || 'none') + '</code>' +
+            '<br>Restart it with <code>npm install &amp;&amp; npm run dev</code> (or <code>python3 serve.py</code>) and reload.';
+        }, 8000);
       })();
     </script>
   </body>

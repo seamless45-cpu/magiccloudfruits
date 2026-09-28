@@ -12,7 +12,14 @@ npm install
 npm run dev        # dev server on http://localhost:5173
 npm run build      # production bundle -> dist/index.html (single file)
 npm run preview    # serve the built bundle on http://localhost:4173
+
+# no-toolchain alternative: serve the built single file with no dependencies
+npm run build && python3 serve.py          # http://localhost:5173
 ```
+
+`serve.py` sends `Cache-Control: no-store`, so a browser can never end up holding a
+cached page while the server is down — the situation where a page sits on its boot
+screen forever waiting for a script that no longer exists.
 
 The dev server binds to all interfaces (`server.host: true`) and accepts any
 `Host` header (`server.allowedHosts: true`) so it also works behind sandbox /
@@ -37,8 +44,11 @@ as `HTTP 403 Blocked request. This host is not allowed.`
 
 | What you see | What it means |
 | --- | --- |
-| **White screen** | The HTML loaded but the JavaScript never ran — the dev/preview server had stopped (the page was served from a cache or an "offline" shell), or JS is disabled. Reload once the server is up. |
-| Dark screen, "Booting arena…" forever | Same as above; the 12s watchdog then names the script it could not load. |
+| **White screen** | The HTML loaded but the JavaScript never ran — the dev/preview server had stopped, or JS is disabled. Reload once the server is up. |
+| Dark screen, "Booting arena…" / "Downloading engine…" | The page loaded but the script has not executed yet; after 4.5s the page reloads itself once with a cache-buster, which clears stale cached copies. |
+| Dark screen, "Building arena…" then it starts | Normal on slow machines — the world is being constructed and shaders compiled. |
+| Dark screen, "The game script never ran." | The script could not be fetched (server stopped). The message names the exact script. |
+| Dark screen, "The engine loaded but the arena did not appear." | The script ran but setup failed — see the browser console for the exception. |
 | Dark screen, "3D ARENA FAILED TO START" | The script ran but WebGL2 or a rendering call failed — the red line gives the exact reason. |
 | HUD panels visible, 3D world black | GPU cannot render to half-float targets; handled automatically, otherwise lower the graphics preset. |
 
