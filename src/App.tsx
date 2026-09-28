@@ -15,9 +15,16 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [help, setHelp] = useState(true);
   const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
+  const [fatal, setFatal] = useState<string | null>(null);
 
   useEffect(() => {
-    const g = new Game(host.current!, settings); setGame(g); (window as any).game = g;
+    let g: Game;
+    try { g = new Game(host.current!, settings); } catch (e) {
+      console.error('[1090 Fruits] failed to start', e);
+      setFatal(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    setGame(g); (window as any).game = g;
     let tid = 0;
     g.onToast = (m, c) => { const id = ++tid; setToasts(t => [...t.slice(-4), { id, m, c }]); setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2200); };
     const iv = setInterval(() => setSnap(g.snapshot()), 100);
@@ -35,6 +42,16 @@ export default function App() {
     <div className="fixed inset-0 overflow-hidden">
       <div ref={host} className="absolute inset-0" />
       <div ref={overlay} className="absolute inset-0 pointer-events-none" style={{ opacity: 0, mixBlendMode: 'screen' }} />
+      {fatal && (
+        <div className="absolute inset-0 flex items-center justify-center p-6">
+          <div className="sf-panel max-w-[560px] p-5 text-[12px] leading-relaxed">
+            <div className="font-orb text-[12px] sf-glow text-cyan-200 mb-2">RENDERER OFFLINE</div>
+            <div className="mb-2">The 3D arena could not start. Your browser may not support WebGL2, or hardware acceleration is disabled.</div>
+            <div className="text-cyan-300/70 mb-2">Try: enable hardware acceleration, update your browser/GPU drivers, or open the page in Chrome/Edge/Firefox.</div>
+            <div className="font-orb text-[10px] text-rose-200/90 break-all">{fatal}</div>
+          </div>
+        </div>
+      )}
       {game && snap && (
         <div className="absolute inset-0 pointer-events-none">
           {/* Vitals */}
