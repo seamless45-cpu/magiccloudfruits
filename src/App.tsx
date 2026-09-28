@@ -18,12 +18,25 @@ export default function App() {
   const [fatal, setFatal] = useState<string | null>(null);
 
   useEffect(() => {
+    // Pre-flight: three.js r150+ needs WebGL2. Report precisely what is missing instead of a black screen.
+    const probe = document.createElement('canvas');
+    const gl2 = probe.getContext('webgl2') as WebGL2RenderingContext | null;
+    if (!gl2) {
+      const gl1 = probe.getContext('webgl') || probe.getContext('experimental-webgl');
+      setFatal(`WebGL2 context unavailable (WebGL1 ${gl1 ? 'present' : 'absent'}) · ${navigator.userAgent}`);
+      return;
+    }
+    try { (gl2.getExtension('WEBGL_lose_context') as { loseContext?: () => void } | null)?.loseContext?.(); } catch { /* ignore */ }
+    const onErr = (e: ErrorEvent) => setFatal(f => f ?? `Uncaught error: ${e.message || 'unknown'} (${e.filename}:${e.lineno})`);
+    const onRej = (e: PromiseRejectionEvent) => setFatal(f => f ?? `Unhandled rejection: ${String((e as PromiseRejectionEvent).reason)}`);
+    window.addEventListener('error', onErr); window.addEventListener('unhandledrejection', onRej);
     let g: Game;
     try { g = new Game(host.current!, settings); } catch (e) {
       console.error('[1090 Fruits] failed to start', e);
-      setFatal(e instanceof Error ? e.message : String(e));
+      setFatal((e instanceof Error ? `${e.name}: ${e.message}` : String(e)) + ' · ' + navigator.userAgent);
       return;
     }
+    g.onFatal = m => setFatal(`Render loop stopped — ${m}`);
     setGame(g); (window as any).game = g;
     let tid = 0;
     g.onToast = (m, c) => { const id = ++tid; setToasts(t => [...t.slice(-4), { id, m, c }]); setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2200); };
@@ -31,7 +44,7 @@ export default function App() {
     let raf = 0; const ov = () => { raf = requestAnimationFrame(ov); if (overlay.current) { overlay.current.style.background = g.overlay.color; overlay.current.style.opacity = String(Math.min(0.85, g.overlay.a)); } }; ov();
     const kd = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === 'o' || e.key === 'O') setShowSettings(s => !s); if (e.key === 'h' || e.key === 'H') setHelp(h => !h); };
     window.addEventListener('keydown', kd);
-    return () => { clearInterval(iv); cancelAnimationFrame(raf); window.removeEventListener('keydown', kd); g.dispose(); };
+    return () => { clearInterval(iv); cancelAnimationFrame(raf); window.removeEventListener('keydown', kd); window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej); g.dispose(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const changeSettings = (s: GraphicsSettings) => { setSettings(s); game?.applySettings(s); localStorage.setItem('f1090gfx', JSON.stringify(s)); };
@@ -44,11 +57,12 @@ export default function App() {
       <div ref={overlay} className="absolute inset-0 pointer-events-none" style={{ opacity: 0, mixBlendMode: 'screen' }} />
       {fatal && (
         <div className="absolute inset-0 flex items-center justify-center p-6">
-          <div className="sf-panel max-w-[560px] p-5 text-[12px] leading-relaxed">
-            <div className="font-orb text-[12px] sf-glow text-cyan-200 mb-2">RENDERER OFFLINE</div>
-            <div className="mb-2">The 3D arena could not start. Your browser may not support WebGL2, or hardware acceleration is disabled.</div>
-            <div className="text-cyan-300/70 mb-2">Try: enable hardware acceleration, update your browser/GPU drivers, or open the page in Chrome/Edge/Firefox.</div>
-            <div className="font-orb text-[10px] text-rose-200/90 break-all">{fatal}</div>
+          <div className="sf-panel max-w-[620px] p-5 text-[12px] leading-relaxed select-text">
+            <div className="font-orb text-[12px] sf-glow text-cyan-200 mb-2">3D ARENA FAILED TO START</div>
+            <div className="text-cyan-300/70 mb-2">Diagnostic — copy this line if you report the problem:</div>
+            <div className="font-orb text-[10px] text-rose-200/90 break-all mb-3 bg-black/30 p-2">{fatal}</div>
+            <div className="mb-1">The 2D interface still works; only the 3D view could not start.</div>
+            <div className="text-cyan-300/70">Common causes: WebGL2 disabled or unsupported, blocklisted GPU driver, browser running in a restricted/headless mode, or a rendering error thrown after startup.</div>
           </div>
         </div>
       )}
