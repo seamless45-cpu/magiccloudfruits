@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>1090 Fruits 3D — Sci-Fi Combat Arena</title>
+    <!-- Inline so the page is never a white screen, even if every external request fails. -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #05070d; color: #dff6ff;
+        font-family: 'Rajdhani', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      #boot { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; }
+      #boot .box { max-width: 620px; }
+      #boot .title { font-size: 15px; letter-spacing: .18em; color: #7fe6ff; margin-bottom: 10px; }
+      #boot .msg { font-size: 13px; line-height: 1.6; color: #9fdcf5; }
+      #boot .hint { font-size: 12px; line-height: 1.6; color: #6f9ab0; margin-top: 10px; }
+      #boot code { color: #ffd479; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; }
+      .dots::after { content: ''; animation: d 1.2s steps(4, end) infinite; }
+      @keyframes d { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Loaded non-blocking: a blocked or slow font CDN must never delay first paint
@@ -14,6 +27,40 @@
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot">
+      <div class="box">
+        <div class="title">1090 FRUITS // OPERATOR</div>
+        <div class="msg" id="boot-msg">Booting arena<span class="dots"></span></div>
+        <div class="hint" id="boot-hint"></div>
+        <noscript>
+          <div class="msg" style="margin-top:14px">JavaScript is disabled in this browser.</div>
+          <div class="hint">The 3D arena is rendered entirely by JavaScript, so it cannot start without it.
+            Enable JavaScript for this site, then reload.</div>
+        </noscript>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Watchdog: if the app has not mounted after 12s, say why instead of showing a blank page.
+      (function () {
+        var t = setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount > 0) return; // mounted, boot screen already removed
+          var msg = document.getElementById('boot-msg');
+          var hint = document.getElementById('boot-hint');
+          if (!msg) return;
+          msg.innerHTML = 'The 3D arena did not start loading.';
+          var scripts = document.querySelectorAll('script[src]');
+          var failed = [];
+          for (var i = 0; i < scripts.length; i++) failed.push(scripts[i].getAttribute('src'));
+          hint.innerHTML =
+            'The page itself loaded, so the server is reachable, but the game script never ran.' +
+            '<br>Requested scripts: <code>' + (failed.join('</code>, <code>') || 'none') + '</code>' +
+            '<br>Usually this means the dev/preview server stopped or the script failed to load.' +
+            '<br>Restart it with <code>npm install &amp;&amp; npm run dev</code> and reload.';
+        }, 12000);
+        window.__bootTimer = t;
+      })();
+    </script>
   </body>
 </html>

@@ -18,6 +18,12 @@ export default function App() {
   const [fatal, setFatal] = useState<string | null>(null);
 
   useEffect(() => {
+    // React has mounted: retire the inline boot screen from index.html.
+    clearTimeout((window as unknown as { __bootTimer?: number }).__bootTimer);
+    document.getElementById('boot')?.remove();
+  }, []);
+
+  useEffect(() => {
     // Pre-flight: three.js r150+ needs WebGL2. Report precisely what is missing instead of a black screen.
     const probe = document.createElement('canvas');
     const gl2 = probe.getContext('webgl2') as WebGL2RenderingContext | null;
