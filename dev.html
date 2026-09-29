@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>1090 Fruits 3D — Sci-Fi Combat Arena</title>
+    <!-- Inline so the page is never a white screen, even if every external request fails. -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #05070d; color: #dff6ff;
+        font-family: 'Rajdhani', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      #boot { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; }
+      #boot .box { max-width: 620px; }
+      #boot .title { font-size: 15px; letter-spacing: .18em; color: #7fe6ff; margin-bottom: 10px; }
+      #boot .msg { font-size: 13px; line-height: 1.6; color: #9fdcf5; }
+      #boot .hint { font-size: 12px; line-height: 1.6; color: #6f9ab0; margin-top: 10px; }
+      #boot code { color: #ffd479; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; }
+      .dots::after { content: ''; animation: d 1.2s steps(4, end) infinite; }
+      #boot .actions { display: none; justify-content: center; gap: 10px; margin-top: 16px; }
+      #boot .btn { font: inherit; font-size: 12px; letter-spacing: .12em; color: #bff3ff; cursor: pointer;
+        background: linear-gradient(180deg, rgba(40,200,255,.18), rgba(40,200,255,.05));
+        border: 1px solid rgba(80,220,255,.45); border-radius: 3px; padding: 7px 18px; }
+      #boot .btn:hover { background: rgba(51,224,255,.3); }
+      @keyframes d { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+    </style>
+    <!-- No external requests at all: the page loads nothing but the document itself, so a
+         blocked or 404-ing CDN can never show up as a console error or delay first paint. -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%2333e0ff'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="boot">
+      <div class="box">
+        <div class="title">1090 FRUITS // OPERATOR</div>
+        <div class="msg" id="boot-msg">Booting arena<span class="dots"></span></div>
+        <div class="hint" id="boot-hint"></div>
+        <div class="actions" id="boot-actions">
+          <button type="button" class="btn" onclick="go('/?r=' + Date.now())">RETRY</button>
+          <button type="button" class="btn" onclick="go('/?safe=1&r=' + Date.now())">SAFE MODE</button>
+        </div>
+        <noscript>
+          <div class="msg" style="margin-top:14px">JavaScript is disabled in this browser.</div>
+          <div class="hint">The 3D arena is rendered entirely by JavaScript, so it cannot start without it.
+            Enable JavaScript for this site, then reload.</div>
+        </noscript>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx" onerror="window.__bootScriptFailed = true"></script>
+    <script>
+      // Boot watchdog.
+      //
+      // IMPORTANT: this must never reload the page on its own. An automatic reload can become an
+      // endless loop (a proxy that rewrites query strings defeats any cache-buster guard), which
+      // leaves the game unable to ever finish booting. Recovery is therefore offered as buttons
+      // the user presses - that is always loop-safe.
+      (function () {
+        var root = function () { return document.getElementById('root'); };
+        var mounted = function () { return !!(root() && root().childElementCount > 0); };
+        var started = function () { return !!(window.__appStarted || mounted()); };
+        // Retry navigates to "/" with a cache-buster; safe mode adds ?safe=1. Query strings are
+        // enough on their own: if a proxy strips them we land on "/", which the server answers
+        // with the current build (it sends no-store), so nothing here can 404 or loop.
+        // /index.html and /safe also work when the server sees them (see serve.py).
+        window.go = function (path) { location.href = path; };
+        var setMsg = function (html) {
+          var m = document.getElementById('boot-msg');
+          if (m && !mounted()) m.innerHTML = html;
+        };
+
+        // Progress feedback: a slow first load must not look like a freeze.
+        window.__bootTimer = setTimeout(function () {
+          if (!started()) setMsg('Downloading engine<span class="dots"></span>');
+        }, 1200);
+        window.__bootSlowTimer = setTimeout(function () {
+          if (!mounted()) setMsg('Building arena<span class="dots"></span>');
+        }, 4000);
+
+        setTimeout(function () {
+          if (mounted()) return;
+          var hint = document.getElementById('boot-hint');
+          if (!hint) return;
+
+          var scripts = document.querySelectorAll('script[src]');
+          var list = [];
+          for (var i = 0; i < scripts.length; i++) list.push(scripts[i].getAttribute('src'));
+          var scriptFailed = !!window.__bootScriptFailed;
+          var cameUp = !!window.__appStarted;   // module executed but React never committed
+          var listed = list.length ? '<code>' + list.join('</code>, <code>') + '</code>' : 'its script';
+
+          if (scriptFailed) {
+            setMsg('The game script could not be loaded.');
+            hint.innerHTML = 'The page loaded, but ' + listed + ' was not fetched - usually this is a ' +
+              'cached page from an earlier session while the server has stopped or changed.' +
+              '<br>Press RETRY. If that keeps failing, force a fresh copy with <b>Ctrl+Shift+R</b> ' +
+              '(Cmd+Shift+R on Mac).' +
+              '<br>To restart the server: <code>npm run build &amp;&amp; python3 serve.py</code>';
+          } else if (cameUp) {
+            setMsg('The engine loaded but the arena did not appear.');
+            hint.innerHTML = 'The game script ran, so this is a graphics or setup problem (low-end GPU, ' +
+              'slow shader compile, or graphics settings that are too heavy).' +
+              '<br>Press SAFE MODE to start with minimal graphics, or wait a little longer.';
+          } else {
+            setMsg('The game is taking longer than expected to start.');
+            hint.innerHTML = listed + ' is still loading - expected on a slow connection or slow machine.' +
+              '<br>Wait a little longer, or press RETRY to load it again.';
+          }
+
+          var actions = document.getElementById('boot-actions');
+          if (actions) actions.style.display = 'flex';
+        }, 8000);
+      })();
+    </script>
+  </body>
+</html>

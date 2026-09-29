@@ -7,15 +7,30 @@ always a code/runtime/server problem, never a missing file.
 
 ## Run it
 
-```bash
-npm install
-npm run dev        # dev server on http://localhost:5173
-npm run build      # production bundle -> dist/index.html (single file)
-npm run preview    # serve the built bundle on http://localhost:4173
+Just want to play? No toolchain needed — `index.html` in the repository root **is** the
+finished game (one self-contained file, no assets to fetch).
 
-# no-toolchain alternative: serve the built single file with no dependencies
-npm run build && python3 serve.py          # http://localhost:5173
+```bash
+python3 serve.py                 # serve the game on http://localhost:5173
+
+# development
+npm install
+npm run dev                      # live dev server; "/" forwards to dev.html
+npm run build                    # rebuild and publish (see below)
 ```
+
+`dev.html` is the development entry (it loads `src/main.tsx` through Vite). `npm run build`
+compiles it into a single self-contained page and `scripts/publish.mjs` copies the result to
+`index.html`, `docs/index.html` and a versioned `docs/arena-<version>.html`:
+
+| Path | Purpose |
+| --- | --- |
+| `index.html` | the built game — this is what GitHub Pages serves at the branch root |
+| `docs/index.html` | the same build, for Pages setups pointed at `/docs` |
+| `docs/arena-<version>.html` | a versioned filename, useful when the main URL is cached |
+
+Never point GitHub Pages at the repository root *as a dev tree*: the game must be the built
+`index.html`, because browsers cannot execute the TypeScript that `dev.html` loads.
 
 `serve.py` sends `Cache-Control: no-store`, so a browser can never end up holding a
 cached page while the server is down — the situation where a page sits on its boot

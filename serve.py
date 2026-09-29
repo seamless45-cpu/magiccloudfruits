@@ -27,7 +27,7 @@ import socketserver
 import sys
 import urllib.parse
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
+ROOT = os.path.dirname(os.path.abspath(__file__))   # index.html is the built game
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 5173
 
 # Returned for dev-server paths (e.g. /src/main.tsx) requested by a stale cached page.
@@ -89,8 +89,11 @@ class Server(socketserver.ThreadingTCPServer):
 def main() -> int:
     index = os.path.join(ROOT, "index.html")
     if not os.path.exists(index):
-        print("dist/index.html not found — run: npm install && npm run build", file=sys.stderr)
+        print("index.html not found — run: npm install && npm run build", file=sys.stderr)
         return 1
+    if "/dev.html" in open(index, encoding="utf-8", errors="ignore").read(2000):
+        print("warning: index.html looks like the dev entry, not the build. Run: npm run build",
+              file=sys.stderr)
     with Server(("0.0.0.0", PORT), Handler) as httpd:
         size = os.path.getsize(index) / 1024
         print(f"1090 Fruits serving {index} ({size:.0f} KB) on http://0.0.0.0:{PORT}", flush=True)
