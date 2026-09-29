@@ -38,4 +38,6 @@ export interface GraphicsSettings {
   resolution: number; shadows: boolean; shadowRes: number; bloom: boolean; bloomStrength: number;
   particles: number; debris: number; maxBolts: number; fog: boolean; exposure: number;
   shake: number; showFps: boolean; antialiasFxaa: boolean; drawDistance: number; clouds: number;
+  /** Practice mode: unlimited health, enemies deal no damage, skill cooldowns are zero. */
+  sandbox: boolean;
 }

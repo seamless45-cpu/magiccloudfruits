@@ -3,7 +3,7 @@ import type { Effect } from './types';
 import { rnd, V, addMat, explosion, GEO } from './effects';
 import { ParticleSystem } from './particles';
 
-const PUFF_GEO = new THREE.IcosahedronGeometry(1, 2);
+const PUFF_GEO = new THREE.IcosahedronGeometry(1, 1); // 80 tris: clouds carry more, smaller puffs
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color();
 
 interface Puff { x: number; y: number; z: number; r: number; fy: number; stage: number; shade: number }
@@ -24,8 +24,11 @@ export class StormCloud implements Effect {
   rainTick = 0; boltT = 0; hailT = 0; tornT = 0; isSuper = false; evolved = false; dir: THREE.Vector3; side: THREE.Vector3; stageName = '';
   constructor(public g: any, o: CloudOpts) {
     this.o = { vel: V(), grow: 0.01, rain: 0, rainDmg: 0, hail: 0, bolts: 0, ...o } as any;
-    this.R = o.size / 2;
-    this.base = Math.min(220, 45 + o.size * 0.08);
+    // Far larger and much higher than before: a cumulonimbus is kilometres wide with its base
+    // around a kilometre up, not a puffball scraping the ground. StormCloud #2 keeps the cloud
+    // clear of the arena so the ground stays readable while the storm towers overhead.
+    this.R = o.size * 0.78;
+    this.base = 320 + Math.min(300, o.size * 0.45) + rnd(-25, 25);
     this.dir = this.o.vel.lengthSq() > 0 ? this.o.vel.clone().normalize() : V(0, 0, 1);
     this.side = V(-this.dir.z, 0, this.dir.x);
     this.isSuper = o.kind === 'supercell';
@@ -43,24 +46,60 @@ export class StormCloud implements Effect {
     const R = this.R, b = this.base, k = this.o.kind, dens = this.g.settings.clouds;
     const N = (n: number) => Math.max(3, Math.round(n * dens));
     if (k === 'cumulus' || k === 'cell' || k === 'supercell' || k === 'hail') {
-      for (let i = 0; i < N(16); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.55; this.addPuff(Math.cos(a) * r, b + rnd(0, R * 0.08), Math.sin(a) * r, R * rnd(0.22, 0.34), rnd(0, 0.2), rnd(0.5, 0.68), 0.55); }
-      for (let i = 0; i < N(14); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.4; this.addPuff(Math.cos(a) * r, b + R * rnd(0.2, 0.7), Math.sin(a) * r, R * rnd(0.22, 0.32), rnd(0.2, 0.45), rnd(0.8, 0.95)); }
-      for (let i = 0; i < N(12); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.3; this.addPuff(Math.cos(a) * r, b + R * rnd(0.7, 1.4), Math.sin(a) * r, R * rnd(0.2, 0.28), rnd(0.45, 0.72), rnd(0.9, 1)); }
-      for (let i = 0; i < N(20); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 1.25; this.addPuff(Math.cos(a) * r + R * 0.25, b + R * rnd(1.5, 1.7), Math.sin(a) * r, R * rnd(0.28, 0.4), rnd(0.72, 0.98), rnd(0.88, 1), 0.3); }
-      this.addPuff(0, b + R * 1.85, 0, R * 0.25, 0.9, 1); // overshooting top
+      // Layer 1 - base: wide, flat-bottomed, dark (the part seen from below).
+      for (let i = 0; i < N(56); i++) {
+        const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.82;
+        this.addPuff(Math.cos(a) * r, b + rnd(-R * 0.02, R * 0.04), Math.sin(a) * r, R * rnd(0.1, 0.16), rnd(0, 0.14), rnd(0.3, 0.46), 0.62);
+      }
+      // Layer 2 - lower body.
+      for (let i = 0; i < N(50); i++) {
+        const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.7;
+        this.addPuff(Math.cos(a) * r, b + R * rnd(0.06, 0.34), Math.sin(a) * r, R * rnd(0.11, 0.17), rnd(0.14, 0.34), rnd(0.52, 0.72), 0.85);
+      }
+      // Layer 3 - upper body, brighter, slightly narrower.
+      for (let i = 0; i < N(42); i++) {
+        const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.56;
+        this.addPuff(Math.cos(a) * r, b + R * rnd(0.34, 0.74), Math.sin(a) * r, R * rnd(0.1, 0.15), rnd(0.34, 0.56), rnd(0.8, 0.95), 0.9);
+      }
+      // Layer 4 - the dome.
+      for (let i = 0; i < N(26); i++) {
+        const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.34;
+        this.addPuff(Math.cos(a) * r, b + R * rnd(0.74, 1.02), Math.sin(a) * r, R * rnd(0.09, 0.14), rnd(0.56, 0.78), 1, 0.9);
+      }
+      // Anvil: the top spreads out and shears downwind on the big storms only.
+      const anvil = k === 'supercell' || k === 'hail' || this.o.size >= 400;
+      if (anvil) {
+        for (let i = 0; i < N(40); i++) {
+          const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 1.3;
+          const shear = this.dir.x * R * rnd(0.1, 0.6), shearZ = this.dir.z * R * rnd(0.1, 0.6);
+          this.addPuff(Math.cos(a) * r + shear, b + R * rnd(0.98, 1.2), Math.sin(a) * r + shearZ, R * rnd(0.11, 0.18), rnd(0.72, 0.95), rnd(0.88, 1), 0.6);
+        }
+        this.addPuff(this.dir.x * R * 0.5, b + R * 1.14, this.dir.z * R * 0.5, R * 0.17, 0.95, 1, 0.5); // overshooting top
+      } else {
+        this.addPuff(0, b + R * 1.05, 0, R * 0.13, 0.8, 1, 0.9);
+      }
     } else if (k === 'stratus' || k === 'nimbo') {
-      const n = k === 'nimbo' ? N(26) : N(7);
-      for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.85; this.addPuff(Math.cos(a) * r, b + rnd(0, R * 0.05), Math.sin(a) * r, R * rnd(0.25, 0.38), 0, k === 'nimbo' ? rnd(0.42, 0.55) : rnd(0.7, 0.8), 0.28); }
-    } else { // squall / derecho line: shelf cloud front + taller body behind
+      // Flat, wide, layered - drizzle sheets rather than blobs.
+      for (let layer = 0; layer < (k === 'nimbo' ? 4 : 2); layer++) {
+        const n = N(k === 'nimbo' ? 30 : 16);
+        const y = b + R * layer * 0.05;
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 1.15;
+          this.addPuff(Math.cos(a) * r, y + rnd(-R * 0.02, R * 0.02), Math.sin(a) * r,
+            R * rnd(0.16, 0.26), 0, k === 'nimbo' ? rnd(0.3, 0.45) : rnd(0.6, 0.75), 0.22);
+        }
+      }
+    } else { // squall / derecho: shelf cloud front, towering body behind
       const L = this.o.length!, D = this.o.depth!, bow = this.o.bow ?? 0;
-      const cols = N(Math.min(60, Math.ceil(L / (D * 0.25)))); const pr = Math.max(L / cols, D * 0.12);
+      const cols = N(Math.min(70, Math.ceil(L / (D * 0.22)))); const pr = Math.max(L / cols, D * 0.12);
       for (let i = 0; i < cols; i++) {
         const u = (i / (cols - 1)) * 2 - 1; const fwd = bow * D * (1 - u * u);
         const lat = u * L / 2;
-        this.addPuff(lat, b * 0.55, fwd, pr * 0.8, 0, 0.45, 0.35); // shelf (low, dark front)
-        this.addPuff(lat, b * 0.8, fwd - D * 0.12, pr * 0.9, 0, 0.62, 0.5);
-        this.addPuff(lat + rnd(-pr, pr) * 0.4, b + D * 0.25, fwd - D * rnd(0.3, 0.5), pr * 1.1, 0, rnd(0.8, 0.95));
-        if (i % 2 === 0) this.addPuff(lat, b + D * 0.55, fwd - D * rnd(0.5, 0.8), pr * 1.3, 0, 0.97, 0.4);
+        // Shelf: a low dark leading edge that stays well above the ground.
+        for (let q = 0; q < 3; q++) this.addPuff(lat + rnd(-pr, pr) * 0.5, b - pr * 0.5 + rnd(0, pr * 0.2), fwd + rnd(-pr, pr) * 0.5, pr * rnd(0.3, 0.45), 0, rnd(0.3, 0.45), 0.35);
+        for (let q = 0; q < 3; q++) this.addPuff(lat + rnd(-pr, pr) * 0.5, b + pr * 0.2 + rnd(0, pr * 0.3), fwd - D * 0.08 + rnd(-pr, pr) * 0.5, pr * rnd(0.32, 0.5), 0, rnd(0.5, 0.66), 0.55);
+        for (let q = 0; q < 3; q++) this.addPuff(lat + rnd(-pr, pr) * 0.6, b + pr * 1.0 + rnd(0, pr * 0.4), fwd - D * rnd(0.2, 0.45), pr * rnd(0.34, 0.55), 0, rnd(0.72, 0.88));
+        if (i % 2 === 0) this.addPuff(lat, b + pr * 2.0, fwd - D * rnd(0.5, 0.85), pr * 0.7, 0, 0.97, 0.5);
       }
     }
   }
@@ -116,16 +155,19 @@ export class StormCloud implements Effect {
     const dens = g.settings.particles;
     if (rainOn > 0 && fadeK > 0) {
       // rainshafts: white smoke with fluid (curl + ground outflow) behaviour
+      // The shaft is spawned from the lower part of the cloud, but capped: particle lifetime is
+      // proportional to spawn height, and a 700 m start would put thousands of extra puffs on screen.
+      const rainTop = Math.min(this.base, 220);
       const shafts = Math.min(30, Math.ceil(rainOn * (this.R / 40) * 3 * dens * dt * 60));
       const rp = V();
       for (let i = 0; i < shafts; i++) {
         this.rainPoint(rp); const vy = -rnd(14, 24) * (0.8 + rainOn * 0.4);
-        const h = this.base * rnd(0.55, 0.95);
-        g.smoke.spawn(rp.x, h, rp.z, o.vel.x + rnd(-2, 2), vy, o.vel.z + rnd(-2, 2), o.rainColor ?? 0xd9dee6, Math.min(80, this.R * rnd(0.12, 0.22)), h / -vy + rnd(1.5, 3),
+        const h = rainTop * rnd(0.55, 0.95);
+        g.smoke.spawn(rp.x, h, rp.z, o.vel.x + rnd(-2, 2), vy, o.vel.z + rnd(-2, 2), o.rainColor ?? 0xd9dee6, Math.min(60, this.R * rnd(0.07, 0.13)), h / -vy + rnd(1.5, 3),
           { turb: 5, spread: 0.55, drag: 0.15, grow: 1.4, alpha: 0.1 + 0.12 * Math.min(1, rainOn), ox: rp.x + rnd(-3, 3), oz: rp.z + rnd(-3, 3) });
       }
       const drops = Math.min(60, Math.ceil(rainOn * this.R * 0.3 * dens * dt * 60));
-      for (let i = 0; i < drops; i++) { this.rainPoint(rp); g.smoke.spawn(rp.x, this.base * 0.6, rp.z, o.vel.x * 0.5, -60, o.vel.z * 0.5, 0xbcd4ff, 0.35, this.base * 0.6 / 60, { alpha: 0.7 }); }
+      for (let i = 0; i < drops; i++) { this.rainPoint(rp); g.smoke.spawn(rp.x, rainTop * 0.62, rp.z, o.vel.x * 0.5, -60, o.vel.z * 0.5, 0xbcd4ff, 0.35, rainTop * 0.62 / 60, { alpha: 0.7 }); }
       // rain damage every 0.05s
       this.rainTick += dt;
       while (this.rainTick >= 0.05) {
@@ -154,9 +196,9 @@ export class StormCloud implements Effect {
         this.boltT = rnd(0.2, 2) / o.bolts;
         const isSuper = Math.random() < (o.superChance ?? 0); const mul = isSuper ? (o.superMul ?? 3) : 1;
         const rp = this.rainPoint(V()); rp.x += rnd(-10, 10);
-        const top = V(rp.x + rnd(-20, 20), this.base * 0.9, rp.z + rnd(-20, 20));
+        const top = V(rp.x + rnd(-40, 40), this.base * 0.92, rp.z + rnd(-40, 40));
         const col = isSuper ? (mul >= 12 ? 0xff66ff : 0xaaddff) : 0xcfe0ff;
-        for (let k = 0; k < (isSuper ? 3 : 1); k++) g.bolt(top, rp, { color: col, width: isSuper ? (mul >= 12 ? 3.2 : 1.8) : 0.8, life: isSuper ? 0.6 : 0.3, segs: 30, jag: 0.07, branches: isSuper ? 6 : 3 });
+        for (let k = 0; k < (isSuper ? 3 : 1); k++) g.bolt(top, rp, { color: col, width: isSuper ? (mul >= 12 ? 3.2 : 1.8) : 0.8, life: isSuper ? 0.6 : 0.42, segs: isSuper ? 20 : 14, jag: 0.05, branches: isSuper ? 4 : 2, taper: 0.35 });
         const r = isSuper ? (mul >= 12 ? 22 : 12) : 6;
         g.damageRadius(rp, r, (o.boltDmg ?? 3000) * mul * (o.dmgMul ?? 1), { stun: 0.4, noCharge: true });
         if (isSuper) explosion(g, rp, r, { core: 0xffffff, mid: col, ring: col, smoke: 0x333344, debrisCount: 10 });
@@ -169,7 +211,7 @@ export class StormCloud implements Effect {
       this.hailT += dt * o.hail * 10 * Math.max(0.3, dens);
       while (this.hailT >= 1) {
         this.hailT -= 1;
-        const rp = this.rainPoint(V()); const h = this.base * 0.7; const vy = 45; const tt = h / vy;
+        const rp = this.rainPoint(V()); const h = Math.min(this.base * 0.7, 120); const vy = 45; const tt = h / vy; // stones must land quickly enough to read as hail
         g.fx.spawn(rp.x, h, rp.z, 0, -vy, 0, 0xeaf6ff, 0.9, tt, {});
         const dmg = (o.hailDmg ?? 8000) * (o.dmgMul ?? 1), sh = o.hailShatter ?? 0.6, shd = o.hailShatterDmg ?? 0.4;
         g.after(tt, () => {
@@ -192,7 +234,7 @@ export class StormCloud implements Effect {
     this.puffs.forEach((p, i) => { const s = p.shade * 0.8; this.mesh.setColorAt(i, _c.setRGB(s, s, s * 1.05)); });
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     // wall cloud
-    const R = this.R; for (let i = 0; i < 8; i++) { const a = (i / 8) * 6.28; this.puffs.push({ x: Math.cos(a) * R * 0.15, y: this.base * 0.75, z: Math.sin(a) * R * 0.15, r: R * 0.12, fy: 0.6, stage: 0, shade: 0.4 }); }
+    const R = this.R; for (let i = 0; i < 8; i++) { const a = (i / 8) * 6.28; this.puffs.push({ x: Math.cos(a) * R * 0.15, y: this.base * 0.75, z: Math.sin(a) * R * 0.15, r: R * 0.07, fy: 0.7, stage: 0, shade: 0.4 }); }
     const old = this.mesh; this.mesh = new THREE.InstancedMesh(PUFF_GEO, this.mat, this.puffs.length); this.mesh.position.copy(old.position); this.mesh.frustumCulled = false;
     this.puffs.forEach((p, i) => { const s = p.shade * 0.8; this.mesh.setColorAt(i, _c.setRGB(s, s, s)); });
     this.g.scene.remove(old); old.dispose(); this.g.scene.add(this.mesh);
@@ -338,7 +380,7 @@ export class Microburst implements Effect {
     const merge = Math.min(1, Math.max(0, (this.t - 2.5) / 2.5));
     this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge * 0.85), 0, this.pos.z + this.offs[i].z * (1 - merge * 0.85)); });
     if (this.t > 5 && this.t < 15) {
-      const k = Math.min(1, (this.t - 5) / 0.5); const base = this.cells[0].base * 0.7; const dens = g.settings.particles;
+      const k = Math.min(1, (this.t - 5) / 0.5); const base = Math.min(this.cells[0].base * 0.7, 150); const dens = g.settings.particles;
       for (let i = 0; i < 40 * dens; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * this.size * 0.35;
         g.smoke.spawn(this.pos.x + Math.cos(a) * r, base, this.pos.z + Math.sin(a) * r, 0, -200, 0, 0xf0f3f8, rnd(12, 26), base / 200 + rnd(1.2, 2.2), { alpha: 0.22 * k, spread: 0.45, drag: 0.6, grow: 1.6, turb: 6, ox: this.pos.x, oz: this.pos.z }); }
       const wallR = Math.min(this.size, (this.t - 5) * 60);

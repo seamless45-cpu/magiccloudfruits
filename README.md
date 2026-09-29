@@ -69,6 +69,29 @@ Measured in a browser across 5 window sizes x 11 items: no panel overlaps anothe
 extends past the viewport. `--hud-bottom` (the height reserved for the inventory row) and
 `--inv-max` (the width available between the rails) live in `src/index.css`; both rails stop
 at `--hud-bottom`, so a wide inventory wraps instead of covering the skill list.
+On touch devices the stick and the ATK/JUMP buttons get their own reserved band, `--ctrl-h`
+(108 px; 84 px on short screens such as a landscape phone), which the rails also stop above.
+Below 560 px of height the telemetry panel and the vitals counters hide, so the remaining
+panels keep a readable size instead of fighting for the few available pixels.
+
+Measured in a browser across 7 window sizes (including 360x640 and landscape 640x360 phones)
+x 2 equip states: no panel overlaps another and none extends past the viewport.
+
+## Loading screen
+
+`index.html` ships an inline loading screen (no external requests, so it paints even if
+everything else fails): logo, progress bar with stage labels, rotating tips and a **PLAY**
+button. `main.tsx` and `App.tsx` report progress through `window.__bootProgress`, and
+`Game.onReady` fires after the first frame is actually on screen, which is what reveals PLAY.
+The game only starts when the player presses it (Enter or Space also work), so nobody sees a
+black flash while shaders compile.
+
+## Sandbox mode
+
+Graphics settings (O or Esc) has a **Sandbox Mode** toggle, persisted with the rest of the
+settings: unlimited health, enemies deal 0 damage to the player, and every skill cooldown and
+charge is instant. Hostiles still spawn and fight, so it doubles as a practice range; the HUD
+shows a pulsing SANDBOX badge under the title while it is on.
 
 ## Controls
 

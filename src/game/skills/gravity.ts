@@ -39,7 +39,7 @@ export const GRAVITY_FRUIT: ItemDef = {
       g.every(0.25, 8, (b: number) => {
         const R = g.aoe(17); const c = g.player.pos; let tg = g.enemies.filter((e: any) => !e.dead && e.pos.distanceTo(c) < R);
         const pts = tg.length ? tg.map((e: any) => e.pos.clone()) : [around(c, R), around(c, R)];
-        for (const p of pts) { g.strike(p.x, p.z, { color: 0xa050ff, core: 0xf0e0ff, width: 0.9, n: 3, h: 80 }); g.damageRadius(p, 3.5, 9000, { stun: 0.3 }); }
+        for (const p of pts) { g.strike(p.x, p.z, { color: 0xa050ff, core: 0xf0e0ff, width: 0.9, n: 3, h: 180 }); g.damageRadius(p, 3.5, 9000, { stun: 0.3 }); }
         if (Math.random() < 0.12) { const n = rndi(1, 5); for (let i = 0; i < n; i++) { const t = around(pts[0], 14); fallingRock(g, t, 1.4, 90, 0x3a2f45, 0xb060ff, (p) => { explosion(g, p, g.aoe(7), { core: 0xe0b0ff, mid: 0x8030ff, smoke: 0x221433, debris: 0x3b2b4b }); g.damageRadius(p, g.aoe(7), 7000); }, 120); } }
         if (b === 0) g.toast('GRAVITATIONAL LIGHTNING', '#c89bff');
       });

@@ -7,6 +7,10 @@ import { Inventory, Settings, MobileControls, ZoomControl } from './ui/Panels';
 type Snap = ReturnType<Game['snapshot']>;
 const fmt = (n: number) => (n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n.toFixed(0));
 
+/** Progress hooks for the inline loading screen in index.html (it owns the PLAY button). */
+const bootProgress = (p: number, label?: string) =>
+  (window as unknown as { __bootProgress?: (p: number, l?: string) => void }).__bootProgress?.(p, label);
+
 /** `?safe=1` starts with minimal graphics: a heavy preset can stall or fail to boot on weak GPUs. */
 const safeSettings = (): GraphicsSettings => ({ ...defaultSettings(), ...PRESETS.low, preset: 'low' });
 
@@ -35,6 +39,7 @@ const clampSettings = (raw: unknown): GraphicsSettings => {
     shake: num(s.shake, 0, 2, d.shake),
     showFps: bool(s.showFps, d.showFps),
     antialiasFxaa: bool(s.antialiasFxaa, d.antialiasFxaa),
+    sandbox: bool(s.sandbox, d.sandbox),
     drawDistance: num(s.drawDistance, 1000, 60000, d.drawDistance),
     clouds: num(s.clouds, 0.3, 1.5, d.clouds),
   };
@@ -75,9 +80,11 @@ export default function App() {
   const [fatal, setFatal] = useState<string | null>(null);
 
   useEffect(() => {
-    // React has mounted: retire the inline boot screen from index.html.
+    // React has mounted. The inline loading screen stays on top and is dismissed by its own
+    // PLAY button once the first frame is on screen - that is what makes the start deliberate
+    // instead of a black flash while shaders compile.
     clearTimeout((window as unknown as { __bootTimer?: number }).__bootTimer);
-    document.getElementById('boot')?.remove();
+    bootProgress(0.5, 'Compiling shaders');
   }, []);
 
   useEffect(() => {
@@ -100,6 +107,7 @@ export default function App() {
       return;
     }
     g.onFatal = m => setFatal(`Render loop stopped — ${m}`);
+    g.onReady = () => bootProgress(1, 'Ready'); // first frame rendered: show PLAY
     setGame(g); (window as any).game = g;
     let tid = 0;
     g.onToast = (m, c) => { const id = ++tid; setToasts(t => [...t.slice(-4), { id, m, c }]); setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2200); };
@@ -136,12 +144,12 @@ export default function App() {
       {game && snap && (
         <div className="absolute inset-0 pointer-events-none">
           {/* Left rail: vitals and controls stack in one column, so they cannot overlap */}
-          <div className="absolute left-2 top-2 w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
+          <div className="absolute left-2 top-2 w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'calc(var(--hud-bottom) + var(--ctrl-h))' }}>
           <div data-panel="vitals" className="sf-panel p-2.5 w-full shrink-0 pointer-events-auto">
-            <div className="flex justify-between items-baseline"><span className="font-orb text-[11px] sf-glow text-cyan-200">1090 FRUITS // OPERATOR</span>{snap.invincible && <span className="text-[9px] font-orb text-yellow-200">INVULN</span>}</div>
+            <div className="flex justify-between items-baseline"><span className="font-orb text-[11px] sf-glow text-cyan-200">1090 FRUITS // OPERATOR</span>{snap.sandbox && <span className="text-[9px] font-orb text-emerald-200 sf-pulse">SANDBOX</span>}{snap.invincible && !snap.sandbox && <span className="text-[9px] font-orb text-yellow-200">INVULN</span>}</div>
             <div className="hex-bar mt-1.5"><div className="h-full" style={{ width: `${(snap.hp / snap.maxHp) * 100}%`, background: 'linear-gradient(90deg,#16ffb0,#33e0ff)', boxShadow: '0 0 10px #33e0ff' }} /></div>
             <div className="flex justify-between text-[10px] mt-0.5 font-orb text-cyan-100/80"><span>HP {fmt(snap.hp)} / {fmt(snap.maxHp)}</span><span>{((snap.hp / snap.maxHp) * 100).toFixed(0)}%</span></div>
-            <div className="grid grid-cols-3 gap-1 mt-1.5 text-[10px]">
+            <div className="grid grid-cols-3 gap-1 mt-1.5 text-[10px] [@media(max-height:560px)]:hidden">
               <div><div className="text-cyan-300/60">KILLS</div><div className="font-orb">{snap.kills}</div></div>
               <div><div className="text-cyan-300/60">DPS</div><div className="font-orb">{fmt(snap.dps)}</div></div>
               <div><div className="text-cyan-300/60">HOSTILES</div><div className="font-orb">{snap.alive}</div></div>
@@ -162,8 +170,8 @@ export default function App() {
           )}
           </div>
           {/* Right rail: telemetry, skills and zoom stack in one column, so they cannot overlap */}
-          <div className="absolute right-2 top-2 w-[236px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
-          <div data-panel="telemetry" className="sf-panel p-2.5 w-full text-[10px] shrink-0 pointer-events-auto">
+          <div className="absolute right-2 top-2 w-[236px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'calc(var(--hud-bottom) + var(--ctrl-h))' }}>
+          <div data-panel="telemetry" className="sf-panel p-2.5 w-full text-[10px] shrink-0 pointer-events-auto [@media(max-height:560px)]:hidden">
             <div className="font-orb text-[10px] sf-glow text-cyan-200 mb-1">RANGE TELEMETRY</div>
             <div className="flex justify-between"><span className="text-cyan-300/70">AIM (ground)</span><span className="font-orb tabular-nums">{snap.aimDist.toFixed(2)} m</span></div>
             <div className="flex justify-between"><span className="text-cyan-300/70">AIM (3D)</span><span className="font-orb tabular-nums">{snap.aim3D.toFixed(2)} m</span></div>
@@ -187,7 +195,10 @@ export default function App() {
           {!item && <div className="absolute left-1/2 -translate-x-1/2 font-orb text-[10px] text-cyan-200/70 sf-glow" style={{ bottom: 'calc(var(--hud-bottom) + 4px)' }}>SELECT A FRUIT OR SWORD FROM INVENTORY {touch ? '' : '(1-9, 0, -)'}</div>}
           {touch && <MobileControls game={game} />}
           {/* crosshair */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 opacity-60"><div className="absolute left-1/2 top-0 bottom-0 w-px bg-cyan-300" /><div className="absolute top-1/2 left-0 right-0 h-px bg-cyan-300" /></div>
+          <div className="absolute left-1/2 top-1/2 w-8 h-8 opacity-60" style={{ transform: 'translate(-50%,-50%)' }}>
+            <div className="absolute inset-0 crosshair"><div className="absolute left-1/2 top-0 bottom-0 w-px bg-cyan-300" /><div className="absolute top-1/2 left-0 right-0 h-px bg-cyan-300" /></div>
+            <div className="absolute inset-1 border border-cyan-300/40 sf-pulse" style={{ borderRadius: '50%' }} />
+          </div>
         </div>
       )}
       {showSettings && <Settings settings={settings} onChange={changeSettings} onClose={() => setShowSettings(false)} />}

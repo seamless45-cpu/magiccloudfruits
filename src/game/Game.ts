@@ -21,13 +21,14 @@ export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSetting
   high: { resolution: 1, shadows: true, shadowRes: 2048, bloom: true, particles: 0.85, debris: 0.85, maxBolts: 200, clouds: 1, antialiasFxaa: true, drawDistance: 40000 },
   ultra: { resolution: 1.25, shadows: true, shadowRes: 4096, bloom: true, particles: 1, debris: 1, maxBolts: 320, clouds: 1.2, antialiasFxaa: true, drawDistance: 60000 },
 };
-export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, showFps: true, antialiasFxaa: true, drawDistance: 40000, clouds: 1 });
+export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, showFps: true, antialiasFxaa: true, drawDistance: 40000, clouds: 1, sandbox: false });
 
 interface CdState { rem: number; total: number; charges: number; interval: number; regenT: number; holding: boolean }
 
 export class Game {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera; composer: EffectComposer; bloom: UnrealBloomPass; fxaa: ShaderPass;
   sun!: THREE.DirectionalLight; flashLight!: THREE.PointLight; flashI = 0;
+  arena!: THREE.Group;
   fx: ParticleSystem; smoke: ParticleSystem; debris: DebrisSystem;
   effects: Effect[] = []; timers: { t: number; fn: () => void }[] = [];
   enemies: Enemy[] = []; time = 0; pauseEnemies = 0;
@@ -46,6 +47,9 @@ export class Game {
   overlay = { color: '#000', a: 0, fade: 0 };
   onToast: (m: string, c: string) => void = () => {};
   onFatal: (m: string) => void = () => {};
+  /** Fired once, after the first frame has actually been rendered. */
+  onReady: () => void = () => {};
+  private readyFired = false;
   sel: Record<string, any> = { supercell: 1 };
   gamepadIdx: number | null = null; prevPadButtons: boolean[] = [];
   raf = 0; last = performance.now(); container: HTMLElement; disposed = false;
@@ -98,35 +102,226 @@ export class Game {
       fragmentShader: 'varying vec3 vp; void main(){ float h=normalize(vp).y; vec3 a=vec3(0.02,0.03,0.08), b=vec3(0.10,0.16,0.32), c=vec3(0.30,0.22,0.42); vec3 col = h>0.? mix(c*0.8,mix(b,a,smoothstep(0.,0.6,h)),smoothstep(0.,0.18,h)) : c*0.4; gl_FragColor=vec4(col,1.); }' }));
     sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = -10; sky.onBeforeRender = () => sky.position.copy(this.camera.position); this.scene.add(sky);
     // ground with neon meter grid (1 unit = 1 m)
-    const gmat = new THREE.MeshStandardMaterial({ color: 0x151a24, roughness: 0.9, metalness: 0.1 });
+    const gmat = new THREE.MeshStandardMaterial({ color: 0x1b2432, roughness: 0.85, metalness: 0.1 });
     gmat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vW;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvW=(modelMatrix*vec4(transformed,1.)).xyz;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vW;\nfloat gl(vec2 p,float s,float w){vec2 g=abs(fract(p/s-0.5)-0.5)*s/fwidth(p);return 1.-min(min(g.x,g.y)/w,1.);}')
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat r=length(vW.xz); float g10=gl(vW.xz,10.,1.)*0.35; float g100=gl(vW.xz,100.,1.5); float ring=0.; for(int i=1;i<=6;i++){ float R=float(i)*50.; ring+= (1.-smoothstep(0.,0.6,abs(r-R)))*0.8;} float fade=exp(-r*0.0006);\ntotalEmissiveRadiance += vec3(0.05,0.55,0.9)*(g10+g100*0.7)*fade + vec3(0.9,0.3,1.)*ring*fade*0.5;');
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat r=length(vW.xz); float g10=gl(vW.xz,10.,1.)*0.30; float g100=gl(vW.xz,100.,1.4); float ring=0.; for(int i=1;i<=10;i++){ float R=float(i)*150.; ring+= (1.-smoothstep(0.,1.4,abs(r-R)))*0.9;} float fade=exp(-r*0.00035);\ntotalEmissiveRadiance += vec3(0.05,0.55,0.9)*(g10+g100*0.7)*fade + vec3(0.9,0.3,1.)*ring*fade*0.45;');
     };
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), gmat); ground.receiveShadow = true; this.scene.add(ground);
-    // center pylon (middle of arena)
-    const pyl = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2, 14, 6), new THREE.MeshStandardMaterial({ color: 0x223044, metalness: 0.8, roughness: 0.3, emissive: 0x1166aa, emissiveIntensity: 0.5 })); pyl.position.y = 7; pyl.castShadow = true; this.scene.add(pyl);
-    // some sci-fi pillars for scale
-    const pm = new THREE.MeshStandardMaterial({ color: 0x1d2433, metalness: 0.7, roughness: 0.35, emissive: 0x0a1a2a });
-    for (let i = 0; i < 40; i++) { const a = (i / 40) * Math.PI * 2; const r = 320 + (i % 3) * 60; const h = rnd(20, 70); const m = new THREE.Mesh(new THREE.BoxGeometry(6, h, 6), pm); m.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r); m.castShadow = true; m.receiveShadow = true; this.scene.add(m); }
-    // player
-    const P = this.player; const bm = new THREE.MeshStandardMaterial({ color: 0xdfe6f0, metalness: 0.4, roughness: 0.35 }); const am = new THREE.MeshStandardMaterial({ color: 0x1a2030, metalness: 0.8, roughness: 0.3, emissive: 0x00aaff, emissiveIntensity: 0.4 });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.8, 4, 10), am); body.position.y = 1.0; body.castShadow = true;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), bm); head.position.y = 1.72; head.castShadow = true;
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.1), new THREE.MeshBasicMaterial({ color: 0x33e0ff })); visor.position.set(0, 1.74, 0.24);
-    const armG = new THREE.CapsuleGeometry(0.1, 0.55, 3, 8);
-    const ra = new THREE.Mesh(armG, bm); ra.position.y = -0.35; P.rArm.add(ra); P.rArm.position.set(-0.47, 1.42, 0);
-    const la = new THREE.Mesh(armG, bm); la.position.y = -0.35; P.lArm.add(la); P.lArm.position.set(0.47, 1.42, 0);
-    const legG = new THREE.CapsuleGeometry(0.12, 0.5, 3, 8); const l1 = new THREE.Mesh(legG, am); l1.position.set(0.17, 0.35, 0); const l2 = l1.clone(); l2.position.x = -0.17;
-    P.sword.position.set(0, -0.72, 0.1); P.sword.rotation.x = Math.PI / 2; P.rArm.add(P.sword);
-    P.gun.position.set(0, -0.7, 0.18); P.rArm.add(P.gun);
-    P.mesh.add(body, head, visor, P.rArm, P.lArm, l1, l2); this.scene.add(P.mesh);
+    this.buildArena();
+    this.buildPlayer();
     // aim reticle
     this.aimRing = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.9, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x33e0ff, transparent: true, opacity: 0.9, depthWrite: false })); this.scene.add(this.aimRing);
     const lg = new THREE.BufferGeometry().setFromPoints([V(), V()]);
     this.aimLine = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0x33e0ff, dashSize: 1, gapSize: 1, transparent: true, opacity: 0.5 })); this.aimLine.frustumCulled = false; this.scene.add(this.aimLine);
   }
+  // ---------------------------------------------------------------- arena
+  /** A far wider arena: a lit staging platform, concentric markers out to 1.5 km, monoliths and
+   *  gate towers for scale, and distant megastructures on the horizon.
+   *
+   *  Everything repeated is an InstancedMesh (one draw call per family) - a few hundred separate
+   *  meshes would cost more in draw calls than the whole rest of the scene put together. */
+  buildArena() {
+    const R = new THREE.Group(); R.name = 'arena'; this.scene.add(R);
+    const steel = new THREE.MeshStandardMaterial({ color: 0x1d2433, metalness: 0.85, roughness: 0.3, emissive: 0x0a1a2a });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x12161f, metalness: 0.6, roughness: 0.55 });
+    const trim = new THREE.MeshStandardMaterial({ color: 0x0e2b3a, metalness: 0.9, roughness: 0.2, emissive: 0x18d8ff, emissiveIntensity: 1.1 });
+    const warm = new THREE.MeshStandardMaterial({ color: 0x2a1c14, metalness: 0.7, roughness: 0.4, emissive: 0xff7a2a, emissiveIntensity: 0.9 });
+    const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), P3 = new THREE.Vector3(), S3 = new THREE.Vector3();
+    const place = (im: THREE.InstancedMesh, i: number, x: number, y: number, z: number, ry = 0, sx = 1, sy = 1, sz = 1) => {
+      Q.setFromEuler(new THREE.Euler(0, ry, 0)); P3.set(x, y, z); S3.set(sx, sy, sz);
+      im.setMatrixAt(i, M4.compose(P3, Q, S3));
+    };
+
+    // ---- staging platform: the ground the fight happens on, kept clear of obstacles ----
+    const floor = new THREE.Mesh(new THREE.CylinderGeometry(96, 101, 1.2, 96), dark);
+    floor.position.y = -0.6; floor.receiveShadow = true; R.add(floor);
+    const floorTrim = new THREE.Mesh(new THREE.TorusGeometry(96, 0.5, 8, 128).rotateX(Math.PI / 2), trim);
+    floorTrim.position.y = 0.02; R.add(floorTrim);
+    for (const [gr, tube] of [[26, 0.14], [46, 0.12], [70, 0.1]] as const) {
+      const g = new THREE.Mesh(new THREE.TorusGeometry(gr, tube, 6, 96).rotateX(Math.PI / 2), trim);
+      g.position.y = 0.03; R.add(g);
+    }
+    // four approach ramps
+    const ramps = new THREE.InstancedMesh(new THREE.BoxGeometry(46, 1.6, 14), steel, 4);
+    ramps.receiveShadow = true; R.add(ramps);
+    for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + Math.PI / 4; place(ramps, i, Math.cos(a) * 105, -0.8, Math.sin(a) * 105, -a); }
+
+    // ---- staging detail: markings, blast barriers, cargo and perimeter posts ----
+    // Four approach chevrons pointing at the centre.
+    const chev = new THREE.InstancedMesh(new THREE.BoxGeometry(16, 0.12, 1.4), trim, 16);
+    for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      for (let k = 0; k < 4; k++) { const d = 30 + k * 16; place(chev, i * 4 + k, Math.cos(a) * d, 0.08, Math.sin(a) * d, -a); } }
+    R.add(chev);
+    // Blast barriers: low, heavy walls ringing the fighting area.
+    const walls = new THREE.InstancedMesh(new THREE.BoxGeometry(18, 4.4, 3), steel, 36);
+    walls.castShadow = true; walls.receiveShadow = true; R.add(walls);
+    for (let i = 0; i < 36; i++) { const a = (i / 36) * Math.PI * 2 + 0.06; place(walls, i, Math.cos(a) * 88, 2.2, Math.sin(a) * 88, -a); }
+    const wallCaps = new THREE.InstancedMesh(new THREE.BoxGeometry(18, 0.24, 3.3), warm, 36);
+    for (let i = 0; i < 36; i++) { const a = (i / 36) * Math.PI * 2 + 0.06; place(wallCaps, i, Math.cos(a) * 88, 4.5, Math.sin(a) * 88, -a); }
+    R.add(wallCaps);
+    // Cargo blocks scattered over the apron: scale reads against the 90 m platform.
+    const cargo = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), dark, 46);
+    cargo.castShadow = true; cargo.receiveShadow = true; R.add(cargo);
+    for (let i = 0; i < 46; i++) {
+      const a = (i * 2.399) % 6.283, r = 120 + ((i * 37) % 190);
+      const w = 5 + (i % 5) * 2.4, h = 4 + (i % 4) * 2.6, d2 = 5 + (i % 3) * 3.4;
+      place(cargo, i, Math.cos(a) * r, h / 2, Math.sin(a) * r, a * 1.7, w, h, d2);
+    }
+    // Broken column stumps for cover.
+    const stumps = new THREE.InstancedMesh(new THREE.CylinderGeometry(3.2, 3.6, 1, 6), steel, 22);
+    stumps.castShadow = true; stumps.receiveShadow = true; R.add(stumps);
+    for (let i = 0; i < 22; i++) {
+      const a = (i * 1.617) % 6.283, r = 112 + ((i * 53) % 240), h = 6 + (i % 6) * 5;
+      place(stumps, i, Math.cos(a) * r, h / 2 - 0.4, Math.sin(a) * r, a, 1, h, 1);
+    }
+    // Perimeter posts with glow tips.
+    const posts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.7, 6, 5), steel, 64);
+    const tips = new THREE.InstancedMesh(new THREE.SphereGeometry(0.7, 8, 6), trim, 64);
+    R.add(posts, tips);
+    for (let i = 0; i < 64; i++) {
+      const a = (i / 64) * Math.PI * 2, x = Math.cos(a) * 92, z = Math.sin(a) * 92;
+      place(posts, i, x, 3, z, -a); place(tips, i, x, 6.4, z);
+    }
+
+    // ---- beacon spire, offset from the spawn so the camera never starts inside it ----
+    const SP = V(0, 0, -135);
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 5.4, 46, 8), steel);
+    spire.position.set(SP.x, 23, SP.z); spire.castShadow = true; R.add(spire);
+    const seams = new THREE.InstancedMesh(new THREE.BoxGeometry(0.35, 44, 0.35), trim, 8); R.add(seams);
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; place(seams, i, SP.x + Math.cos(a) * 3.1, 23, SP.z + Math.sin(a) * 3.1); }
+    const crown = new THREE.Mesh(new THREE.ConeGeometry(6.4, 12, 8), warm);
+    crown.position.set(SP.x, 52, SP.z); R.add(crown);
+
+    // ---- four gate towers ----
+    const gateBase = new THREE.InstancedMesh(new THREE.CylinderGeometry(9, 14, 18, 6), steel, 4); gateBase.castShadow = true; gateBase.receiveShadow = true; R.add(gateBase);
+    const gateShaft = new THREE.InstancedMesh(new THREE.BoxGeometry(11, 190, 11), steel, 4); gateShaft.castShadow = true; R.add(gateShaft);
+    const gateBeam = new THREE.InstancedMesh(new THREE.BoxGeometry(12.5, 3, 12.5), trim, 4); R.add(gateBeam);
+    const gateLamp = new THREE.InstancedMesh(new THREE.SphereGeometry(5, 12, 10), warm, 4); R.add(gateLamp);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4, x = Math.cos(a) * 430, z = Math.sin(a) * 430;
+      place(gateBase, i, x, 9, z, -a); place(gateShaft, i, x, 113, z, -a);
+      place(gateBeam, i, x, 205, z, -a); place(gateLamp, i, x, 214, z);
+    }
+
+    // ---- concentric monolith rings, widening outward and growing taller ----
+    const RINGS = [[28, 700, 40, 130, 9], [34, 1050, 60, 220, 13], [40, 1500, 90, 300, 18]] as const;
+    for (const [count, radius, hMin, hMax, w] of RINGS) {
+      const monoliths = new THREE.InstancedMesh(new THREE.BoxGeometry(w, 1, w), steel, count);
+      monoliths.castShadow = true; monoliths.receiveShadow = true; R.add(monoliths);
+      const caps = new THREE.InstancedMesh(new THREE.BoxGeometry(w * 1.25, 3, w * 1.25), trim, count);
+      let ci = 0;
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * Math.PI * 2 + radius * 0.001, h = rnd(hMin, hMax);
+        const x = Math.cos(a) * radius, z = Math.sin(a) * radius, ry = a + rnd(-0.2, 0.2);
+        place(monoliths, i, x, h / 2, z, ry, 1, h, 1); // unit-height box scaled per instance
+        if (i % 3 === 0) place(caps, ci++, x, h * rnd(0.55, 0.95), z, ry);
+      }
+      caps.count = ci;
+    }
+
+    // ---- distant megastructures on the horizon (draw-distance permitting) ----
+    const far = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), dark, 18); R.add(far);
+    const beacons = new THREE.InstancedMesh(new THREE.SphereGeometry(9, 8, 6), trim, 18); R.add(beacons);
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2 + rnd(-0.08, 0.08);
+      const r = rnd(4200, 9500), h = rnd(500, 1500), w = rnd(160, 420);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      place(far, i, x, h / 2, z, a, w, h, w); place(beacons, i, x, h + 14, z);
+    }
+
+    // ---- floating platforms for verticality around the staging area ----
+    const pads = new THREE.InstancedMesh(new THREE.CylinderGeometry(13, 15, 3, 6), steel, 6); pads.castShadow = true; R.add(pads);
+    const padGlow = new THREE.InstancedMesh(new THREE.TorusGeometry(13, 0.4, 6, 48).rotateX(Math.PI / 2), trim, 6); R.add(padGlow);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.4, r = rnd(150, 260), y = rnd(26, 64);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      place(pads, i, x, y, z, a); place(padGlow, i, x, y + 1.7, z, a);
+    }
+
+    // ---- arena light pylons (emissive only: a ring of real point lights is far too costly) ----
+    const py = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.1, 1.8, 26, 5), steel, 16); R.add(py);
+    const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(1.5, 8, 6), trim, 16); R.add(bulbs);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2, x = Math.cos(a) * 300, z = Math.sin(a) * 300;
+      place(py, i, x, 13, z, -a); place(bulbs, i, x, 27, z);
+    }
+    this.arena = R;
+  }
+
+  // ---------------------------------------------------------------- player
+  /** Armoured operator: pauldrons, segmented limbs, glowing seams, backpack vents.
+   *  Arm pivots keep the positions the animation code expects (rArm/lArm at the shoulders). */
+  buildPlayer() {
+    const P = this.player;
+    P.mesh.scale.setScalar(1.2); // the operator reads a little larger next to 3-10 m hostiles
+    const plate = new THREE.MeshStandardMaterial({ color: 0x93a1b6, metalness: 0.6, roughness: 0.34 });
+    const suit = new THREE.MeshStandardMaterial({ color: 0x151b28, metalness: 0.75, roughness: 0.38 });
+    const glow = new THREE.MeshStandardMaterial({ color: 0x0a2a3a, emissive: 0x2fd8ff, emissiveIntensity: 0.7, metalness: 0.6, roughness: 0.25 });
+    const visorMat = new THREE.MeshStandardMaterial({ color: 0x08202c, emissive: 0x53e8ff, emissiveIntensity: 1.1, metalness: 0.9, roughness: 0.1 });
+    const strap = new THREE.MeshStandardMaterial({ color: 0x2a2f3a, metalness: 0.4, roughness: 0.7 });
+
+    const add = (mesh: THREE.Mesh, parent: THREE.Object3D = P.mesh) => { mesh.castShadow = true; parent.add(mesh); return mesh; };
+
+    // torso: tapered chest over a narrow waist, with a raised chest plate and glowing spine seams
+    const chest = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.42, 8, 16), suit)); chest.position.y = 1.34; chest.scale.set(1.15, 1, 0.82);
+    const plateF = add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.44, 0.2), plate)); plateF.position.set(0, 1.38, 0.19); plateF.rotation.x = -0.06;
+    const core = add(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.06, 12).rotateX(Math.PI / 2), glow)); core.position.set(0, 1.4, 0.3);
+    const waist = add(new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.3, 12), suit)); waist.position.y = 1.0;
+    const belt = add(new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.045, 6, 20).rotateX(Math.PI / 2), glow)); belt.position.y = 0.95;
+
+    // backpack with vents
+    const pack = add(new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.56, 0.24), suit)); pack.position.set(0, 1.36, -0.24);
+    for (const sgn of [-1, 1]) {
+      const nozzle = add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.1, 8), suit)); nozzle.position.set(sgn * 0.13, 1.1, -0.3); nozzle.rotation.x = 0.25;
+      const slit = add(new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.34, 0.03), glow)); slit.position.set(sgn * 0.17, 1.4, -0.36);
+      void nozzle;
+    }
+
+    // helmet: rounded shell, wrapped visor, side vents, antenna
+    const neck = add(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.14, 10), suit)); neck.position.y = 1.62;
+    const helm = add(new THREE.Mesh(new THREE.SphereGeometry(0.27, 24, 18), plate)); helm.position.y = 1.83; helm.scale.set(1, 1.06, 1.02);
+    const visor = add(new THREE.Mesh(new THREE.SphereGeometry(0.245, 24, 16, -1.2, 2.4, 1.05, 0.95), visorMat)); visor.position.y = 1.83; visor.scale.set(1.02, 1.02, 1.06);
+    const crest = add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.42), plate)); crest.position.set(0, 2.06, -0.02);
+    const antenna = add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.34, 6), strap)); antenna.position.set(-0.2, 2.06, -0.1); antenna.rotation.z = 0.35;
+    const tip = add(new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), glow)); tip.position.set(-0.26, 2.22, -0.1);
+    for (const sgn of [-1, 1]) {
+      const ear = add(new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, 0.14), glow)); ear.position.set(sgn * 0.25, 1.82, -0.02);
+    }
+
+    // arms: shoulder ball, pauldron, upper arm, forearm, fist (pivot stays at the shoulder)
+    const buildArm = (side: 1 | -1, parent: THREE.Group) => {
+      const sh = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), suit); sh.position.y = -0.02; sh.castShadow = true; parent.add(sh);
+      const pauld = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), plate);
+      pauld.position.set(side * 0.06, 0.02, 0); pauld.rotation.z = -side * 0.25; pauld.castShadow = true; parent.add(pauld);
+      const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.095, 0.26, 6, 12), suit); upper.position.y = -0.26; upper.castShadow = true; parent.add(upper);
+      const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.028, 6, 16).rotateX(Math.PI / 2), glow); cuff.position.y = -0.44; parent.add(cuff);
+      const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.082, 0.24, 6, 12), plate); fore.position.y = -0.6; fore.castShadow = true; parent.add(fore);
+      const fist = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.16), suit); fist.position.y = -0.78; fist.castShadow = true; parent.add(fist);
+    };
+    P.rArm.position.set(-0.36, 1.52, 0); P.lArm.position.set(0.36, 1.52, 0);
+    buildArm(-1, P.rArm); buildArm(1, P.lArm);
+
+    // legs: thigh plate, knee, shin, boot
+    const buildLeg = (x: number) => {
+      const hip = add(new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), suit)); hip.position.set(x, 0.86, 0);
+      const thigh = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.34, 6, 12), plate)); thigh.position.set(x, 0.62, 0);
+      const knee = add(new THREE.Mesh(new THREE.SphereGeometry(0.105, 12, 10), suit)); knee.position.set(x, 0.4, 0.01);
+      const shin = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.32, 6, 12), suit)); shin.position.set(x, 0.22, 0);
+      const greave = add(new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.3, 0.13), plate)); greave.position.set(x, 0.22, 0.05);
+      const boot = add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.34), plate)); boot.position.set(x, 0.07, 0.05);
+      const sole = add(new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.03, 0.35), suit)); sole.position.set(x, 0.015, 0.05);
+      void hip; void knee; void greave; void sole;
+    };
+    buildLeg(0.16); buildLeg(-0.16);
+
+    // held items keep their original mount points so attacks still line up
+    P.sword.position.set(0, -0.72, 0.1); P.sword.rotation.x = Math.PI / 2; P.rArm.add(P.sword);
+    P.gun.position.set(0, -0.7, 0.18); P.rArm.add(P.gun);
+    this.scene.add(P.mesh);
+  }
+
   setHeld(item: ItemDef | null) {
     const P = this.player; P.sword.clear(); P.gun.clear();
     if (!item) return;
@@ -206,7 +401,8 @@ export class Game {
     if (this.drag.active) { const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y; this.drag.x = e.clientX; this.drag.y = e.clientY; this.rotateCam(dx, dy); }
   };
   onPointerUp = (e: PointerEvent) => { if (e.pointerType !== 'touch') this.drag.active = false; };
-  rotateCam(dx: number, dy: number) { this.cam.yaw -= dx * 0.005; this.cam.pitch = THREE.MathUtils.clamp(this.cam.pitch + dy * 0.004, -0.2, 1.45); }
+  // pitch may go negative: the player can tilt up far enough to watch the storm overhead
+  rotateCam(dx: number, dy: number) { this.cam.yaw -= dx * 0.005; this.cam.pitch = THREE.MathUtils.clamp(this.cam.pitch + dy * 0.004, -0.62, 1.45); }
   onTouch = (e: TouchEvent) => {
     e.preventDefault();
     const ts = Array.from(e.touches);
@@ -271,8 +467,14 @@ export class Game {
   }
   startCd(it: ItemDef, i: number) { const s = it.skills[i]; const st = this.cds[it.id][i]; st.total = s.cd * (s.cdMul ? s.cdMul(this) : 1) * this.cdMul(); st.rem = st.total; }
   tickCds(dt: number) {
+    const sb = this.settings.sandbox;
     for (const it of this.items) it.skills.forEach((s, i) => {
       const st = this.cds[it.id][i];
+      if (sb) {
+        // SANDBOX: cooldowns and charge regeneration are instant, so every skill is always ready.
+        st.rem = 0; st.interval = 0; st.regenT = 0;
+        if (s.charges) st.charges = s.charges.max;
+      }
       if (st.rem > 0) st.rem = Math.max(0, st.rem - dt);
       if (st.interval > 0) st.interval -= dt;
       if (s.charges && st.charges < s.charges.max) { st.regenT += dt; if (st.regenT >= s.charges.regen) { st.regenT = 0; st.charges++; } }
@@ -304,8 +506,10 @@ export class Game {
   bolt(a: THREE.Vector3, b: THREE.Vector3, o: BoltOpts = {}) { if (boltStats.active >= this.settings.maxBolts) return null; return this.add(new Bolt(this.scene, a, b, o)) as Bolt; }
   /** tall vertical jagged bolt from sky to ground point; `n` overlapped bolts */
   strike(x: number, z: number, o: BoltOpts & { h?: number; n?: number; spread?: number } = {}) {
-    const h = o.h ?? rnd(70, 110); const n = o.n ?? 1;
-    for (let i = 0; i < n; i++) { const s = o.spread ?? 0.6; this.bolt(V(x + rnd(-8, 8), h, z + rnd(-8, 8)), V(x + rnd(-s, s), 0.1, z + rnd(-s, s)), { segs: 32, jag: 0.06, branches: 4, life: 0.4, ...o }); }
+    // Real channels are hundreds of metres tall and only lightly kinked: reach well up toward the
+    // cloud base, with long segments and a narrow fork instead of a short, scribbly burst.
+    const h = o.h ?? rnd(230, 340); const n = o.n ?? 1;
+    for (let i = 0; i < n; i++) { const s = o.spread ?? 0.6; this.bolt(V(x + rnd(-10, 10), h, z + rnd(-10, 10)), V(x + rnd(-s, s), 0.1, z + rnd(-s, s)), { segs: 14, jag: 0.05, branches: 3, life: 0.42, taper: 0.4, ...o }); }
     const c = new THREE.Color(o.color ?? 0x88aaff);
     for (let i = 0; i < 14; i++) this.fx.spawn(x, 0.4, z, rnd(-12, 12), rnd(4, 16), rnd(-12, 12), c, 0.5, rnd(0.2, 0.5), { grav: 20 });
     this.flash(V(x, 0, z), o.color ?? 0x88aaff, 12);
@@ -369,10 +573,11 @@ export class Game {
     if (e.blind > 0) return;
     const P = this.player;
     if (e.hacked > 0) { P.hp = Math.min(P.maxHp, P.hp + (e.kind === 'boss' ? 1500 : 400)); this.fx.spawn(P.pos.x, 1.5, P.pos.z, 0, 3, 0, 0x33ff88, 1.2, 0.6, {}); return; }
+    if (this.settings.sandbox) return; // SANDBOX: hostile attacks land but deal no damage
     if (P.invincible > 0) return;
     P.hp -= e.kind === 'boss' ? 1500 : e.kind === 'elite' ? 600 : 180;
     this.screen('#ff2030', 0.18, 3);
-    if (this.buff('alarm')) { this.strike(e.pos.x, e.pos.z, { color: 0xff2a2a, core: 0xffd0d0, width: 0.7, n: 2, h: 40 }); this.damage(e, 0, { percentMax: 0.2, noCharge: true }); }
+    if (this.buff('alarm')) { this.strike(e.pos.x, e.pos.z, { color: 0xff2a2a, core: 0xffd0d0, width: 0.7, n: 2, h: 120 }); this.damage(e, 0, { percentMax: 0.2, noCharge: true }); }
     if (P.hp <= 0) { P.hp = P.maxHp; P.pos.set(0, 0, 0); this.toast('YOU WERE DEFEATED — RESPAWNED', '#ff5566'); }
   }
   jump() { if (this.player.grounded) { this.player.vel.y = 13; this.player.grounded = false; } }
@@ -393,6 +598,7 @@ export class Game {
     try {
       this.update(dt);
       if ((this.settings.bloom || this.settings.antialiasFxaa) && this.halfFloat) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+      if (!this.readyFired) { this.readyFired = true; this.onReady(); } // loading screen may open now
     } catch (e) {
       // A failure in the render loop would otherwise leave a silently frozen/black scene.
       this.disposed = true; cancelAnimationFrame(this.raf);
@@ -406,7 +612,8 @@ export class Game {
     this.pollGamepad(dt);
     const P = this.player;
     if (P.invincible > 0) P.invincible -= dt;
-    P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.01 * dt);
+    if (this.settings.sandbox) P.hp = P.maxHp; // SANDBOX: health never drops
+    else P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.01 * dt);
     // movement
     let mx = 0, mz = 0; const K = this.keys;
     if (K.has('w') || K.has('arrowup')) mz += 1; if (K.has('s') || K.has('arrowdown')) mz -= 1; if (K.has('a') || K.has('arrowleft')) mx -= 1; if (K.has('d') || K.has('arrowright')) mx += 1;
@@ -455,6 +662,8 @@ export class Game {
     const cp = Math.cos(this.cam.pitch), spp = Math.sin(this.cam.pitch);
     this.camera.position.set(tgt.x + Math.sin(this.cam.yaw) * cp * this.cam.dist, tgt.y + spp * this.cam.dist, tgt.z + Math.cos(this.cam.yaw) * cp * this.cam.dist);
     if (this.camera.position.y < 0.5) this.camera.position.y = 0.5;
+    // looking up: keep the camera low but aim above the horizon so clouds and lightning are in frame
+    if (this.cam.pitch < 0) this.camera.lookAt(tgt.x, tgt.y + Math.min(260, -this.cam.pitch * this.cam.dist * 0.55), tgt.z);
     this.camera.lookAt(tgt);
     let amp = 0;
     for (let i = this.shakes.length - 1; i >= 0; i--) {
@@ -470,7 +679,7 @@ export class Game {
     const P = this.player; const dps = this.stats.dmgWin.reduce((a, b) => a + b.d, 0) / 3;
     const ne = this.nearest(P.pos);
     return {
-      hp: P.hp, maxHp: P.maxHp, kills: this.stats.kills, dps, total: this.stats.dmg, fps: this.fps,
+      hp: P.hp, maxHp: P.maxHp, kills: this.stats.kills, dps, total: this.stats.dmg, fps: this.fps, sandbox: this.settings.sandbox,
       aimDist: Math.hypot(this.aim.x - P.pos.x, this.aim.z - P.pos.z), aim3D: this.aim.distanceTo(P.pos), camDist: this.camera.position.distanceTo(V(P.pos.x, P.pos.y + 1.6, P.pos.z)), zoomTarget: this.cam.targetDist,
       nearest: ne ? ne.pos.distanceTo(P.pos) : 0, alive: this.enemies.filter(e => !e.dead).length, equipped: this.equipped,
       buffs: Object.entries(this.buffs).filter(([, v]) => v > this.time).map(([k, v]) => ({ k, rem: v - this.time })),

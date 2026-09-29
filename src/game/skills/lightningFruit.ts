@@ -19,7 +19,7 @@ export const LIGHTNING_FRUIT: ItemDef = {
       grp.add(head, aura, e1, e2, ear1, ear2);
       const dir = (tg ? tg.pos.clone().setY(1.5) : g.aim.clone().setY(1.5)).sub(P).normalize();
       g.add(new Projectile(g, { pos: P.clone(), vel: dir.multiplyScalar(30), mesh: grp, homing: () => (tg && !tg.dead ? tg.pos.clone().setY(1.5) : null), turn: 4, hitR: 2.5, life: 10,
-        onHit: (hp) => { const R = g.aoe(30); explosion(g, hp.setY(0), R, { core: 0xfffbe0, mid: Y, ring: CY, smoke: 0x2a2a30, debris: 0x55504a, spikes: 12, shake: 22 }); for (let i = 0; i < 8; i++) { const p = around(hp, R * 0.7); g.strike(p.x, p.z, { color: Y, core: 0xffffff, width: 0.8, h: 60 }); } g.damageRadius(hp, R, 30000, { stun: 1 }); },
+        onHit: (hp) => { const R = g.aoe(30); explosion(g, hp.setY(0), R, { core: 0xfffbe0, mid: Y, ring: CY, smoke: 0x2a2a30, debris: 0x55504a, spikes: 12, shake: 22 }); for (let i = 0; i < 8; i++) { const p = around(hp, R * 0.7); g.strike(p.x, p.z, { color: Y, core: 0xffffff, width: 0.8, h: 150 }); } g.damageRadius(hp, R, 30000, { stun: 1 }); },
         trail: (p, dt, self) => { grp.lookAt(p.clone().add(self.o.vel)); aura.scale.set(2.6 + Math.random() * 0.5, 2.2 + Math.random() * 0.5, 3.6); g.fx.spawn(p.x + rnd(-1, 1), p.y + rnd(-1, 1), p.z + rnd(-1, 1), 0, 0, 0, Y, 1.2, 0.3, {});
           if (Math.random() < 0.5) g.bolt(p.clone(), p.clone().add(V(rnd(-4, 4), rnd(-3, 3), rnd(-4, 4))), { color: Y, width: 0.2, life: 0.12, segs: 8, branches: 1 }); } }));
     } },
@@ -85,7 +85,7 @@ export const LIGHTNING_FRUIT: ItemDef = {
         im.instanceMatrix.needsUpdate = true;
       }));
       g.after(1, () => g.every(0.1, N, (i: number) => { const c = cps[i]; const p = V(c.x + rnd(-5, 5), 0, c.z + rnd(-5, 5)); const R = g.aoe(16);
-        for (let n = 0; n < 3; n++) g.bolt(V(c.x + rnd(-4, 4), c.y - 3, c.z + rnd(-4, 4)), V(p.x + rnd(-0.6, 0.6), 0.1, p.z + rnd(-0.6, 0.6)), { color: Y, core: 0xffffff, width: 1, life: 0.35, segs: 30, jag: 0.06, branches: 4 });
+        for (let n = 0; n < 3; n++) g.bolt(V(c.x + rnd(-4, 4), c.y - 3, c.z + rnd(-4, 4)), V(p.x + rnd(-0.6, 0.6), 0.1, p.z + rnd(-0.6, 0.6)), { color: Y, core: 0xffffff, width: 1, life: 0.42, segs: 16, jag: 0.05, branches: 3, taper: 0.4 });
         explosion(g, p, R, { core: 0xfffbe0, mid: 0xffc020, ring: Y, smoke: 0x2a2a30, debris: 0x4a4a45, debrisCount: 6, smokeCount: 5, shake: 6 }); g.damageRadius(p, R, 12000, { stun: 3 }); }));
     } },
   ],

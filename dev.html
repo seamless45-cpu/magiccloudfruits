@@ -7,20 +7,56 @@
     <!-- Inline so the page is never a white screen, even if every external request fails. -->
     <style>
       html, body { margin: 0; height: 100%; background: #05070d; color: #dff6ff;
-        font-family: 'Rajdhani', system-ui, -apple-system, 'Segoe UI', sans-serif; }
-      #boot { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; }
-      #boot .box { max-width: 620px; }
-      #boot .title { font-size: 15px; letter-spacing: .18em; color: #7fe6ff; margin-bottom: 10px; }
-      #boot .msg { font-size: 13px; line-height: 1.6; color: #9fdcf5; }
+        font-family: 'Rajdhani', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
+      /* ---------------------------------------------------------------- loading screen */
+      #boot { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; text-align: center;
+        padding: 24px; background: radial-gradient(120% 90% at 50% 0%, #0b2338 0%, #061019 45%, #04070c 100%);
+        transition: opacity .45s ease, transform .45s ease; }
+      #boot.gone { opacity: 0; transform: scale(1.02); pointer-events: none; }
+      #boot .grid { position: absolute; inset: -20%; background-image: linear-gradient(rgba(51,224,255,.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(51,224,255,.07) 1px, transparent 1px);
+        background-size: 46px 46px; transform: perspective(520px) rotateX(62deg); animation: drift 16s linear infinite; }
+      #boot .scan { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 0%, rgba(51,224,255,.06) 45%, transparent 55%);
+        background-size: 100% 240px; animation: scan 5.5s linear infinite; }
+      #boot .box { position: relative; width: min(560px, 92vw); }
+      #boot h1 { font-size: clamp(26px, 6vw, 44px); letter-spacing: .22em; margin: 0; color: #e6faff;
+        text-shadow: 0 0 18px rgba(51,224,255,.75), 0 0 46px rgba(51,224,255,.35); animation: glow 3.2s ease-in-out infinite; }
+      #boot .sub { font-size: 11px; letter-spacing: .34em; color: #6fc4de; margin-top: 8px; }
+      #boot .mark { display: block; font-size: 30px; color: #33e0ff; margin-bottom: 6px; animation: spin 6s linear infinite; }
+      #boot .spin-ring { width: 74px; height: 74px; margin: 26px auto 18px; position: relative; }
+      #boot .spin-ring i { position: absolute; inset: 0; border: 2px solid transparent; border-top-color: #33e0ff; border-radius: 50%;
+        animation: spin 1.5s linear infinite; }
+      #boot .spin-ring i:nth-child(2) { inset: 9px; border-top-color: #7a5cff; animation-duration: 2.4s; animation-direction: reverse; }
+      #boot .spin-ring i:nth-child(3) { inset: 18px; border-top-color: #16ffb0; animation-duration: 3.4s; }
+      #boot .bar { height: 8px; background: rgba(255,255,255,.08); border: 1px solid rgba(80,220,255,.3); overflow: hidden;
+        clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+      #boot .bar span { display: block; height: 100%; width: 0%; transition: width .35s ease;
+        background: linear-gradient(90deg, #16ffb0, #33e0ff 55%, #7a5cff); box-shadow: 0 0 14px rgba(51,224,255,.8); }
+      #boot .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px;
+        font-size: 12.5px; color: #9fdcf5; letter-spacing: .06em; }
+      #boot .pct { color: #bff3ff; font-variant-numeric: tabular-nums; }
       #boot .hint { font-size: 12px; line-height: 1.6; color: #6f9ab0; margin-top: 10px; }
       #boot code { color: #ffd479; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; }
+      #boot .tips { font-size: 11px; letter-spacing: .1em; color: #4d7d92; margin-top: 18px; min-height: 16px; }
       .dots::after { content: ''; animation: d 1.2s steps(4, end) infinite; }
+      #boot .play { display: none; font: inherit; font-size: 16px; letter-spacing: .24em; color: #eafcff; cursor: pointer;
+        margin-top: 20px; padding: 14px 46px; background: linear-gradient(180deg, rgba(51,224,255,.34), rgba(51,224,255,.1));
+        border: 1px solid rgba(120,240,255,.7); clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+        box-shadow: 0 0 22px rgba(51,224,255,.35), inset 0 0 18px rgba(51,224,255,.2); transition: all .18s; }
+      #boot .play.show { display: inline-block; animation: pulse 1.9s ease-in-out infinite; }
+      #boot .play:hover { background: rgba(51,224,255,.45); box-shadow: 0 0 34px rgba(51,224,255,.65); }
+      #boot .play:active { transform: scale(.97); }
       #boot .actions { display: none; justify-content: center; gap: 10px; margin-top: 16px; }
       #boot .btn { font: inherit; font-size: 12px; letter-spacing: .12em; color: #bff3ff; cursor: pointer;
         background: linear-gradient(180deg, rgba(40,200,255,.18), rgba(40,200,255,.05));
         border: 1px solid rgba(80,220,255,.45); border-radius: 3px; padding: 7px 18px; }
       #boot .btn:hover { background: rgba(51,224,255,.3); }
       @keyframes d { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes drift { to { background-position: 0 46px, 46px 0; } }
+      @keyframes scan { to { background-position: 0 240px; } }
+      @keyframes glow { 0%, 100% { text-shadow: 0 0 16px rgba(51,224,255,.6); } 50% { text-shadow: 0 0 26px rgba(51,224,255,.95), 0 0 60px rgba(51,224,255,.45); } }
+      @keyframes pulse { 0%, 100% { box-shadow: 0 0 20px rgba(51,224,255,.35); transform: translateY(0); } 50% { box-shadow: 0 0 40px rgba(51,224,255,.75); transform: translateY(-2px); } }
     </style>
     <!-- No external requests at all: the page loads nothing but the document itself, so a
          blocked or 404-ing CDN can never show up as a console error or delay first paint. -->
@@ -29,14 +65,22 @@
   <body>
     <div id="root"></div>
     <div id="boot">
+      <div class="grid"></div>
+      <div class="scan"></div>
       <div class="box">
-        <div class="title">1090 FRUITS // OPERATOR</div>
-        <div class="msg" id="boot-msg">Booting arena<span class="dots"></span></div>
+        <span class="mark">◈</span>
+        <h1>1090 FRUITS</h1>
+        <div class="sub">3D COMBAT ARENA · OPERATOR INTERFACE</div>
+        <div class="spin-ring" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="bar"><span id="boot-bar"></span></div>
+        <div class="row"><span id="boot-msg">Initialising<span class="dots"></span></span><span class="pct" id="boot-pct">0%</span></div>
         <div class="hint" id="boot-hint"></div>
+        <button type="button" id="boot-play" class="play">▶ &nbsp;PLAY</button>
         <div class="actions" id="boot-actions">
           <button type="button" class="btn" onclick="go('/?r=' + Date.now())">RETRY</button>
           <button type="button" class="btn" onclick="go('/?safe=1&r=' + Date.now())">SAFE MODE</button>
         </div>
+        <div class="tips" id="boot-tip"></div>
         <noscript>
           <div class="msg" style="margin-top:14px">JavaScript is disabled in this browser.</div>
           <div class="hint">The 3D arena is rendered entirely by JavaScript, so it cannot start without it.
@@ -46,7 +90,7 @@
     </div>
     <script type="module" src="/src/main.tsx" onerror="window.__bootScriptFailed = true"></script>
     <script>
-      // Boot watchdog.
+      // Boot watchdog + loading screen.
       //
       // IMPORTANT: this must never reload the page on its own. An automatic reload can become an
       // endless loop (a proxy that rewrites query strings defeats any cache-buster guard), which
@@ -54,6 +98,7 @@
       // the user presses - that is always loop-safe.
       (function () {
         var root = function () { return document.getElementById('root'); };
+        var boot = function () { return document.getElementById('boot'); };
         var mounted = function () { return !!(root() && root().childElementCount > 0); };
         var started = function () { return !!(window.__appStarted || mounted()); };
         // Retry navigates to "/" with a cache-buster; safe mode adds ?safe=1. Query strings are
@@ -61,51 +106,85 @@
         // with the current build (it sends no-store), so nothing here can 404 or loop.
         // /index.html and /safe also work when the server sees them (see serve.py).
         window.go = function (path) { location.href = path; };
-        var setMsg = function (html) {
-          var m = document.getElementById('boot-msg');
-          if (m && !mounted()) m.innerHTML = html;
-        };
+
+        var tips = [
+          'TIP \u00b7 1-9, 0, - equip fruit or sword \u00b7 Z X C V B F G N M L K J cast skills',
+          'TIP \u00b7 RMB drag to orbit, wheel or + / - to zoom out to 300 m',
+          'TIP \u00b7 cloud fruits build storm cells: the bigger the name, the bigger the storm',
+          'TIP \u00b7 lightning always finds the tip of your blade - raise it and aim well',
+          'TIP \u00b7 sandbox mode in graphics settings: infinite HP and zero cooldowns',
+        ];
+        var ti = 0;
+        var tipEl = document.getElementById('boot-tip');
+        if (tipEl) { tipEl.textContent = tips[0]; setInterval(function () { ti = (ti + 1) % tips.length; tipEl.textContent = tips[ti]; }, 3200); }
+
+        var setMsg = function (html) { var m = document.getElementById('boot-msg'); if (m) m.innerHTML = html; };
+        var setHint = function (html) { var h = document.getElementById('boot-hint'); if (h) h.innerHTML = html; };
 
         // Progress feedback: a slow first load must not look like a freeze.
-        window.__bootTimer = setTimeout(function () {
-          if (!started()) setMsg('Downloading engine<span class="dots"></span>');
-        }, 1200);
-        window.__bootSlowTimer = setTimeout(function () {
-          if (!mounted()) setMsg('Building arena<span class="dots"></span>');
-        }, 4000);
+        window.__bootProgress = function (p, label) {
+          var bar = document.getElementById('boot-bar'), pct = document.getElementById('boot-pct');
+          p = Math.max(0, Math.min(1, p));
+          if (bar) bar.style.width = (p * 100).toFixed(0) + '%';
+          if (pct) pct.textContent = (p * 100).toFixed(0) + '%';
+          if (label) setMsg(label + (p < 1 ? '<span class="dots"></span>' : ''));
+          if (p >= 1) {
+            // The arena has rendered its first frame: hand control to the player.
+            window.__gameReady = true;
+            var play = document.getElementById('boot-play');
+            if (play) play.classList.add('show');
+            setHint('');
+          }
+        };
+
+        window.__startGame = function () {
+          var b = boot(); if (!b) return;
+          b.classList.add('gone');
+          window.__playing = true;
+          setTimeout(function () { if (b && b.parentNode) b.parentNode.removeChild(b); }, 500);
+        };
+        var play = document.getElementById('boot-play');
+        if (play) play.addEventListener('click', function () { window.__startGame(); });
+        document.addEventListener('keydown', function (e) {
+          if (window.__gameReady && !window.__playing && (e.key === 'Enter' || e.key === ' ')) { window.__startGame(); }
+        });
+        setTimeout(function () { window.__bootProgress(0.06, 'Loading engine'); }, 60);
+        setTimeout(function () { if (!window.__gameReady) window.__bootProgress(0.16, 'Loading engine'); }, 1400);
 
         setTimeout(function () {
-          if (mounted()) return;
-          var hint = document.getElementById('boot-hint');
-          if (!hint) return;
+          if (window.__gameReady || window.__playing) return;
+          if (!mounted()) {
+            var scripts = document.querySelectorAll('script[src]');
+            var list = [];
+            for (var i = 0; i < scripts.length; i++) list.push(scripts[i].getAttribute('src'));
+            var scriptFailed = !!window.__bootScriptFailed;
+            var cameUp = !!window.__appStarted;   // module executed but React never committed
+            var listed = list.length ? '<code>' + list.join('</code>, <code>') + '</code>' : 'its script';
 
-          var scripts = document.querySelectorAll('script[src]');
-          var list = [];
-          for (var i = 0; i < scripts.length; i++) list.push(scripts[i].getAttribute('src'));
-          var scriptFailed = !!window.__bootScriptFailed;
-          var cameUp = !!window.__appStarted;   // module executed but React never committed
-          var listed = list.length ? '<code>' + list.join('</code>, <code>') + '</code>' : 'its script';
+            if (scriptFailed) {
+              setMsg('The game script could not be loaded.');
+              setHint('The page loaded, but ' + listed + ' was not fetched - usually this is a ' +
+                'cached page from an earlier session while the server has stopped or changed.' +
+                '<br>Press RETRY. If that keeps failing, force a fresh copy with <b>Ctrl+Shift+R</b> ' +
+                '(Cmd+Shift+R on Mac).' +
+                '<br>To restart the server: <code>npm run build &amp;&amp; python3 serve.py</code>');
+            } else if (cameUp) {
+              setMsg('The engine loaded but the arena did not appear.');
+              setHint('The game script ran, so this is a graphics or setup problem (low-end GPU, ' +
+                'slow shader compile, or graphics settings that are too heavy).' +
+                '<br>Press SAFE MODE to start with minimal graphics, or wait a little longer.');
+            } else {
+              setMsg('The game is taking longer than expected to start.');
+              setHint(listed + ' is still loading - expected on a slow connection or slow machine.' +
+                '<br>Wait a little longer, or press RETRY to load it again.');
+            }
 
-          if (scriptFailed) {
-            setMsg('The game script could not be loaded.');
-            hint.innerHTML = 'The page loaded, but ' + listed + ' was not fetched - usually this is a ' +
-              'cached page from an earlier session while the server has stopped or changed.' +
-              '<br>Press RETRY. If that keeps failing, force a fresh copy with <b>Ctrl+Shift+R</b> ' +
-              '(Cmd+Shift+R on Mac).' +
-              '<br>To restart the server: <code>npm run build &amp;&amp; python3 serve.py</code>';
-          } else if (cameUp) {
-            setMsg('The engine loaded but the arena did not appear.');
-            hint.innerHTML = 'The game script ran, so this is a graphics or setup problem (low-end GPU, ' +
-              'slow shader compile, or graphics settings that are too heavy).' +
-              '<br>Press SAFE MODE to start with minimal graphics, or wait a little longer.';
+            var actions = document.getElementById('boot-actions');
+            if (actions) actions.style.display = 'flex';
           } else {
-            setMsg('The game is taking longer than expected to start.');
-            hint.innerHTML = listed + ' is still loading - expected on a slow connection or slow machine.' +
-              '<br>Wait a little longer, or press RETRY to load it again.';
+            // React is up: the arena is only a frame or two away, so let the player in anyway.
+            window.__bootProgress(1, 'Ready');
           }
-
-          var actions = document.getElementById('boot-actions');
-          if (actions) actions.style.display = 'flex';
         }, 8000);
       })();
     </script>

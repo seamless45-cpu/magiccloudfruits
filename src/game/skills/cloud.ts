@@ -29,21 +29,22 @@ export const CLOUD_FRUIT: ItemDef = {
   } },
   skills: [
     { name: 'Cumulus Growth', cd: 5, info: '10s growth humilis→Cb · 35% supercell · 2min', cast: (g) => {
-      for (let i = 0; i < 3; i++) { const p = around(g.player.pos, 220); g.add(new StormCloud(g, { pos: p, kind: 'cumulus', size: rnd(140, 220), life: 120, grow: 10, rain: 0.8, rainDmg: 260, supercellChance: 0.35, boltDmg: 9000, hailDmg: 22000, hailShatter: 0.6, hailShatterDmg: 0.4 })); }
+      // formed far enough away that the cloud towers in view instead of sitting overhead
+      for (let i = 0; i < 3; i++) { const p = around(g.player.pos, 380); g.add(new StormCloud(g, { pos: p, kind: 'cumulus', size: rnd(140, 220), life: 120, grow: 10, rain: 0.8, rainDmg: 260, supercellChance: 0.35, boltDmg: 9000, hailDmg: 22000, hailShatter: 0.6, hailShatterDmg: 0.4 })); }
       g.toast('CUMULUS GROWTH', '#e6eef8');
     } },
     { name: 'Atmospheric Instability', cd: 5, info: 'Squall line 1200×400m · 10m/s · 120mph', cast: (g) => {
-      const f = g.player.facing.clone(); const p = g.player.pos.clone().addScaledVector(f, -320);
+      const f = g.player.facing.clone(); const p = g.player.pos.clone().addScaledVector(f, -560);
       g.add(new StormCloud(g, { pos: p, kind: 'squall', size: 400, length: 1200, depth: 400, bow: 0.08, life: 120, grow: 1.5, vel: f.clone().multiplyScalar(10), rain: 1.4, rainDmg: 200, wind: 120, windDmg: 3500, bolts: 0.9, boltDmg: 9000, superChance: 0.1, superMul: 3, superName: 'SUPERBOLT', shade: 0.9 }));
       g.toast('SQUALL LINE APPROACHING', '#cfd8e6');
     } },
     { name: 'Hailstorm', cd: 5, info: '4 Cb 280m · golf-ball hail · 8s', cast: (g) => {
-      for (let i = 0; i < 4; i++) { const a = (i / 4) * 6.28 + 0.6; const p = g.aim.clone().add(V(Math.cos(a) * 130, 0, Math.sin(a) * 130));
+      for (let i = 0; i < 4; i++) { const a = (i / 4) * 6.28 + 0.6; const p = g.aim.clone().add(V(Math.cos(a) * 260, 0, Math.sin(a) * 260));
         g.add(new StormCloud(g, { pos: p, kind: 'hail', size: 280, life: 8, grow: 1.2, rain: 0.9, rainDmg: 150, hail: 6, hailDmg: 16000, hailShatter: 0.5, hailShatterDmg: 0.3, bolts: 0.8, boltDmg: 8000, shade: 0.75, rainColor: 0xd0d6de })); }
     } },
     { name: 'Derecho Swarm', cd: 5, info: '4 derechos 1600×800m · 24m/s · 240mph', cast: (g) => {
       const c = g.player.pos.clone(); const dirs = [V(1, 0, 0), V(-1, 0, 0), V(0, 0, 1), V(0, 0, -1)];
-      for (const d of dirs) { const start = c.clone().addScaledVector(d, 24 * 15); g.add(new StormCloud(g, { pos: start, kind: 'derecho', size: 800, length: 1600, depth: 800, bow: 0.3, life: 30, grow: 1.5, vel: d.clone().multiplyScalar(-24), rain: 1.6, rainDmg: 300, wind: 240, windDmg: 7000, bolts: 1.2, boltDmg: 10000, shade: 0.78 })); }
+      for (const d of dirs) { const start = c.clone().addScaledVector(d, 24 * 29); g.add(new StormCloud(g, { pos: start, kind: 'derecho', size: 800, length: 1600, depth: 800, bow: 0.3, life: 30, grow: 1.5, vel: d.clone().multiplyScalar(-24), rain: 1.6, rainDmg: 300, wind: 240, windDmg: 7000, bolts: 1.2, boltDmg: 10000, shade: 0.78 })); }
       g.toast('DERECHO SWARM', '#b9c6d8');
     } },
     { name: 'Tornado Destruction', cd: 5, info: 'Supercell 350m · 200mph tornado · 10s', cast: (g) => {

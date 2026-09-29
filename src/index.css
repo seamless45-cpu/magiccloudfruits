@@ -30,12 +30,66 @@ body { font-family: 'Rajdhani', 'Segoe UI', system-ui, sans-serif; color: #dff6f
    bottom of the screen; the side rails end above it, so a wide inventory can never collide
    with the skill panel or the zoom control. --inv-max keeps the row inside the space between
    the rails on wider screens. */
-:root { --hud-bottom: 76px; --inv-max: calc(100vw - 540px); }
+/* --ctrl-h reserves room for the on-screen stick and action buttons on touch devices, so the
+   side rails stop above them instead of running underneath. */
+:root { --hud-bottom: 76px; --inv-max: calc(100vw - 540px); --ctrl-h: 0px; }
+@media (pointer: coarse) { :root { --ctrl-h: 108px; } }
 @media (max-width: 1239px) { :root { --hud-bottom: 160px; } .slot { width: 48px; height: 48px; } }
 @media (max-width: 700px) { :root { --hud-bottom: 140px; --inv-max: calc(100vw - 1rem); } .slot { width: 44px; height: 44px; } }
+/* Short screens (landscape phones): a slimmer band, tighter controls, and the least essential
+   telemetry moved out of the way so nothing can overlap. */
+@media (max-height: 560px) {
+  :root { --hud-bottom: 104px; --ctrl-h: 84px; }
+  .slot { width: 40px; height: 40px; }
+}
 
 .hex-bar { height: 10px; background: rgba(255, 255, 255, 0.06); clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); overflow: hidden; }
 .toast-in { animation: tin .25s ease-out; }
 @keyframes tin { from { opacity: 0; transform: translateY(-8px) scale(.96); } to { opacity: 1; transform: none; } }
 input[type=range] { accent-color: #33e0ff; }
+
+/* ------------------------------------------------------------------ HUD motion
+   Entrance, sweep and pulse animations. Everything here is transform/opacity only, so no
+   animation can move a panel into another one or push it off screen: layout never changes. */
+@keyframes sf-in { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes sf-in-right { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes sf-in-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes sf-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes sf-sweep { from { transform: translateX(-120%); } to { transform: translateX(320%); } }
+@keyframes sf-ready { 0%, 100% { box-shadow: inset 0 0 10px rgba(60,255,190,.12); } 50% { box-shadow: inset 0 0 18px rgba(60,255,190,.4), 0 0 10px rgba(60,255,190,.25); } }
+@keyframes sf-spin-slow { to { transform: rotate(360deg); } }
+@keyframes sf-flicker { 0%, 100% { opacity: 1; } 47% { opacity: .82; } 52% { opacity: .97; } }
+@keyframes sf-toast { from { opacity: 0; transform: translateY(-10px) scale(.94); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes sf-cross { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.sf-panel { animation: sf-in .32s ease-out both; transition: border-color .2s, box-shadow .2s; }
+.sf-panel:hover { border-color: rgba(120, 240, 255, 0.5); box-shadow: inset 0 0 22px rgba(51, 224, 255, 0.12); }
+.sf-pulse { animation: sf-pulse 1.5s ease-in-out infinite; }
+.sf-flicker { animation: sf-flicker 2.6s ease-in-out infinite; }
+.sf-scan-glow { animation: sf-sweep 3.4s ease-in-out infinite; }
+
+.hex-bar > div { transition: width .28s ease-out, background .3s; }
+.skill-row { animation: sf-in-up .3s ease-out both; }
+.skill-row.ready { animation: sf-ready 2.1s ease-in-out infinite; }
+.skill-row::after { /* light sweep across a ready skill row */
+  content: ''; position: absolute; top: 0; bottom: 0; width: 28%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(120, 255, 220, 0.16), transparent); opacity: 0; transition: opacity .2s; }
+.skill-row.ready::after { opacity: 1; animation: sf-sweep 2.6s linear infinite; }
+
+.slot { animation: sf-in-up .34s ease-out both; transition: all .12s, transform .12s; }
+.slot:hover { transform: translateY(-4px); }
+.slot.eq { animation: sf-in-up .34s ease-out both, sf-ready 2.4s ease-in-out infinite .34s; }
+
+.sf-btn { position: relative; overflow: hidden; }
+.sf-btn::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent); transform: translateX(-120%); }
+.sf-btn:hover::after { animation: sf-sweep .7s ease-out; }
+
+.toast-in { animation: sf-toast .26s ease-out; }
+.crosshair { animation: sf-cross 12s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-panel, .slot, .skill-row, .toast-in, .sf-pulse, .sf-flicker { animation: none !important; }
+  .skill-row.ready::after, .sf-btn::after { animation: none !important; }
+}
 select { background: #0a1626; color: #cff4ff; border: 1px solid var(--line); }

@@ -4,10 +4,22 @@ import { GEO, rnd, V } from './effects';
 export type EnemyKind = 'normal' | 'elite' | 'boss';
 
 const G = {
-  body: new THREE.CapsuleGeometry(0.55, 1.1, 4, 10),
-  head: new THREE.SphereGeometry(0.42, 14, 10),
-  eye: new THREE.SphereGeometry(0.08, 6, 6),
+  torso: new THREE.CapsuleGeometry(0.5, 0.9, 8, 14),
+  chest: new THREE.BoxGeometry(0.86, 0.72, 0.62),
+  shoulder: new THREE.SphereGeometry(0.26, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.65),
+  armUpper: new THREE.CapsuleGeometry(0.13, 0.34, 6, 12),
+  armFore: new THREE.CapsuleGeometry(0.15, 0.36, 6, 12),
+  claw: new THREE.ConeGeometry(0.1, 0.34, 6),
+  thigh: new THREE.CapsuleGeometry(0.18, 0.36, 6, 12),
+  shin: new THREE.CapsuleGeometry(0.13, 0.34, 6, 12),
+  head: new THREE.SphereGeometry(0.34, 18, 14),
+  jaw: new THREE.BoxGeometry(0.42, 0.16, 0.4),
+  eye: new THREE.SphereGeometry(0.075, 8, 8),
   horn: new THREE.ConeGeometry(0.12, 0.5, 6),
+  spike: new THREE.ConeGeometry(0.09, 0.42, 5),
+  crest: new THREE.BoxGeometry(0.1, 0.5, 0.34),
+  core: new THREE.SphereGeometry(0.16, 12, 10),
+  plate: new THREE.BoxGeometry(0.34, 0.26, 0.1),
   bar: new THREE.PlaneGeometry(1.6, 0.16),
   cage: new THREE.EdgesGeometry(new THREE.CylinderGeometry(1, 1, 1, 8, 3)),
   ice: new THREE.IcosahedronGeometry(1, 0),
@@ -19,8 +31,13 @@ const M = {
   cage: new THREE.LineBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0.95 }),
   ice: new THREE.MeshStandardMaterial({ color: 0x9fe6ff, transparent: true, opacity: 0.55, roughness: 0.05, metalness: 0.2, emissive: 0x114466 }),
   star: new THREE.MeshBasicMaterial({ color: 0xffee55 }),
-  horn: new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.3 }),
+  horn: new THREE.MeshStandardMaterial({ color: 0x1a1a1e, metalness: 0.85, roughness: 0.3 }),
   crown: new THREE.MeshStandardMaterial({ color: 0xffc830, metalness: 1, roughness: 0.25, emissive: 0x442200 }),
+  armor: new THREE.MeshStandardMaterial({ color: 0x39424f, metalness: 0.85, roughness: 0.35 }),
+  claw: new THREE.MeshStandardMaterial({ color: 0xd8dde6, metalness: 0.9, roughness: 0.2 }),
+  coreRed: new THREE.MeshStandardMaterial({ color: 0x3a0a10, emissive: 0xff2a3a, emissiveIntensity: 1.7, metalness: 0.6, roughness: 0.3 }),
+  coreViolet: new THREE.MeshStandardMaterial({ color: 0x220a3a, emissive: 0xb060ff, emissiveIntensity: 1.7, metalness: 0.6, roughness: 0.3 }),
+  coreTeal: new THREE.MeshStandardMaterial({ color: 0x06222a, emissive: 0x2fe0d0, emissiveIntensity: 1.5, metalness: 0.6, roughness: 0.3 }),
 };
 
 export class Enemy {
@@ -35,16 +52,72 @@ export class Enemy {
     this.kind = kind;
     this.scale = kind === 'boss' ? 3.2 : kind === 'elite' ? 1.6 : 1;
     this.maxHp = kind === 'boss' ? 2.5e6 : kind === 'elite' ? 1.5e5 : 12000;
-    this.hp = this.maxHp; this.radius = 0.7 * this.scale; this.height = 2.2 * this.scale;
+    this.hp = this.maxHp; this.radius = 0.85 * this.scale; this.height = 2.55 * this.scale;
     this.speed = kind === 'boss' ? 5 : kind === 'elite' ? 6.5 : 7.5;
     const col = kind === 'boss' ? 0x7a1020 : kind === 'elite' ? 0x5a2a9a : 0x2f4f5f;
     this.bodyMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.35, emissive: 0x000000 });
-    const body = new THREE.Mesh(G.body, this.bodyMat); body.position.y = 1.1; body.castShadow = true;
-    const head = new THREE.Mesh(G.head, this.bodyMat); head.position.y = 2.05; head.castShadow = true;
-    const e1 = new THREE.Mesh(G.eye, M.eye); e1.position.set(0.15, 2.1, 0.36); const e2 = e1.clone(); e2.position.x = -0.15;
-    const inner = new THREE.Group(); inner.add(body, head, e1, e2);
-    if (kind !== 'normal') { const h1 = new THREE.Mesh(G.horn, M.horn); h1.position.set(0.22, 2.45, 0); h1.rotation.z = -0.4; const h2 = h1.clone(); h2.position.x = -0.22; h2.rotation.z = 0.4; inner.add(h1, h2); }
-    if (kind === 'boss') { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.3, 0.25, 8, 1, true), M.crown); c.position.y = 2.55; inner.add(c); }
+    const inner = new THREE.Group();
+    const armor = kind === 'normal' ? M.armor : this.bodyMat;
+    const coreMat = kind === 'boss' ? M.coreRed : kind === 'elite' ? M.coreViolet : M.coreTeal;
+    const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = inner) => {
+      const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m;
+    };
+
+    // legs: thigh, shin, clawed foot
+    for (const sgn of [-1, 1]) {
+      const thigh = mk(G.thigh, armor, sgn * 0.26, 0.85, 0);
+      const shin = mk(G.shin, this.bodyMat, sgn * 0.28, 0.42, 0.04);
+      const foot = mk(G.claw, M.claw, sgn * 0.3, 0.12, 0.2); foot.rotation.x = Math.PI * 0.62;
+      void thigh; void shin;
+    }
+    // torso: broad chest over a segmented abdomen, with an exposed glowing core
+    const abd = mk(G.torso, this.bodyMat, 0, 1.18, 0); abd.scale.set(0.86, 0.78, 0.72);
+    const chest = mk(G.chest, armor, 0, 1.6, 0); chest.scale.set(1.06, 1, 0.86);
+    const core = mk(G.core, coreMat, 0, 1.58, 0.3);
+    for (const sgn of [-1, 1]) mk(G.plate, armor, sgn * 0.3, 1.42, 0.26);
+    // shoulders + arms: pauldron, upper arm, forearm, three claws
+    for (const sgn of [-1, 1]) {
+      const arm = new THREE.Group(); arm.position.set(sgn * 0.56, 1.72, 0); inner.add(arm);
+      const pauld = mk(G.shoulder, armor, 0, 0.02, 0, arm); pauld.rotation.z = -sgn * 0.35;
+      mk(G.armUpper, this.bodyMat, 0, -0.28, 0, arm);
+      mk(G.armFore, armor, 0, -0.66, 0.02, arm);
+      for (let c = 0; c < 3; c++) {
+        const claw = mk(G.claw, M.claw, (c - 1) * 0.08, -0.98, 0.03, arm);
+        claw.rotation.x = Math.PI + (c - 1) * 0.16;
+      }
+    }
+    // head: skull, jaw, two eyes; elite/boss get horns and a crest
+    const head = mk(G.head, this.bodyMat, 0, 2.16, 0.06); head.scale.set(1, 0.94, 1.06);
+    mk(G.jaw, M.horn, 0, 2.0, 0.3);
+    for (let i = 0; i < 5; i++) mk(new THREE.ConeGeometry(0.035, 0.12, 4), M.claw, -0.16 + i * 0.08, 2.06, 0.44).rotation.x = Math.PI;
+    for (const sgn of [-1, 1]) {
+      const socket = mk(G.eye, M.horn, sgn * 0.15, 2.21, 0.28); socket.scale.set(1.5, 1.3, 1.1);
+      const eye = mk(G.eye, M.eye, sgn * 0.15, 2.21, 0.33); eye.scale.setScalar(0.9);
+      const brow = mk(G.plate, M.horn, sgn * 0.15, 2.34, 0.3); brow.scale.set(1.2, 0.8, 1.6);
+    }
+    if (kind !== 'normal') {
+      for (const sgn of [-1, 1]) {
+        const h = mk(G.horn, M.horn, sgn * 0.26, 2.52, 0.0); h.rotation.z = -sgn * 0.75; h.rotation.x = -0.32; h.scale.set(1.15, 1.9, 1.15);
+      }
+      const fin = mk(G.crest, M.horn, 0, 2.46, -0.26); fin.rotation.x = -0.7; fin.scale.set(1.4, 1.3, 0.6);
+      for (let i = 0; i < 4; i++) {
+        const sp = mk(G.spike, M.horn, 0, 1.86 - i * 0.02, -0.34 - i * 0.06);
+        sp.rotation.x = -0.5 - i * 0.12;
+      }
+    }
+    if (kind === 'boss') {
+      // crown: ring of upright spikes + a glowing gem, so the silhouette reads as royalty
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2, sp2 = mk(G.spike, M.crown, Math.cos(a) * 0.26, 2.62, Math.sin(a) * 0.26 + 0.04);
+        sp2.rotation.z = -Math.cos(a) * 0.3; sp2.rotation.x = Math.sin(a) * 0.3; sp2.scale.setScalar(1.5);
+      }
+      const ring = mk(new THREE.TorusGeometry(0.27, 0.05, 6, 20).rotateX(Math.PI / 2), M.crown, 0, 2.58, 0.04);
+      void ring;
+      const gem = mk(G.core, M.coreRed, 0, 2.34, 0.36); gem.scale.setScalar(0.9);
+      for (const sgn of [-1, 1]) {
+        const pauld = mk(G.shoulder, M.crown, sgn * 0.62, 1.62, 0); pauld.scale.setScalar(1.5); pauld.rotation.z = -sgn * 0.4;
+      }
+    }
     inner.scale.setScalar(this.scale); this.mesh.add(inner);
     const bg = new THREE.Mesh(G.bar, M.barBg);
     this.bar = new THREE.Mesh(G.bar, new THREE.MeshBasicMaterial({ color: kind === 'boss' ? 0xff3040 : kind === 'elite' ? 0xc070ff : 0x30ffb0, depthWrite: false }));
