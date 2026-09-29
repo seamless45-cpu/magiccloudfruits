@@ -78,3 +78,17 @@ The app now reports failures instead of showing an empty canvas:
 
 - A browser with **WebGL2** (three.js r150+ requires it). three@0.186 is pinned.
 - Node 18+ for the dev tooling.
+
+## Playable build (GitHub Pages)
+
+`docs/index.html` is the compiled, fully self-contained game — the same file `npm run build`
+produces. GitHub Pages is configured to serve the `docs/` folder, so the game is playable at:
+
+    https://seamless45-cpu.github.io/magiccloudfruits/
+
+That URL needs no build step and no dev server. `docs/arena-<version>.html` holds the same
+build under a versioned name, which is handy when a browser has cached the main URL — a new
+filename is always a fresh copy.
+
+Do not point Pages at the repository root: that serves the Vite dev entry `index.html`, which
+loads `/src/main.tsx`. Browsers cannot execute TypeScript, so the page would never boot.
