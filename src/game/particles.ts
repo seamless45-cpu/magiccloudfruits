@@ -39,7 +39,7 @@ void main(){
 
 export interface SpawnOpts {
   grav?: number; drag?: number; grow?: number; alpha?: number; turb?: number;
-  ox?: number; oz?: number; spread?: number; fade?: number;
+  ox?: number; oz?: number; spread?: number; fade?: number; windX?: number; windZ?: number; windResponse?: number;
 }
 
 /** Ring-buffer GPU point particle system with fluid-ish turbulence & ground outflow. */
@@ -48,6 +48,7 @@ export class ParticleSystem {
   pos: Float32Array; vel: Float32Array; col: Float32Array; size: Float32Array; alpha: Float32Array;
   life: Float32Array; maxLife: Float32Array; baseAlpha: Float32Array; grav: Float32Array; drag: Float32Array;
   grow: Float32Array; turb: Float32Array; ox: Float32Array; oz: Float32Array; spread: Float32Array; baseSize: Float32Array;
+  windX: Float32Array; windZ: Float32Array; windResponse: Float32Array; active: number[] = []; activeAt: Int32Array;
   geo: THREE.BufferGeometry; points: THREE.Points; mat: THREE.ShaderMaterial;
   density = 1;
   constructor(cap: number, additive: boolean) {
@@ -57,6 +58,7 @@ export class ParticleSystem {
     this.maxLife = new Float32Array(cap); this.baseAlpha = new Float32Array(cap); this.grav = new Float32Array(cap);
     this.drag = new Float32Array(cap); this.grow = new Float32Array(cap); this.turb = new Float32Array(cap);
     this.ox = new Float32Array(cap); this.oz = new Float32Array(cap); this.spread = new Float32Array(cap); this.baseSize = new Float32Array(cap);
+    this.windX = new Float32Array(cap); this.windZ = new Float32Array(cap); this.windResponse = new Float32Array(cap); this.activeAt = new Int32Array(cap); this.activeAt.fill(-1);
     this.geo = new THREE.BufferGeometry();
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aColor', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
@@ -84,21 +86,33 @@ export class ParticleSystem {
     this.baseAlpha[i] = o.alpha ?? 1; this.alpha[i] = this.baseAlpha[i];
     this.grav[i] = o.grav ?? 0; this.drag[i] = o.drag ?? 0; this.grow[i] = o.grow ?? 0; this.turb[i] = o.turb ?? 0;
     this.ox[i] = o.ox ?? x; this.oz[i] = o.oz ?? z; this.spread[i] = o.spread ?? 0;
+    this.windX[i] = o.windX ?? 0; this.windZ[i] = o.windZ ?? 0; this.windResponse[i] = o.windResponse ?? 0;
+    if (this.activeAt[i] < 0) { this.activeAt[i] = this.active.length; this.active.push(i); }
+    (this.geo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
   }
   update(dt: number, t: number) {
     const p = this.pos, v = this.vel;
-    for (let i = 0; i < this.cap; i++) {
-      if (this.life[i] <= 0) { if (this.alpha[i] !== 0) { this.alpha[i] = 0; this.size[i] = 0; } continue; }
+    for (let n = this.active.length - 1; n >= 0; n--) {
+      const i = this.active[n];
       this.life[i] -= dt;
       const i3 = i * 3;
+      if (this.life[i] <= 0) {
+        this.life[i] = 0; this.alpha[i] = 0; this.size[i] = 0;
+        const last = this.active.pop()!;
+        if (n < this.active.length) { this.active[n] = last; this.activeAt[last] = n; }
+        this.activeAt[i] = -1;
+        continue;
+      }
       const tb = this.turb[i];
       if (tb > 0) {
-        // cheap divergence-free-ish curl field for fluid-like billowing
+        // Cheap divergence-free-ish curl field for fluid-like billowing.
         const x = p[i3] * 0.02, y = p[i3 + 1] * 0.02, z = p[i3 + 2] * 0.02;
         v[i3] += (Math.sin(y * 3.1 + t * 1.3) - Math.cos(z * 2.7 - t)) * tb * dt;
         v[i3 + 1] += (Math.sin(z * 2.3 + t * 0.9) - Math.cos(x * 3.3)) * tb * 0.4 * dt;
         v[i3 + 2] += (Math.sin(x * 2.9 - t * 1.1) - Math.cos(y * 2.1 + t)) * tb * dt;
       }
+      const wind = this.windResponse[i];
+      if (wind > 0) { const blend = Math.min(1, wind * dt); v[i3] += (this.windX[i] - v[i3]) * blend; v[i3 + 2] += (this.windZ[i] - v[i3 + 2]) * blend; }
       v[i3 + 1] -= this.grav[i] * dt;
       const d = 1 - Math.min(1, this.drag[i] * dt);
       v[i3] *= d; v[i3 + 1] *= d; v[i3 + 2] *= d;
@@ -117,10 +131,11 @@ export class ParticleSystem {
       this.alpha[i] = this.baseAlpha[i] * Math.min(1, k * 2.5) * Math.min(1, (1 - k) * 12 + 0.2);
       this.size[i] = this.baseSize[i] * (1 + this.grow[i] * (1 - k));
     }
-    (this.geo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.aAlpha as THREE.BufferAttribute).needsUpdate = true;
+    if (this.active.length > 0) {
+      (this.geo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+      (this.geo.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;
+      (this.geo.attributes.aAlpha as THREE.BufferAttribute).needsUpdate = true;
+    }
   }
 }
 const _c = new THREE.Color();
@@ -132,7 +147,7 @@ const _p = new THREE.Vector3();
 
 /** Instanced physical debris chunks (rocks, ice shards, blocks). */
 export class DebrisSystem {
-  cap: number; cursor = 0; mesh: THREE.InstancedMesh;
+  cap: number; cursor = 0; mesh: THREE.InstancedMesh; active: number[] = []; activeAt: Int32Array;
   p: Float32Array; v: Float32Array; r: Float32Array; rv: Float32Array; s: Float32Array; life: Float32Array; ml: Float32Array;
   density = 1;
   constructor(cap: number) {
@@ -142,7 +157,7 @@ export class DebrisSystem {
     this.mesh = new THREE.InstancedMesh(geo, mat, cap);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.castShadow = true; this.mesh.frustumCulled = false;
-    this.p = new Float32Array(cap * 3); this.v = new Float32Array(cap * 3); this.r = new Float32Array(cap * 3); this.rv = new Float32Array(cap * 3);
+    this.p = new Float32Array(cap * 3); this.v = new Float32Array(cap * 3); this.r = new Float32Array(cap * 3); this.rv = new Float32Array(cap * 3); this.activeAt = new Int32Array(cap); this.activeAt.fill(-1);
     this.s = new Float32Array(cap); this.life = new Float32Array(cap); this.ml = new Float32Array(cap);
     _m.makeScale(0, 0, 0);
     for (let i = 0; i < cap; i++) { this.mesh.setMatrixAt(i, _m); this.mesh.setColorAt(i, _c.setHex(0x777777)); }
@@ -154,15 +169,21 @@ export class DebrisSystem {
     this.r[i3] = Math.random() * 6; this.r[i3 + 1] = Math.random() * 6; this.r[i3 + 2] = Math.random() * 6;
     this.rv[i3] = (Math.random() - 0.5) * 12; this.rv[i3 + 1] = (Math.random() - 0.5) * 12; this.rv[i3 + 2] = (Math.random() - 0.5) * 12;
     this.s[i] = size; this.life[i] = life; this.ml[i] = life;
+    if (this.activeAt[i] < 0) { this.activeAt[i] = this.active.length; this.active.push(i); }
     this.mesh.setColorAt(i, _c.setHex(color));
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
   update(dt: number) {
     let dirty = false;
-    for (let i = 0; i < this.cap; i++) {
-      if (this.life[i] <= 0) continue;
-      dirty = true; const i3 = i * 3;
+    for (let n = this.active.length - 1; n >= 0; n--) {
+      const i = this.active[n], i3 = i * 3; dirty = true;
       this.life[i] -= dt;
+      if (this.life[i] <= 0) {
+        _m.makeScale(0, 0, 0); this.mesh.setMatrixAt(i, _m);
+        const last = this.active.pop()!;
+        if (n < this.active.length) { this.active[n] = last; this.activeAt[last] = n; }
+        this.activeAt[i] = -1; continue;
+      }
       this.v[i3 + 1] -= 30 * dt;
       this.p[i3] += this.v[i3] * dt; this.p[i3 + 1] += this.v[i3 + 1] * dt; this.p[i3 + 2] += this.v[i3 + 2] * dt;
       const sz = this.s[i];
@@ -171,7 +192,7 @@ export class DebrisSystem {
         this.rv[i3] *= 0.6; this.rv[i3 + 1] *= 0.6; this.rv[i3 + 2] *= 0.6;
       }
       this.r[i3] += this.rv[i3] * dt; this.r[i3 + 1] += this.rv[i3 + 1] * dt; this.r[i3 + 2] += this.rv[i3 + 2] * dt;
-      const k = this.life[i] <= 0 ? 0 : Math.min(1, this.life[i] / 0.6);
+      const k = Math.min(1, this.life[i] / 0.6);
       _e.set(this.r[i3], this.r[i3 + 1], this.r[i3 + 2]); _q.setFromEuler(_e);
       _s.setScalar(sz * k); _p.set(this.p[i3], this.p[i3 + 1], this.p[i3 + 2]);
       _m.compose(_p, _q, _s); this.mesh.setMatrixAt(i, _m);

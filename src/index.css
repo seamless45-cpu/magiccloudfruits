@@ -64,3 +64,11 @@ select { background: #0a1626; color: #cff4ff; border: 1px solid var(--line); }
 
 .sandbox-tag { padding: 2px 5px; border: 1px solid rgba(80,255,190,.34); background: rgba(30,200,130,.12); animation: sandbox-glow 2.2s ease-in-out infinite; }
 @keyframes sandbox-glow { 50% { box-shadow: 0 0 12px rgba(40,255,170,.24); } }
+
+.gui-toggle { position:absolute; z-index:60; left:12px; display:flex; align-items:center; gap:8px; padding:9px 12px; pointer-events:auto; color:#c8f5ff; background:rgba(5,18,32,.82); border:1px solid rgba(80,220,255,.38); backdrop-filter:blur(8px); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); font:10px Orbitron,'Segoe UI',sans-serif; letter-spacing:.12em; transition:background .18s,border-color .18s,box-shadow .18s,transform .2s; }
+.gui-toggle:hover { background:rgba(20,66,93,.92); border-color:rgba(80,220,255,.7); box-shadow:0 0 18px rgba(51,224,255,.22); }
+.gui-toggle-visible { top:50%; transform:translateY(-50%); }
+.gui-toggle-visible:hover { transform:translateY(-50%) translateX(2px); }
+.gui-toggle-hidden { bottom:12px; animation:gui-dock .25s ease both; }
+.gui-toggle span:first-child { font-size:14px; color:#63e9ff; }
+@keyframes gui-dock { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }

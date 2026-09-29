@@ -32,18 +32,18 @@ export const CLOUD_FRUIT: ItemDef = {
       for (let i = 0; i < 3; i++) { const p = around(g.player.pos, 220); g.add(new StormCloud(g, { pos: p, kind: 'cumulus', size: rnd(140, 220), life: 120, grow: 10, rain: 0.8, rainDmg: 260, supercellChance: 0.35, boltDmg: 9000, hailDmg: 22000, hailShatter: 0.6, hailShatterDmg: 0.4 })); }
       g.toast('CUMULUS GROWTH', '#e6eef8');
     } },
-    { name: 'Atmospheric Instability', cd: 5, info: 'Squall line 2400×800m · 10m/s · 240mph', cast: (g) => {
+    { name: 'Atmospheric Instability', cd: 5, info: 'Elevated squall shelf 2.6×0.9km · 10m/s · 120mph', cast: (g) => {
       const f = g.player.facing.clone(); const p = g.player.pos.clone().addScaledVector(f, -320);
-      g.add(new StormCloud(g, { pos: p, kind: 'squall', size: 800, length: 2400, depth: 800, bow: 0.16, life: 240, grow: 1.5, vel: f.clone().multiplyScalar(10), rain: 2.8, rainDmg: 250, wind: 240, windDmg: 5500, bolts: 1.9, boltDmg: 18000, superChance: 0.1, superMul: 3, superName: 'SUPERBOLT', shade: 0.9 }));
+      g.add(new StormCloud(g, { pos: p, kind: 'squall', size: 1000, length: 2600, depth: 900, bow: 0.1, life: 120, grow: 1.8, vel: f.clone().multiplyScalar(10), rain: 1.4, rainDmg: 200, wind: 120, windDmg: 3500, bolts: 0.9, boltDmg: 9000, superChance: 0.1, superMul: 3, superName: 'SUPERBOLT', shade: 0.9 }));
       g.toast('SQUALL LINE APPROACHING', '#cfd8e6');
     } },
     { name: 'Hailstorm', cd: 5, info: '4 Cb 280m · golf-ball hail · 8s', cast: (g) => {
       for (let i = 0; i < 4; i++) { const a = (i / 4) * 6.28 + 0.6; const p = g.aim.clone().add(V(Math.cos(a) * 130, 0, Math.sin(a) * 130));
         g.add(new StormCloud(g, { pos: p, kind: 'hail', size: 280, life: 8, grow: 1.2, rain: 0.9, rainDmg: 150, hail: 6, hailDmg: 16000, hailShatter: 0.5, hailShatterDmg: 0.3, bolts: 0.8, boltDmg: 8000, shade: 0.75, rainColor: 0xd0d6de })); }
     } },
-    { name: 'Derecho Swarm', cd: 5, info: '4 derechos 1600×800m · 24m/s · 240mph', cast: (g) => {
+    { name: 'Derecho Swarm', cd: 5, info: '4 elevated derechos 3.2×1.4km · 24m/s · 105mph gusts', cast: (g) => {
       const c = g.player.pos.clone(); const dirs = [V(1, 0, 0), V(-1, 0, 0), V(0, 0, 1), V(0, 0, -1)];
-      for (const d of dirs) { const start = c.clone().addScaledVector(d, 24 * 15); g.add(new StormCloud(g, { pos: start, kind: 'derecho', size: 800, length: 1600, depth: 800, bow: 0.3, life: 30, grow: 1.5, vel: d.clone().multiplyScalar(-24), rain: 1.6, rainDmg: 300, wind: 240, windDmg: 7000, bolts: 1.2, boltDmg: 10000, shade: 0.78 })); }
+      for (const d of dirs) { const start = c.clone().addScaledVector(d, 24 * 15); g.add(new StormCloud(g, { pos: start, kind: 'derecho', size: 1400, length: 3200, depth: 1400, bow: 0.3, life: 30, grow: 1.8, vel: d.clone().multiplyScalar(-24), rain: 1.6, rainDmg: 300, wind: 105, windDmg: 7000, bolts: 1.2, boltDmg: 10000, shade: 0.78 })); }
       g.toast('DERECHO SWARM', '#b9c6d8');
     } },
     { name: 'Tornado Destruction', cd: 5, info: 'Supercell 350m · 200mph tornado · 10s', cast: (g) => {
@@ -51,12 +51,12 @@ export const CLOUD_FRUIT: ItemDef = {
       g.after(1.5, () => g.add(new Tornado(g, cl, 9, 200, 10, undefined, 7000)));
       g.toast('TORNADO WARNING', '#ff9a5a');
     } },
-    { name: 'Hurricane Storm', cd: 5, info: 'Warm-up 1s (invincible) · 25km · 450mph · 5min', cast: (g) => {
+    { name: 'Hurricane Storm', cd: 5, info: 'Warm-up 1s (invincible) · 25km · Category 5 · 165mph · 5min', cast: (g) => {
       const P = g.player; P.invincible = Math.max(P.invincible, 1.1); g.anim('raise', 1); P.lockMove = 1;
       g.add(new Timed(g, new THREE.Group(), 1, (k) => { const h = g.handPos(); for (let i = 0; i < 4; i++) { const a = Math.random() * 6.28, r = 3 * (1 - k) + 0.3; g.smoke.spawn(h.x + Math.cos(a) * r, h.y, h.z + Math.sin(a) * r, -Math.sin(a) * 8, 1, Math.cos(a) * 8, 0xf0f4fa, 0.6, 0.4, { alpha: 0.7 }); } }));
-      g.after(1, () => { g.add(new Hurricane(g, P.pos.clone(), P.facing.clone(), 300, 5000)); g.toast('HURRICANE — CATEGORY 5 · 450 MPH', '#9fd0ff'); });
+      g.after(1, () => { g.add(new Hurricane(g, P.pos.clone(), P.facing.clone(), 300, 5000)); g.toast('HURRICANE — CATEGORY 5 · 165 MPH', '#9fd0ff'); });
     } },
-    { name: 'Microburst Bomb', cd: 5, info: 'Cells merge → 200m/s downburst · 10s', cast: (g) => { g.add(new Microburst(g, g.aim.clone(), 150, 4500)); g.toast('MICROBURST', '#e0ecff'); } },
+    { name: 'Microburst Bomb', cd: 5, info: 'Cells merge → 145mph downburst gust · 10s', cast: (g) => { g.add(new Microburst(g, g.aim.clone(), 150, 4500)); g.toast('MICROBURST', '#e0ecff'); } },
     { name: 'Nimbostratus Flooding', cd: 5, info: 'Nimbostratus 250m · rising floodwater', cast: (g) => {
       const c = g.aim.clone(); for (let i = 0; i < 5; i++) { const p = i === 0 ? c.clone() : around(c, 170); g.add(new StormCloud(g, { pos: p, kind: 'nimbo', size: 250, life: 32, grow: 2, rain: 1, rainDmg: 120, shade: 0.9, rainColor: 0xcdd3db })); }
       g.add(new Flood(g, c, 320, 32, 7, 3000)); g.toast('FLOOD WARNING', '#6fb0e0');

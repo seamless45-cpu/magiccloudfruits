@@ -72,6 +72,7 @@ export default function App() {
   const [settings, setSettings] = useState<GraphicsSettings>(initialSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [showTitle, setShowTitle] = useState(true);
+  const [showGui, setShowGui] = useState(true);
   const [help, setHelp] = useState(true);
   const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
@@ -135,7 +136,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {game && snap && !showTitle && (
+      {game && snap && !showTitle && showGui && (
         <div className="absolute inset-0 pointer-events-none">
           {/* Left rail: vitals and controls stack in one column, so they cannot overlap */}
           <div className="absolute left-2 top-2 w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
@@ -212,7 +213,12 @@ export default function App() {
           </div>
         </div>
       )}
-      {showSettings && <Settings settings={settings} onChange={changeSettings} onClose={() => setShowSettings(false)} />}
+      {showSettings && showGui && <Settings settings={settings} onChange={changeSettings} onClose={() => setShowSettings(false)} />}
+      {game && snap && !showTitle && (
+        <button className={`gui-toggle ${showGui ? 'gui-toggle-visible' : 'gui-toggle-hidden'}`} onClick={() => { setShowGui(v => !v); if (!showGui) setShowSettings(false); }} aria-label={showGui ? 'Hide interface' : 'Show interface'} title={showGui ? 'Hide interface' : 'Show interface'}>
+          <span aria-hidden="true">{showGui ? '◉' : '◌'}</span><span>{showGui ? 'HIDE GUI' : 'SHOW GUI'}</span>
+        </button>
+      )}
     </div>
   );
 }
