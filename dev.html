@@ -8,9 +8,14 @@
     <style>
       html, body { margin: 0; height: 100%; background: #05070d; color: #dff6ff;
         font-family: 'Rajdhani', system-ui, -apple-system, 'Segoe UI', sans-serif; }
-      #boot { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; }
+      #boot { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; overflow:hidden; background: radial-gradient(ellipse at 50% 42%, #102c49 0%, #091322 36%, #04070e 78%); }
+      #boot:before,#boot:after { content:''; position:absolute; width:min(70vw,520px); aspect-ratio:1; border:1px solid rgba(76,211,255,.13); transform:rotate(45deg); animation: boot-orbit 22s linear infinite; }
+      #boot:after { width:min(84vw,680px); border-color:rgba(76,211,255,.07); animation-duration:34s; animation-direction:reverse; }
+      #boot .box { position:relative; z-index:1; padding:36px 42px; border:1px solid rgba(80,220,255,.24); background:rgba(5,14,27,.72); box-shadow:0 20px 80px #0009,inset 0 0 26px #33e0ff0c; clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px); animation: boot-enter .8s ease both; }
+      #boot .box:after { content:''; display:block; width:100px; height:2px; margin:25px auto 0; background:#47dfff; box-shadow:0 0 15px #33e0ff; animation: boot-pulse 1.8s ease-in-out infinite; }
+      @keyframes boot-orbit { to { transform:rotate(405deg); } } @keyframes boot-enter { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } } @keyframes boot-pulse { 50% { opacity:.3; width:58px; } }
       #boot .box { max-width: 620px; }
-      #boot .title { font-size: 15px; letter-spacing: .18em; color: #7fe6ff; margin-bottom: 10px; }
+      #boot .title { font-size: 15px; font-weight:700; text-shadow:0 0 18px rgba(51,224,255,.45); letter-spacing: .18em; color: #7fe6ff; margin-bottom: 10px; }
       #boot .msg { font-size: 13px; line-height: 1.6; color: #9fdcf5; }
       #boot .hint { font-size: 12px; line-height: 1.6; color: #6f9ab0; margin-top: 10px; }
       #boot code { color: #ffd479; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; }

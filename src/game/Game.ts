@@ -21,7 +21,7 @@ export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSetting
   high: { resolution: 1, shadows: true, shadowRes: 2048, bloom: true, particles: 0.85, debris: 0.85, maxBolts: 200, clouds: 1, antialiasFxaa: true, drawDistance: 40000 },
   ultra: { resolution: 1.25, shadows: true, shadowRes: 4096, bloom: true, particles: 1, debris: 1, maxBolts: 320, clouds: 1.2, antialiasFxaa: true, drawDistance: 60000 },
 };
-export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, showFps: true, antialiasFxaa: true, drawDistance: 40000, clouds: 1 });
+export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, showFps: true, antialiasFxaa: true, drawDistance: 40000, clouds: 1 });
 
 interface CdState { rem: number; total: number; charges: number; interval: number; regenT: number; holding: boolean }
 
@@ -32,7 +32,7 @@ export class Game {
   effects: Effect[] = []; timers: { t: number; fn: () => void }[] = [];
   enemies: Enemy[] = []; time = 0; pauseEnemies = 0;
   settings: GraphicsSettings;
-  player = { pos: V(0, 0, 0), vel: V(), facing: V(0, 0, 1), hp: 50000, maxHp: 50000, invincible: 0, mesh: new THREE.Group(), rArm: new THREE.Group(), lArm: new THREE.Group(), sword: new THREE.Group(), gun: new THREE.Group(), anim: { type: '', t: 0, d: 0 }, grounded: true, lockMove: 0 };
+  player = { pos: V(0, 0, 0), vel: V(), facing: V(0, 0, 1), hp: 50000, maxHp: 50000, invincible: 0, mesh: new THREE.Group(), rArm: new THREE.Group(), lArm: new THREE.Group(), sword: new THREE.Group(), gun: new THREE.Group(), legs: [] as THREE.Group[], anim: { type: '', t: 0, d: 0 }, grounded: true, lockMove: 0 };
   cam = { yaw: Math.PI, pitch: 0.42, dist: 22, targetDist: 22 };
   shakes: { pos: THREE.Vector3 | null; i: number; d: number; t: number }[] = [];
   aim = V(0, 0, 30); mouse = new THREE.Vector2(); ray = new THREE.Raycaster(); aimRing!: THREE.Mesh; aimLine!: THREE.Line;
@@ -48,7 +48,7 @@ export class Game {
   onFatal: (m: string) => void = () => {};
   sel: Record<string, any> = { supercell: 1 };
   gamepadIdx: number | null = null; prevPadButtons: boolean[] = [];
-  raf = 0; last = performance.now(); container: HTMLElement; disposed = false;
+  raf = 0; last = performance.now(); container: HTMLElement; disposed = false; paused = true; cloudGroups: THREE.Group[] = [];
   halfFloat = true;
   pinch = { d: 0 }; drag = { active: false, x: 0, y: 0, id: -1, moved: 0 };
 
@@ -105,23 +105,58 @@ export class Game {
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat r=length(vW.xz); float g10=gl(vW.xz,10.,1.)*0.35; float g100=gl(vW.xz,100.,1.5); float ring=0.; for(int i=1;i<=6;i++){ float R=float(i)*50.; ring+= (1.-smoothstep(0.,0.6,abs(r-R)))*0.8;} float fade=exp(-r*0.0006);\ntotalEmissiveRadiance += vec3(0.05,0.55,0.9)*(g10+g100*0.7)*fade + vec3(0.9,0.3,1.)*ring*fade*0.5;');
     };
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), gmat); ground.receiveShadow = true; this.scene.add(ground);
+    // Vast perimeter and elevated, soft-edged cloud banks give the arena a true open-sky scale.
+    const cloudPalette = [0xf1f5ff, 0xdce6f4, 0xc7d4e8, 0xffffff];
+    for (let i = 0; i < 13; i++) {
+      const cloud = new THREE.Group();
+      const a = i * Math.PI * 2 / 13 + rnd(-0.2, 0.2), radius = rnd(700, 1550);
+      cloud.position.set(Math.cos(a) * radius, rnd(190, 330), Math.sin(a) * radius);
+      cloud.rotation.y = rnd(0, Math.PI * 2);
+      const count = 9 + Math.floor(Math.random() * 7);
+      for (let j = 0; j < count; j++) {
+        const size = rnd(40, 105);
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({
+          color: cloudPalette[Math.floor(Math.random() * cloudPalette.length)], roughness: 1,
+          metalness: 0, transparent: true, opacity: rnd(0.54, 0.78), depthWrite: false,
+        }));
+        puff.scale.set(size * rnd(1.05, 1.7), size * rnd(0.25, 0.52), size * rnd(0.8, 1.4));
+        puff.position.set(rnd(-150, 150), rnd(-18, 24), rnd(-120, 120));
+        cloud.add(puff);
+      }
+      cloud.userData.drift = rnd(0.35, 1.1); cloud.userData.phase = rnd(0, Math.PI * 2);
+      this.cloudGroups.push(cloud); this.scene.add(cloud);
+    }
+    // A broad, circular combat basin, with distant monoliths and luminous perimeter markers.
+    const arenaRing = new THREE.Mesh(new THREE.TorusGeometry(1380, 3.5, 8, 192), new THREE.MeshBasicMaterial({ color: 0x42cfff, transparent: true, opacity: 0.32 }));
+    arenaRing.rotation.x = Math.PI / 2; arenaRing.position.y = 0.15; this.scene.add(arenaRing);
+    const markerMat = new THREE.MeshStandardMaterial({ color: 0x293b52, emissive: 0x1b8fc4, emissiveIntensity: 0.75, metalness: 0.72, roughness: 0.3 });
+    for (let i = 0; i < 64; i++) {
+      const a = i * Math.PI * 2 / 64, r = 1370, h = i % 4 === 0 ? rnd(38, 76) : rnd(12, 28);
+      const marker = new THREE.Mesh(new THREE.CylinderGeometry(i % 4 === 0 ? 5 : 2.2, i % 4 === 0 ? 8 : 3.4, h, 6), markerMat);
+      marker.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r); marker.castShadow = true; this.scene.add(marker);
+    }
     // center pylon (middle of arena)
     const pyl = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2, 14, 6), new THREE.MeshStandardMaterial({ color: 0x223044, metalness: 0.8, roughness: 0.3, emissive: 0x1166aa, emissiveIntensity: 0.5 })); pyl.position.y = 7; pyl.castShadow = true; this.scene.add(pyl);
     // some sci-fi pillars for scale
     const pm = new THREE.MeshStandardMaterial({ color: 0x1d2433, metalness: 0.7, roughness: 0.35, emissive: 0x0a1a2a });
-    for (let i = 0; i < 40; i++) { const a = (i / 40) * Math.PI * 2; const r = 320 + (i % 3) * 60; const h = rnd(20, 70); const m = new THREE.Mesh(new THREE.BoxGeometry(6, h, 6), pm); m.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r); m.castShadow = true; m.receiveShadow = true; this.scene.add(m); }
+    for (let i = 0; i < 56; i++) { const a = (i / 56) * Math.PI * 2; const r = 520 + (i % 4) * 70; const h = rnd(28, 110); const m = new THREE.Mesh(new THREE.BoxGeometry(rnd(9, 18), h, rnd(9, 18)), pm); m.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r); m.castShadow = true; m.receiveShadow = true; this.scene.add(m); }
     // player
     const P = this.player; const bm = new THREE.MeshStandardMaterial({ color: 0xdfe6f0, metalness: 0.4, roughness: 0.35 }); const am = new THREE.MeshStandardMaterial({ color: 0x1a2030, metalness: 0.8, roughness: 0.3, emissive: 0x00aaff, emissiveIntensity: 0.4 });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.8, 4, 10), am); body.position.y = 1.0; body.castShadow = true;
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.38, 0.78, 5, 12), am); body.position.y = 1.0; body.castShadow = true;
+    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.48, 0.22), new THREE.MeshStandardMaterial({ color: 0x43536b, metalness: 0.82, roughness: 0.28, emissive: 0x062d45, emissiveIntensity: 0.5 })); chest.position.set(0, 1.18, 0.17); chest.castShadow = true;
+    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 1), new THREE.MeshBasicMaterial({ color: 0x49eaff })); core.position.set(0, 1.2, 0.3);
+    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.68, 0.24), am); pack.position.set(0, 1.05, -0.27); P.mesh.add(pack);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), bm); head.position.y = 1.72; head.castShadow = true;
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.1), new THREE.MeshBasicMaterial({ color: 0x33e0ff })); visor.position.set(0, 1.74, 0.24);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.1, 0.13), new THREE.MeshBasicMaterial({ color: 0x35eaff })); visor.position.set(0, 1.74, 0.24);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.16, 10), am); neck.position.y = 1.46;
     const armG = new THREE.CapsuleGeometry(0.1, 0.55, 3, 8);
     const ra = new THREE.Mesh(armG, bm); ra.position.y = -0.35; P.rArm.add(ra); P.rArm.position.set(-0.47, 1.42, 0);
     const la = new THREE.Mesh(armG, bm); la.position.y = -0.35; P.lArm.add(la); P.lArm.position.set(0.47, 1.42, 0);
-    const legG = new THREE.CapsuleGeometry(0.12, 0.5, 3, 8); const l1 = new THREE.Mesh(legG, am); l1.position.set(0.17, 0.35, 0); const l2 = l1.clone(); l2.position.x = -0.17;
+    const legG = new THREE.CapsuleGeometry(0.13, 0.5, 3, 8); const legMat = am; const l1 = new THREE.Group(), l2 = new THREE.Group();
+    for (const [leg, x] of [[l1, -0.18], [l2, 0.18]] as [THREE.Group, number][]) { const thigh = new THREE.Mesh(legG, legMat); thigh.position.y = 0.34; thigh.castShadow = true; const knee = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), bm); knee.position.set(0, 0.1, 0.05); const boot = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.18, 0.38), bm); boot.position.set(0, -0.03, 0.09); leg.add(thigh, knee, boot); leg.position.set(x, 0.03, 0); }
     P.sword.position.set(0, -0.72, 0.1); P.sword.rotation.x = Math.PI / 2; P.rArm.add(P.sword);
     P.gun.position.set(0, -0.7, 0.18); P.rArm.add(P.gun);
-    P.mesh.add(body, head, visor, P.rArm, P.lArm, l1, l2); this.scene.add(P.mesh);
+    P.mesh.add(body, chest, core, neck, head, visor, P.rArm, P.lArm, l1, l2); P.legs = [l1, l2]; this.scene.add(P.mesh);
     // aim reticle
     this.aimRing = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.9, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x33e0ff, transparent: true, opacity: 0.9, depthWrite: false })); this.scene.add(this.aimRing);
     const lg = new THREE.BufferGeometry().setFromPoints([V(), V()]);
@@ -147,6 +182,7 @@ export class Game {
   // ---------------------------------------------------------------- settings
   applySettings(s: GraphicsSettings) {
     this.settings = s;
+    for (const cloud of this.cloudGroups) cloud.scale.setScalar(s.clouds);
     this.renderer.setPixelRatio(Math.min(2.5, window.devicePixelRatio * s.resolution));
     this.renderer.shadowMap.enabled = s.shadows; this.sun.castShadow = s.shadows;
     if (this.sun.shadow.mapSize.x !== s.shadowRes) { this.sun.shadow.mapSize.set(s.shadowRes, s.shadowRes); this.sun.shadow.map?.dispose(); (this.sun.shadow as any).map = null; }
@@ -247,7 +283,7 @@ export class Game {
     this.setHeld(this.item);
     if (this.item) this.toast(`EQUIPPED: ${this.item.name.toUpperCase()}`, this.item.color);
   }
-  cdMul() { return this.buff('alarm') ? 0.75 : 1; }
+  cdMul() { return this.settings.sandbox ? 0 : this.buff('alarm') ? 0.75 : 1; }
   dmgMul() { return this.buff('alarm') ? 3 : 1; }
   aoe(r: number) { return this.buff('alarm') ? r * 3 : r; }
   buff(n: string) { return (this.buffs[n] ?? 0) > this.time; }
@@ -271,6 +307,7 @@ export class Game {
   }
   startCd(it: ItemDef, i: number) { const s = it.skills[i]; const st = this.cds[it.id][i]; st.total = s.cd * (s.cdMul ? s.cdMul(this) : 1) * this.cdMul(); st.rem = st.total; }
   tickCds(dt: number) {
+    if (this.settings.sandbox) { for (const it of this.items) it.skills.forEach((s, i) => { const st = this.cds[it.id][i]; st.rem = 0; st.total = 0; st.interval = 0; if (s.charges) { st.charges = s.charges.max; st.regenT = 0; } }); }
     for (const it of this.items) it.skills.forEach((s, i) => {
       const st = this.cds[it.id][i];
       if (st.rem > 0) st.rem = Math.max(0, st.rem - dt);
@@ -304,8 +341,8 @@ export class Game {
   bolt(a: THREE.Vector3, b: THREE.Vector3, o: BoltOpts = {}) { if (boltStats.active >= this.settings.maxBolts) return null; return this.add(new Bolt(this.scene, a, b, o)) as Bolt; }
   /** tall vertical jagged bolt from sky to ground point; `n` overlapped bolts */
   strike(x: number, z: number, o: BoltOpts & { h?: number; n?: number; spread?: number } = {}) {
-    const h = o.h ?? rnd(70, 110); const n = o.n ?? 1;
-    for (let i = 0; i < n; i++) { const s = o.spread ?? 0.6; this.bolt(V(x + rnd(-8, 8), h, z + rnd(-8, 8)), V(x + rnd(-s, s), 0.1, z + rnd(-s, s)), { segs: 32, jag: 0.06, branches: 4, life: 0.4, ...o }); }
+    const h = o.h ?? rnd(175, 245); const n = o.n ?? 1;
+    for (let i = 0; i < n; i++) { const s = o.spread ?? 0.6; this.bolt(V(x + rnd(-8, 8), h, z + rnd(-8, 8)), V(x + rnd(-s, s), 0.1, z + rnd(-s, s)), { segs: 18, jag: 0.035, branches: 2, width: 0.38, life: 0.32, ...o }); }
     const c = new THREE.Color(o.color ?? 0x88aaff);
     for (let i = 0; i < 14; i++) this.fx.spawn(x, 0.4, z, rnd(-12, 12), rnd(4, 16), rnd(-12, 12), c, 0.5, rnd(0.2, 0.5), { grav: 20 });
     this.flash(V(x, 0, z), o.color ?? 0x88aaff, 12);
@@ -369,7 +406,7 @@ export class Game {
     if (e.blind > 0) return;
     const P = this.player;
     if (e.hacked > 0) { P.hp = Math.min(P.maxHp, P.hp + (e.kind === 'boss' ? 1500 : 400)); this.fx.spawn(P.pos.x, 1.5, P.pos.z, 0, 3, 0, 0x33ff88, 1.2, 0.6, {}); return; }
-    if (P.invincible > 0) return;
+    if (this.settings.sandbox || P.invincible > 0) { if (this.settings.sandbox) P.hp = P.maxHp; return; }
     P.hp -= e.kind === 'boss' ? 1500 : e.kind === 'elite' ? 600 : 180;
     this.screen('#ff2030', 0.18, 3);
     if (this.buff('alarm')) { this.strike(e.pos.x, e.pos.z, { color: 0xff2a2a, core: 0xffd0d0, width: 0.7, n: 2, h: 40 }); this.damage(e, 0, { percentMax: 0.2, noCharge: true }); }
@@ -402,11 +439,13 @@ export class Game {
   };
   update(dt: number) {
     this.time += dt;
+    for (const cloud of this.cloudGroups) { cloud.position.x += dt * cloud.userData.drift; cloud.position.z += Math.sin(this.time * 0.08 + cloud.userData.phase) * dt * 0.7; cloud.rotation.y += dt * 0.002; }
+    if (this.paused) { const P = this.player, tgt = V(P.pos.x, P.pos.y + 1.6, P.pos.z), cp = Math.cos(this.cam.pitch), sp = Math.sin(this.cam.pitch); this.camera.position.set(tgt.x + Math.sin(this.cam.yaw) * cp * this.cam.dist, tgt.y + sp * this.cam.dist, tgt.z + Math.cos(this.cam.yaw) * cp * this.cam.dist); this.camera.lookAt(tgt); this.sun.position.set(P.pos.x + 80, 140, P.pos.z + 60); this.sun.target.position.copy(P.pos); return; }
     if (this.pauseEnemies > 0) this.pauseEnemies -= dt;
     this.pollGamepad(dt);
     const P = this.player;
     if (P.invincible > 0) P.invincible -= dt;
-    P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.01 * dt);
+    P.hp = this.settings.sandbox ? P.maxHp : Math.min(P.maxHp, P.hp + P.maxHp * 0.01 * dt);
     // movement
     let mx = 0, mz = 0; const K = this.keys;
     if (K.has('w') || K.has('arrowup')) mz += 1; if (K.has('s') || K.has('arrowdown')) mz -= 1; if (K.has('a') || K.has('arrowleft')) mx -= 1; if (K.has('d') || K.has('arrowright')) mx += 1;
@@ -417,10 +456,13 @@ export class Game {
     else if (ml > 0.05) { mv.divideScalar(Math.max(1, ml)); const sp = K.has('shift') ? 30 : 20; P.pos.addScaledVector(mv, sp * dt); P.facing.copy(mv).normalize(); }
     P.vel.y -= 32 * dt; P.pos.y += P.vel.y * dt; if (P.pos.y <= 0) { P.pos.y = 0; P.vel.y = 0; P.grounded = true; }
     if (P.vel.x || P.vel.z) { P.pos.x += P.vel.x * dt; P.pos.z += P.vel.z * dt; }
+    const playerRadius = Math.hypot(P.pos.x, P.pos.z); if (playerRadius > 1320) { P.pos.x *= 1320 / playerRadius; P.pos.z *= 1320 / playerRadius; }
     P.mesh.position.copy(P.pos); P.mesh.rotation.y = Math.atan2(P.facing.x, P.facing.z);
     // anim
     const A = P.anim; A.t += dt; const ak = A.d ? Math.min(1, A.t / A.d) : 1;
     P.rArm.rotation.set(0, 0, 0); P.lArm.rotation.set(0, 0, 0);
+    const moving = ml > 0.05 && P.grounded; const gait = Math.sin(this.time * (K.has('shift') ? 13 : 9));
+    if (P.legs) { P.legs[0].rotation.x = moving ? gait * 0.42 : 0; P.legs[1].rotation.x = moving ? -gait * 0.42 : 0; }
     if (ak < 1) {
       if (A.type === 'slash') { P.rArm.rotation.x = -2.6 + ak * 3.2; P.rArm.rotation.z = 0.6 - ak; }
       else if (A.type === 'shoot') P.rArm.rotation.x = -1.57;

@@ -45,7 +45,7 @@ export class Bolt implements Effect {
   constructor(scene: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, opts: BoltOpts = {}) {
     active++;
     this.a = a.clone(); this.b = b.clone();
-    this.o = { color: 0x88aaff, core: 0xffffff, width: 0.6, life: 0.35, segs: 22, jag: 0.12, branches: 3, flat: false, opacity: 1, ...opts } as any;
+    this.o = { color: 0x88aaff, core: 0xffffff, width: 0.6, life: 0.35, segs: 18, jag: 0.07, branches: 2, flat: false, opacity: 1, ...opts } as any;
     this.life = this.o.life;
     const segs = this.o.segs; this.bsegs = Math.max(3, Math.floor(segs / 2.5));
     const nPts = segs + 1 + this.o.branches * (this.bsegs + 1);

@@ -35,10 +35,14 @@ export function Settings({ settings, onChange, onClose }: { settings: GraphicsSe
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/40 pointer-events-auto z-50" onPointerDown={e => e.stopPropagation()}>
       <div className="sf-panel w-[420px] max-w-[94vw] max-h-[88vh] overflow-y-auto p-4">
-        <div className="flex justify-between items-center mb-2"><h2 className="font-orb text-sm sf-glow text-cyan-200">ADVANCED GRAPHICS SETTINGS</h2><button className="sf-btn px-2 text-xs" onClick={onClose}>✕</button></div>
+        <div className="flex justify-between items-center mb-2"><h2 className="font-orb text-sm sf-glow text-cyan-200">SETTINGS // ARENA SYSTEMS</h2><button className="sf-btn px-2 text-xs" onClick={onClose}>✕</button></div>
         <div className="flex gap-1 mb-2">
           {(['low', 'medium', 'high', 'ultra'] as const).map(p => <button key={p} className={`sf-btn flex-1 py-1 text-[10px] font-orb ${settings.preset === p ? 'on' : ''}`} onClick={() => onChange({ ...settings, ...PRESETS[p], preset: p })}>{p.toUpperCase()}</button>)}
         </div>
+        <div className="settings-section mt-4 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">GAMEPLAY</div>
+        <Row label="Sandbox Mode"><button className={`sf-btn px-2 text-[10px] font-orb ${settings.sandbox ? 'on' : ''}`} onClick={() => set('sandbox', !settings.sandbox)}>{settings.sandbox ? 'ON' : 'OFF'}</button></Row>
+        <p className="text-[10px] text-cyan-200/45 py-1">Unlimited health · incoming damage disabled · all skill cooldowns reset to zero.</p>
+        <div className="settings-section mt-3 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">GRAPHICS</div>
         <Row label="Render Resolution">{num('resolution', 0.4, 1.5, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
         <Row label="Shadows">{tog('shadows')}</Row>
         <Row label="Shadow Resolution"><select value={settings.shadowRes} onChange={e => set('shadowRes', +e.target.value)} className="text-[11px] px-1">{[512, 1024, 2048, 4096].map(v => <option key={v} value={v}>{v}</option>)}</select></Row>

@@ -22,6 +22,7 @@ const clampSettings = (raw: unknown): GraphicsSettings => {
     ? (s.preset as GraphicsSettings['preset']) : d.preset;
   return {
     preset,
+    sandbox: bool(s.sandbox, d.sandbox),
     resolution: num(s.resolution, 0.4, 1.5, d.resolution),
     shadows: bool(s.shadows, d.shadows),
     shadowRes: [512, 1024, 2048, 4096].includes(s.shadowRes as number) ? (s.shadowRes as number) : d.shadowRes,
@@ -70,6 +71,7 @@ export default function App() {
   const [snap, setSnap] = useState<Snap | null>(null);
   const [settings, setSettings] = useState<GraphicsSettings>(initialSettings);
   const [showSettings, setShowSettings] = useState(false);
+  const [showTitle, setShowTitle] = useState(true);
   const [help, setHelp] = useState(true);
   const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
@@ -133,12 +135,12 @@ export default function App() {
           </div>
         </div>
       )}
-      {game && snap && (
+      {game && snap && !showTitle && (
         <div className="absolute inset-0 pointer-events-none">
           {/* Left rail: vitals and controls stack in one column, so they cannot overlap */}
           <div className="absolute left-2 top-2 w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
           <div data-panel="vitals" className="sf-panel p-2.5 w-full shrink-0 pointer-events-auto">
-            <div className="flex justify-between items-baseline"><span className="font-orb text-[11px] sf-glow text-cyan-200">1090 FRUITS // OPERATOR</span>{snap.invincible && <span className="text-[9px] font-orb text-yellow-200">INVULN</span>}</div>
+            <div className="flex justify-between items-baseline"><span className="font-orb text-[11px] sf-glow text-cyan-200">1090 FRUITS // OPERATOR</span>{settings.sandbox && <span className="text-[9px] font-orb text-emerald-200 sandbox-tag">SANDBOX</span>}{snap.invincible && <span className="text-[9px] font-orb text-yellow-200">INVULN</span>}</div>
             <div className="hex-bar mt-1.5"><div className="h-full" style={{ width: `${(snap.hp / snap.maxHp) * 100}%`, background: 'linear-gradient(90deg,#16ffb0,#33e0ff)', boxShadow: '0 0 10px #33e0ff' }} /></div>
             <div className="flex justify-between text-[10px] mt-0.5 font-orb text-cyan-100/80"><span>HP {fmt(snap.hp)} / {fmt(snap.maxHp)}</span><span>{((snap.hp / snap.maxHp) * 100).toFixed(0)}%</span></div>
             <div className="grid grid-cols-3 gap-1 mt-1.5 text-[10px]">
@@ -188,6 +190,26 @@ export default function App() {
           {touch && <MobileControls game={game} />}
           {/* crosshair */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 opacity-60"><div className="absolute left-1/2 top-0 bottom-0 w-px bg-cyan-300" /><div className="absolute top-1/2 left-0 right-0 h-px bg-cyan-300" /></div>
+        </div>
+      )}
+      {showTitle && !fatal && (
+        <div className="title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto">
+          <div className="title-card sf-panel w-full max-w-[560px] p-7 sm:p-10 text-center">
+            <div className="title-mark mx-auto mb-6"><span>1090</span><i /></div>
+            <p className="font-orb text-[10px] tracking-[.34em] text-cyan-200/60 mb-3">STORMFRONT // COMBAT SIMULATION</p>
+            <h1 className="font-orb text-3xl sm:text-5xl font-bold tracking-[.12em] text-white sf-glow">FRUITS</h1>
+            <p className="mt-3 text-sm sm:text-base text-cyan-100/65">Choose your power. Take the arena.</p>
+            <div className="title-rule my-7" />
+            <button className="play-btn font-orb px-10 py-4 text-sm tracking-[.2em]" onClick={() => { setShowTitle(false); game && (game.paused = false); }}>
+              <span className="play-icon">▶</span> ENTER ARENA
+            </button>
+            <div className="mt-4 flex justify-center gap-3">
+              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setShowSettings(true)}>SETTINGS</button>
+              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setHelp(h => !h)}>CONTROLS</button>
+            </div>
+            {help && <p className="mt-5 text-[10px] leading-relaxed text-cyan-100/40">WASD MOVE · SHIFT SPRINT · SPACE JUMP · LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
+            <p className="mt-7 font-orb text-[9px] tracking-[.18em] text-cyan-300/30">WIDE OPEN ARENA · SANDBOX AVAILABLE IN SETTINGS</p>
+          </div>
         </div>
       )}
       {showSettings && <Settings settings={settings} onChange={changeSettings} onClose={() => setShowSettings(false)} />}

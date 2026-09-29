@@ -156,7 +156,7 @@ export class StormCloud implements Effect {
         const rp = this.rainPoint(V()); rp.x += rnd(-10, 10);
         const top = V(rp.x + rnd(-20, 20), this.base * 0.9, rp.z + rnd(-20, 20));
         const col = isSuper ? (mul >= 12 ? 0xff66ff : 0xaaddff) : 0xcfe0ff;
-        for (let k = 0; k < (isSuper ? 3 : 1); k++) g.bolt(top, rp, { color: col, width: isSuper ? (mul >= 12 ? 3.2 : 1.8) : 0.8, life: isSuper ? 0.6 : 0.3, segs: 30, jag: 0.07, branches: isSuper ? 6 : 3 });
+        for (let k = 0; k < (isSuper ? 3 : 1); k++) g.bolt(top, rp, { color: col, width: isSuper ? (mul >= 12 ? 3.2 : 1.8) : 0.8, life: isSuper ? 0.6 : 0.3, segs: 18, jag: 0.045, branches: isSuper ? 3 : 2 });
         const r = isSuper ? (mul >= 12 ? 22 : 12) : 6;
         g.damageRadius(rp, r, (o.boltDmg ?? 3000) * mul * (o.dmgMul ?? 1), { stun: 0.4, noCharge: true });
         if (isSuper) explosion(g, rp, r, { core: 0xffffff, mid: col, ring: col, smoke: 0x333344, debrisCount: 10 });

@@ -39,3 +39,28 @@ body { font-family: 'Rajdhani', 'Segoe UI', system-ui, sans-serif; color: #dff6f
 @keyframes tin { from { opacity: 0; transform: translateY(-8px) scale(.96); } to { opacity: 1; transform: none; } }
 input[type=range] { accent-color: #33e0ff; }
 select { background: #0a1626; color: #cff4ff; border: 1px solid var(--line); }
+
+/* Ambient motion is deliberately restrained so the HUD feels alive without distracting from combat. */
+.sf-panel { animation: panel-arrive .45s cubic-bezier(.18,.78,.2,1) both; }
+@keyframes panel-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.hex-bar > div { transition: width .24s ease, filter .2s ease; }
+.slot { transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+.slot:hover { transform: translateY(-4px); }
+.title-screen { background: radial-gradient(ellipse at 50% 46%, rgba(8,40,65,.32), rgba(2,6,15,.78) 65%), linear-gradient(120deg,rgba(4,9,19,.22),rgba(4,10,22,.58)); backdrop-filter: blur(2px); animation: title-fade .6s ease both; }
+@keyframes title-fade { from { opacity: 0; } to { opacity: 1; } }
+.title-card { background: linear-gradient(145deg,rgba(9,28,49,.9),rgba(4,11,23,.92)); box-shadow: 0 25px 90px rgba(0,0,0,.55), inset 0 0 34px rgba(51,224,255,.07); animation: card-rise .7s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes card-rise { from { transform: translateY(18px) scale(.975); opacity: 0; } to { transform: none; opacity: 1; } }
+.title-mark { position: relative; display: grid; place-items: center; width: 64px; height: 64px; border: 1px solid rgba(93,226,255,.5); transform: rotate(45deg); color: #bff6ff; font: 700 14px Orbitron, sans-serif; box-shadow: 0 0 25px rgba(51,224,255,.17), inset 0 0 18px rgba(51,224,255,.13); }
+.title-mark span { transform: rotate(-45deg); }
+.title-mark i { position:absolute; inset:-7px; border:1px solid rgba(93,226,255,.14); animation: mark-spin 18s linear infinite; }
+@keyframes mark-spin { to { transform: rotate(360deg); } }
+.title-rule { height: 1px; background: linear-gradient(90deg,transparent,rgba(84,218,255,.44),transparent); }
+.play-btn { color: #05131e; background: linear-gradient(110deg,#9cf5ff,#39caff 55%,#a7edff); border: 1px solid rgba(192,250,255,.8); box-shadow: 0 0 28px rgba(51,224,255,.27); transition: transform .2s, filter .2s, box-shadow .2s; clip-path: polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px); }
+.play-btn:hover { transform: translateY(-2px) scale(1.025); filter: brightness(1.12); box-shadow: 0 0 38px rgba(51,224,255,.48); }
+.play-btn:active { transform: scale(.98); }
+.play-icon { font-size: 10px; margin-right: 9px; }
+.settings-section { border-bottom: 1px solid rgba(80,220,255,.18); padding-bottom: 5px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+
+.sandbox-tag { padding: 2px 5px; border: 1px solid rgba(80,255,190,.34); background: rgba(30,200,130,.12); animation: sandbox-glow 2.2s ease-in-out infinite; }
+@keyframes sandbox-glow { 50% { box-shadow: 0 0 12px rgba(40,255,170,.24); } }

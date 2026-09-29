@@ -28,7 +28,7 @@ export class Enemy {
   mesh = new THREE.Group(); bodyMat: THREE.MeshStandardMaterial; bar: THREE.Mesh; barGrp = new THREE.Group();
   stun = 0; freeze = 0; imprison = 0; blind = 0; flee = 0; hacked = 0; lift = 0; burn = 0; burnDps = 0; burnTick = 0;
   bleeds: { t: number; dps: number }[] = []; bleedTick = 0; attackCd = 1; wander = V(); wanderT = 0;
-  dead = false; deadT = 0; cage: THREE.LineSegments; ice: THREE.Mesh; star: THREE.Mesh; airborne = false; id: number; lastHit = 0;
+  dead = false; deadT = 0; limbs: THREE.Group[] = []; walkT = 0; cage: THREE.LineSegments; ice: THREE.Mesh; star: THREE.Mesh; airborne = false; id: number; lastHit = 0;
   static nextId = 1;
   constructor(public g: any, kind: EnemyKind) {
     this.id = Enemy.nextId++;
@@ -43,6 +43,25 @@ export class Enemy {
     const head = new THREE.Mesh(G.head, this.bodyMat); head.position.y = 2.05; head.castShadow = true;
     const e1 = new THREE.Mesh(G.eye, M.eye); e1.position.set(0.15, 2.1, 0.36); const e2 = e1.clone(); e2.position.x = -0.15;
     const inner = new THREE.Group(); inner.add(body, head, e1, e2);
+    // Layered armor, articulated limbs and luminous chest details replace the old primitive silhouette.
+    const armor = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.66, 0.32), new THREE.MeshStandardMaterial({ color: kind === 'boss' ? 0x551522 : kind === 'elite' ? 0x412b70 : 0x34485a, metalness: 0.82, roughness: 0.28, emissive: col, emissiveIntensity: kind === 'normal' ? 0.12 : 0.32 }));
+    armor.position.set(0, 1.2, 0.23); armor.castShadow = true; inner.add(armor);
+    const core = new THREE.Mesh(new THREE.OctahedronGeometry(kind === 'boss' ? 0.23 : 0.14, 1), new THREE.MeshBasicMaterial({ color: kind === 'boss' ? 0xff6470 : kind === 'elite' ? 0xcf83ff : 0xff5264 }));
+    core.position.set(0, 1.24, 0.42); inner.add(core);
+    const limbMat = new THREE.MeshStandardMaterial({ color: kind === 'boss' ? 0x36111c : kind === 'elite' ? 0x302150 : 0x263743, metalness: 0.65, roughness: 0.38 });
+    const limbGeo = new THREE.CapsuleGeometry(0.13, 0.48, 3, 8);
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Group(); arm.position.set(side * 0.57, 1.55, 0.02);
+      const upper = new THREE.Mesh(limbGeo, limbMat); upper.position.y = -0.32; upper.castShadow = true;
+      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.23, 10, 8), limbMat); shoulder.position.set(side * -0.04, -0.08, 0.01);
+      const gauntlet = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.22, 0.25), limbMat); gauntlet.position.set(0, -0.6, 0.05);
+      arm.add(upper, shoulder, gauntlet); inner.add(arm); this.limbs.push(arm);
+      const leg = new THREE.Group(); leg.position.set(side * 0.25, 0.55, 0);
+      const lower = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.46, 3, 8), limbMat); lower.position.y = -0.28; lower.castShadow = true;
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.2, 0.42), limbMat); foot.position.set(0, -0.54, 0.1);
+      leg.add(lower, foot); inner.add(leg); this.limbs.push(leg);
+    }
+    const ridge = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.45, 6), M.horn); ridge.position.set(0, 2.45, -0.1); inner.add(ridge);
     if (kind !== 'normal') { const h1 = new THREE.Mesh(G.horn, M.horn); h1.position.set(0.22, 2.45, 0); h1.rotation.z = -0.4; const h2 = h1.clone(); h2.position.x = -0.22; h2.rotation.z = 0.4; inner.add(h1, h2); }
     if (kind === 'boss') { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.3, 0.25, 8, 1, true), M.crown); c.position.y = 2.55; inner.add(c); }
     inner.scale.setScalar(this.scale); this.mesh.add(inner);
@@ -58,7 +77,7 @@ export class Enemy {
     this.respawn();
   }
   respawn() {
-    const p = this.g.player.pos; const a = Math.random() * Math.PI * 2; const r = rnd(50, 170);
+    const p = this.g.player.pos; const a = Math.random() * Math.PI * 2; const r = rnd(110, 360);
     this.pos.set(p.x + Math.cos(a) * r, 0, p.z + Math.sin(a) * r);
     this.hp = this.maxHp; this.dead = false; this.vel.set(0, 0, 0);
     this.stun = this.freeze = this.imprison = this.blind = this.flee = this.hacked = this.lift = this.burn = 0; this.bleeds = [];
@@ -102,7 +121,10 @@ export class Enemy {
     }
     if (this.lift > 0) { this.pos.y += (4 - this.pos.y) * Math.min(1, dt * 4); this.airborne = true; }
     this.pos.addScaledVector(mv, this.speed * dt);
-    if (mv.lengthSq() > 0) this.mesh.rotation.y = Math.atan2(mv.x, mv.z);
+    const arenaRadius = Math.hypot(this.pos.x, this.pos.z); if (arenaRadius > 1330) { this.pos.x *= 1330 / arenaRadius; this.pos.z *= 1330 / arenaRadius; }
+    if (mv.lengthSq() > 0) { this.mesh.rotation.y = Math.atan2(mv.x, mv.z); this.walkT += dt * (this.kind === 'boss' ? 5 : 8); }
+    const stride = mv.lengthSq() > 0 ? Math.sin(this.walkT) * 0.38 : 0;
+    this.limbs.forEach((limb, i) => { limb.rotation.x = stride * (i % 2 === 0 ? 1 : -1); });
     this.syncVisual(dt);
   }
   syncVisual(dt: number) {
