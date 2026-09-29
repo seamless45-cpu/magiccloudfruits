@@ -6,8 +6,8 @@ import type { GraphicsSettings } from '../game/types';
 export function Inventory({ game, equipped }: { game: Game; equipped: number }) {
   const keyLabel = (i: number) => (i < 9 ? String(i + 1) : i === 9 ? '0' : '-');
   return (
-    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
-      <div className="flex gap-1 items-end">
+    <div data-panel="inventory" className="absolute bottom-2 left-0 right-0 px-2 flex justify-center pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
+      <div data-panel="inventory-row" className="flex gap-1 items-end justify-center flex-wrap" style={{ maxWidth: 'var(--inv-max)' }}>
         {game.items.map((it, i) => (
           <button key={it.id} className={`slot ${equipped === i ? 'eq' : ''}`} onClick={() => game.toggleEquip(i)} title={`${it.name} (${it.type})`}>
             <span className="absolute top-0.5 left-1 text-[9px] font-orb text-cyan-200/70">{keyLabel(i)}</span>
@@ -82,11 +82,11 @@ export function MobileControls({ game }: { game: Game }) {
 /** Zoom control usable on PC, laptop (touchpad), mobile, console & TV remotes (focusable buttons + slider). */
 export function ZoomControl({ game, zoom }: { game: Game; zoom: number }) {
   return (
-    <div className="sf-panel absolute right-2 bottom-2 p-1.5 flex items-center gap-1 pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
+    <div data-panel="zoom" className="sf-panel w-full shrink-0 mt-auto p-1.5 flex items-center gap-1 justify-between pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
       <button className="sf-btn w-7 h-7 font-orb text-sm" onClick={() => game.zoomBy(-10)} aria-label="Zoom in">+</button>
-      <input type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={1} value={zoom} onChange={e => game.setZoom(+e.target.value)} className="w-20 max-sm:w-14" aria-label="Camera distance" />
+      <input type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={1} value={zoom} onChange={e => game.setZoom(+e.target.value)} className="flex-1 min-w-0" aria-label="Camera distance" />
       <button className="sf-btn w-7 h-7 font-orb text-sm" onClick={() => game.zoomBy(10)} aria-label="Zoom out">−</button>
-      <span className="font-orb text-[9px] w-12 text-right text-cyan-100">{zoom.toFixed(0)}m</span>
+      <span className="font-orb text-[9px] w-11 text-right text-cyan-100 shrink-0">{zoom.toFixed(0)}m</span>
     </div>
   );
 }

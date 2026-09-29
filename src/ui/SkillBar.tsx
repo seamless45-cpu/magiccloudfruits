@@ -34,17 +34,17 @@ export function SkillBar({ game, equipped, touch }: { game: Game; equipped: numb
 
   if (!item) return null;
   if (!open) return (
-    <button onClick={() => setOpen(true)} className="sf-btn font-orb absolute right-2 top-1/2 -translate-y-1/2 px-2 py-3 text-[10px] pointer-events-auto" style={{ writingMode: 'vertical-rl' }}>SKILLS ▸</button>
+    <button data-panel="skills" onClick={() => setOpen(true)} className="sf-btn font-orb w-full py-2 text-[10px] pointer-events-auto shrink-0">SKILLS ▸</button>
   );
   const held = (i: number, down: boolean) => (down ? game.pressSkill(i) : game.releaseSkill(i));
   return (
-    <div className="sf-panel absolute right-2 top-1/2 -translate-y-1/2 w-[236px] max-sm:w-[190px] p-2 pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
-      <div className="flex items-center justify-between mb-1.5">
+    <div data-panel="skills" className="sf-panel w-full flex-none min-h-0 flex flex-col p-2 pointer-events-auto" onPointerDown={e => e.stopPropagation()} style={{ maxHeight: '100%' }}>
+      <div className="flex items-center justify-between mb-1.5 shrink-0">
         <div className="font-orb text-[10px] sf-glow truncate" style={{ color: item.color }}>{item.glyph} {item.name.toUpperCase()}</div>
         <button className="sf-btn text-[10px] px-1.5 leading-4" onClick={() => setOpen(false)} title="Close">✕</button>
       </div>
       {item.passive && <div className="text-[9px] text-cyan-200/60 mb-1 leading-tight">PASSIVE · {item.passive}</div>}
-      <div className="flex flex-col gap-1 max-h-[62vh] overflow-y-auto pr-0.5">
+      <div className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto pr-0.5">
         {item.skills.map((s, i) => (
           <div key={item.id + i} ref={el => { rows.current[i] = el; }} className="skill-row flex items-center gap-1.5 pr-1.5 h-[26px]" title={s.info}>
             <div ref={el => { fills.current[i] = el; }} className="skill-fill" style={{ transform: 'scaleX(0)' }} />

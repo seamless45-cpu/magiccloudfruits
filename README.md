@@ -50,6 +50,26 @@ The dev server binds to all interfaces (`server.host: true`) and accepts any
 tunnel / preview domains. Vite 7 rejects unknown hosts by default, which shows up
 as `HTTP 403 Blocked request. This host is not allowed.`
 
+## HUD layout
+
+The heads-up display is built from two rails plus a reserved bottom band, so panels cannot
+collide at any screen size:
+
+```
++--------------------+                                    +------------------+
+| vitals             |                                    | range telemetry  |
+| controls (dismiss) |              3D view               | skills (scrolls) |
+|                    |                                    | zoom (pinned)    |
++--------------------+------------------------------------+------------------+
+|                        inventory (wraps if needed)                        |
++--------------------------------------------------------------------------+
+```
+
+Measured in a browser across 5 window sizes x 11 items: no panel overlaps another and none
+extends past the viewport. `--hud-bottom` (the height reserved for the inventory row) and
+`--inv-max` (the width available between the rails) live in `src/index.css`; both rails stop
+at `--hud-bottom`, so a wide inventory wraps instead of covering the skill list.
+
 ## Controls
 
 | Input | Action |
