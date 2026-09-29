@@ -45,15 +45,23 @@ export class Game {
   fps = 60; fpsAcc = 0; fpsN = 0;
   overlay = { color: '#000', a: 0, fade: 0 };
   onToast: (m: string, c: string) => void = () => {};
+  onFatal: (m: string) => void = () => {};
   sel: Record<string, any> = { supercell: 1 };
   gamepadIdx: number | null = null; prevPadButtons: boolean[] = [];
   raf = 0; last = performance.now(); container: HTMLElement; disposed = false;
+  halfFloat = true;
   pinch = { d: 0 }; drag = { active: false, x: 0, y: 0, id: -1, moved: 0 };
 
   constructor(container: HTMLElement, settings: GraphicsSettings) {
     this.container = container; this.settings = settings;
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // EffectComposer (three r152+) renders into half-float targets. Without the matching
+    // extension the framebuffer is incomplete and the 3D view comes out black, so detect it
+    // up front and fall back to direct rendering.
+    const gl2 = this.renderer.getContext() as WebGL2RenderingContext;
+    try { this.halfFloat = !!(gl2.getExtension('EXT_color_buffer_half_float') || gl2.getExtension('EXT_color_buffer_float')); }
+    catch { this.halfFloat = false; }
+    this.renderer.shadowMap.type = THREE.PCFShadowMap; this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.style.touchAction = 'none';
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.5, settings.drawDistance);
@@ -143,7 +151,7 @@ export class Game {
     this.renderer.shadowMap.enabled = s.shadows; this.sun.castShadow = s.shadows;
     if (this.sun.shadow.mapSize.x !== s.shadowRes) { this.sun.shadow.mapSize.set(s.shadowRes, s.shadowRes); this.sun.shadow.map?.dispose(); (this.sun.shadow as any).map = null; }
     this.scene.traverse((o: any) => { if (o.material) o.material.needsUpdate = true; });
-    this.bloom.enabled = s.bloom; this.bloom.strength = s.bloomStrength; this.fxaa.enabled = s.antialiasFxaa;
+    this.bloom.enabled = s.bloom && this.halfFloat; this.bloom.strength = s.bloomStrength; this.fxaa.enabled = s.antialiasFxaa && this.halfFloat;
     this.fx.density = s.particles; this.smoke.density = s.particles; this.debris.density = s.debris;
     (this.scene.fog as THREE.FogExp2).density = s.fog ? 0.0009 * (25000 / s.drawDistance) : 0;
     this.renderer.toneMappingExposure = s.exposure;
@@ -382,8 +390,15 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     const now = performance.now(); const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     this.fpsAcc += dt; this.fpsN++; if (this.fpsAcc > 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
-    this.update(dt);
-    if (this.settings.bloom || this.settings.antialiasFxaa) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    try {
+      this.update(dt);
+      if ((this.settings.bloom || this.settings.antialiasFxaa) && this.halfFloat) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    } catch (e) {
+      // A failure in the render loop would otherwise leave a silently frozen/black scene.
+      this.disposed = true; cancelAnimationFrame(this.raf);
+      console.error('[1090 Fruits] render loop stopped', e);
+      this.onFatal(e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    }
   };
   update(dt: number) {
     this.time += dt;
