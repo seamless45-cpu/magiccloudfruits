@@ -1,13 +1,57 @@
 import * as THREE from 'three';
 import { GEO, rnd, V } from './effects';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export type EnemyKind = 'normal' | 'elite' | 'boss';
 
+type ShapePart = { geometry: THREE.BufferGeometry; position?: [number, number, number]; scale?: [number, number, number]; rotation?: [number, number, number] };
+const assemble = (parts: ShapePart[]) => {
+  const geometries = parts.map(({ geometry, position = [0, 0, 0], scale = [1, 1, 1], rotation = [0, 0, 0] }) => {
+    const mesh = geometry.clone();
+    const matrix = new THREE.Matrix4().compose(new THREE.Vector3(...position), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rotation)), new THREE.Vector3(...scale));
+    mesh.applyMatrix4(matrix); geometry.dispose(); return mesh;
+  });
+  const merged = mergeGeometries(geometries, false);
+  geometries.forEach(g => g.dispose());
+  if (!merged) throw new Error('Unable to assemble enemy geometry');
+  return merged;
+};
+
+// Shared low-poly assemblies: enemy silhouettes stay detailed, but each variant reuses its meshes/materials.
 const G = {
-  body: new THREE.CapsuleGeometry(0.55, 1.1, 4, 10),
-  head: new THREE.SphereGeometry(0.42, 14, 10),
-  eye: new THREE.SphereGeometry(0.08, 6, 6),
-  horn: new THREE.ConeGeometry(0.12, 0.5, 6),
+  body: assemble([
+    { geometry: new THREE.CapsuleGeometry(0.55, 1.1, 4, 10), position: [0, 1.1, 0] },
+    { geometry: new THREE.SphereGeometry(0.42, 12, 8), position: [0, 2.05, 0] },
+  ]),
+  eyes: assemble([
+    { geometry: new THREE.SphereGeometry(0.08, 6, 6), position: [0.15, 2.1, 0.36] },
+    { geometry: new THREE.SphereGeometry(0.08, 6, 6), position: [-0.15, 2.1, 0.36] },
+  ]),
+  armor: assemble([
+    { geometry: new THREE.BoxGeometry(0.92, 0.66, 0.32), position: [0, 1.2, 0.23] },
+    { geometry: new THREE.SphereGeometry(0.23, 8, 6), position: [-0.52, 1.47, 0.03], scale: [1.3, 0.9, 1] },
+    { geometry: new THREE.SphereGeometry(0.23, 8, 6), position: [0.52, 1.47, 0.03], scale: [1.3, 0.9, 1] },
+    { geometry: new THREE.BoxGeometry(0.58, 0.12, 0.38), position: [0, 1.57, 0.16] },
+  ]),
+  arm: assemble([
+    { geometry: new THREE.CapsuleGeometry(0.13, 0.48, 3, 7), position: [0, -0.32, 0] },
+    { geometry: new THREE.SphereGeometry(0.22, 8, 6), position: [0, -0.08, 0.01] },
+    { geometry: new THREE.BoxGeometry(0.27, 0.22, 0.3), position: [0, -0.6, 0.07] },
+  ]),
+  leg: assemble([
+    { geometry: new THREE.CapsuleGeometry(0.17, 0.46, 3, 7), position: [0, -0.28, 0] },
+    { geometry: new THREE.SphereGeometry(0.17, 8, 6), position: [0, -0.12, 0.04] },
+    { geometry: new THREE.BoxGeometry(0.32, 0.2, 0.42), position: [0, -0.54, 0.1] },
+    { geometry: new THREE.BoxGeometry(0.28, 0.22, 0.24), position: [0, -0.34, 0.11] },
+  ]),
+  core: new THREE.OctahedronGeometry(1, 1),
+  crest: assemble([{ geometry: new THREE.ConeGeometry(0.18, 0.45, 6), position: [0, 2.45, -0.1] }]),
+  horns: assemble([
+    { geometry: new THREE.ConeGeometry(0.18, 0.64, 6), position: [0, 2.5, -0.1] },
+    { geometry: new THREE.ConeGeometry(0.12, 0.5, 6), position: [0.24, 2.45, 0], rotation: [0, 0, -0.4] },
+    { geometry: new THREE.ConeGeometry(0.12, 0.5, 6), position: [-0.24, 2.45, 0], rotation: [0, 0, 0.4] },
+  ]),
+  crown: new THREE.CylinderGeometry(0.35, 0.3, 0.25, 8, 1, true).translate(0, 2.55, 0),
   bar: new THREE.PlaneGeometry(1.6, 0.16),
   cage: new THREE.EdgesGeometry(new THREE.CylinderGeometry(1, 1, 1, 8, 3)),
   ice: new THREE.IcosahedronGeometry(1, 0),
@@ -16,12 +60,17 @@ const G = {
 const M = {
   eye: new THREE.MeshBasicMaterial({ color: 0xff3344 }),
   barBg: new THREE.MeshBasicMaterial({ color: 0x100a14, transparent: true, opacity: 0.8, depthWrite: false }),
+  bars: [0x30ffb0, 0xc070ff, 0xff3040].map(color => new THREE.MeshBasicMaterial({ color, depthWrite: false })),
+  armor: [0x34485a, 0x412b70, 0x551522].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.82, roughness: 0.28, emissive: color, emissiveIntensity: 0.22 })),
+  limbs: [0x263743, 0x302150, 0x36111c].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.65, roughness: 0.38 })),
+  cores: [0xff5264, 0xcf83ff, 0xff6470].map(color => new THREE.MeshBasicMaterial({ color })),
   cage: new THREE.LineBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0.95 }),
   ice: new THREE.MeshStandardMaterial({ color: 0x9fe6ff, transparent: true, opacity: 0.55, roughness: 0.05, metalness: 0.2, emissive: 0x114466 }),
   star: new THREE.MeshBasicMaterial({ color: 0xffee55 }),
   horn: new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.3 }),
   crown: new THREE.MeshStandardMaterial({ color: 0xffc830, metalness: 1, roughness: 0.25, emissive: 0x442200 }),
 };
+const kindIndex = (kind: EnemyKind) => kind === 'boss' ? 2 : kind === 'elite' ? 1 : 0;
 
 export class Enemy {
   kind: EnemyKind; maxHp: number; hp: number; pos = V(); vel = V(); radius: number; height: number; speed: number; scale: number;
@@ -39,34 +88,24 @@ export class Enemy {
     this.speed = kind === 'boss' ? 5 : kind === 'elite' ? 6.5 : 7.5;
     const col = kind === 'boss' ? 0x7a1020 : kind === 'elite' ? 0x5a2a9a : 0x2f4f5f;
     this.bodyMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.35, emissive: 0x000000 });
-    const body = new THREE.Mesh(G.body, this.bodyMat); body.position.y = 1.1; body.castShadow = true;
-    const head = new THREE.Mesh(G.head, this.bodyMat); head.position.y = 2.05; head.castShadow = true;
-    const e1 = new THREE.Mesh(G.eye, M.eye); e1.position.set(0.15, 2.1, 0.36); const e2 = e1.clone(); e2.position.x = -0.15;
-    const inner = new THREE.Group(); inner.add(body, head, e1, e2);
-    // Layered armor, articulated limbs and luminous chest details replace the old primitive silhouette.
-    const armor = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.66, 0.32), new THREE.MeshStandardMaterial({ color: kind === 'boss' ? 0x551522 : kind === 'elite' ? 0x412b70 : 0x34485a, metalness: 0.82, roughness: 0.28, emissive: col, emissiveIntensity: kind === 'normal' ? 0.12 : 0.32 }));
-    armor.position.set(0, 1.2, 0.23); armor.castShadow = true; inner.add(armor);
-    const core = new THREE.Mesh(new THREE.OctahedronGeometry(kind === 'boss' ? 0.23 : 0.14, 1), new THREE.MeshBasicMaterial({ color: kind === 'boss' ? 0xff6470 : kind === 'elite' ? 0xcf83ff : 0xff5264 }));
-    core.position.set(0, 1.24, 0.42); inner.add(core);
-    const limbMat = new THREE.MeshStandardMaterial({ color: kind === 'boss' ? 0x36111c : kind === 'elite' ? 0x302150 : 0x263743, metalness: 0.65, roughness: 0.38 });
-    const limbGeo = new THREE.CapsuleGeometry(0.13, 0.48, 3, 8);
+    const inner = new THREE.Group();
+    const body = new THREE.Mesh(G.body, this.bodyMat); body.castShadow = true;
+    const eyes = new THREE.Mesh(G.eyes, M.eye);
+    const armor = new THREE.Mesh(G.armor, M.armor[kindIndex(kind)]); armor.castShadow = true;
+    const core = new THREE.Mesh(G.core, M.cores[kindIndex(kind)]);
+    core.position.set(0, 1.24, 0.42); core.scale.setScalar(kind === 'boss' ? 0.23 : 0.14);
+    inner.add(body, eyes, armor, core);
     for (const side of [-1, 1]) {
       const arm = new THREE.Group(); arm.position.set(side * 0.57, 1.55, 0.02);
-      const upper = new THREE.Mesh(limbGeo, limbMat); upper.position.y = -0.32; upper.castShadow = true;
-      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.23, 10, 8), limbMat); shoulder.position.set(side * -0.04, -0.08, 0.01);
-      const gauntlet = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.22, 0.25), limbMat); gauntlet.position.set(0, -0.6, 0.05);
-      arm.add(upper, shoulder, gauntlet); inner.add(arm); this.limbs.push(arm);
+      const armMesh = new THREE.Mesh(G.arm, M.limbs[kindIndex(kind)]); armMesh.castShadow = true; arm.add(armMesh); inner.add(arm); this.limbs.push(arm);
       const leg = new THREE.Group(); leg.position.set(side * 0.25, 0.55, 0);
-      const lower = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.46, 3, 8), limbMat); lower.position.y = -0.28; lower.castShadow = true;
-      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.2, 0.42), limbMat); foot.position.set(0, -0.54, 0.1);
-      leg.add(lower, foot); inner.add(leg); this.limbs.push(leg);
+      const legMesh = new THREE.Mesh(G.leg, M.limbs[kindIndex(kind)]); legMesh.castShadow = true; leg.add(legMesh); inner.add(leg); this.limbs.push(leg);
     }
-    const ridge = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.45, 6), M.horn); ridge.position.set(0, 2.45, -0.1); inner.add(ridge);
-    if (kind !== 'normal') { const h1 = new THREE.Mesh(G.horn, M.horn); h1.position.set(0.22, 2.45, 0); h1.rotation.z = -0.4; const h2 = h1.clone(); h2.position.x = -0.22; h2.rotation.z = 0.4; inner.add(h1, h2); }
-    if (kind === 'boss') { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.3, 0.25, 8, 1, true), M.crown); c.position.y = 2.55; inner.add(c); }
+    const crest = new THREE.Mesh(kind === 'normal' ? G.crest : G.horns, M.horn); inner.add(crest);
+    if (kind === 'boss') inner.add(new THREE.Mesh(G.crown, M.crown));
     inner.scale.setScalar(this.scale); this.mesh.add(inner);
     const bg = new THREE.Mesh(G.bar, M.barBg);
-    this.bar = new THREE.Mesh(G.bar, new THREE.MeshBasicMaterial({ color: kind === 'boss' ? 0xff3040 : kind === 'elite' ? 0xc070ff : 0x30ffb0, depthWrite: false }));
+    this.bar = new THREE.Mesh(G.bar, M.bars[kindIndex(kind)]);
     this.bar.position.z = 0.01; this.barGrp.add(bg, this.bar); this.barGrp.position.y = this.height + 0.6; this.barGrp.scale.setScalar(kind === 'boss' ? 2.5 : kind === 'elite' ? 1.5 : 1);
     this.mesh.add(this.barGrp);
     this.cage = new THREE.LineSegments(G.cage, M.cage); this.cage.scale.set(this.radius * 1.8, this.height * 1.1, this.radius * 1.8); this.cage.position.y = this.height * 0.55; this.cage.visible = false;

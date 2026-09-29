@@ -36,7 +36,7 @@ export class Game {
   cam = { yaw: Math.PI, pitch: 0.42, dist: 22, targetDist: 22 };
   shakes: { pos: THREE.Vector3 | null; i: number; d: number; t: number }[] = [];
   aim = V(0, 0, 30); mouse = new THREE.Vector2(); ray = new THREE.Raycaster(); aimRing!: THREE.Mesh; aimLine!: THREE.Line;
-  keys = new Set<string>(); joy = { x: 0, y: 0 }; isTouch = false; touchAim = false;
+  keys = new Set<string>(); joy = { x: 0, y: 0 }; isTouch = false; touchAim = false; touchSprint = false;
   items: ItemDef[] = ITEMS; equipped = -1; cds: Record<string, CdState[]> = {};
   m1 = { t: 0, combo: 0, last: 0, lag: 0 };
   buffs: Record<string, number> = {};
@@ -143,10 +143,14 @@ export class Game {
     // player
     const P = this.player; const bm = new THREE.MeshStandardMaterial({ color: 0xdfe6f0, metalness: 0.4, roughness: 0.35 }); const am = new THREE.MeshStandardMaterial({ color: 0x1a2030, metalness: 0.8, roughness: 0.3, emissive: 0x00aaff, emissiveIntensity: 0.4 });
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.38, 0.78, 5, 12), am); body.position.y = 1.0; body.castShadow = true;
-    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.48, 0.22), new THREE.MeshStandardMaterial({ color: 0x43536b, metalness: 0.82, roughness: 0.28, emissive: 0x062d45, emissiveIntensity: 0.5 })); chest.position.set(0, 1.18, 0.17); chest.castShadow = true;
+    const chestMat = new THREE.MeshStandardMaterial({ color: 0x43536b, metalness: 0.82, roughness: 0.28, emissive: 0x062d45, emissiveIntensity: 0.5 });
+    const chest = new THREE.Mesh(new THREE.DodecahedronGeometry(0.52, 0), chestMat); chest.scale.set(0.82, 0.58, 0.52); chest.position.set(0, 1.18, 0.18); chest.castShadow = true;
+    const shoulders = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.24, 0), chestMat, 2); const shoulderM = new THREE.Matrix4(), shoulderQ = new THREE.Quaternion(), shoulderS = new THREE.Vector3(1.35, 0.9, 1.05);
+    for (let i = 0; i < 2; i++) { shoulderM.compose(V(i === 0 ? -0.5 : 0.5, 1.48, 0), shoulderQ, shoulderS); shoulders.setMatrixAt(i, shoulderM); } shoulders.instanceMatrix.needsUpdate = true; shoulders.castShadow = true;
     const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 1), new THREE.MeshBasicMaterial({ color: 0x49eaff })); core.position.set(0, 1.2, 0.3);
     const pack = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.68, 0.24), am); pack.position.set(0, 1.05, -0.27); P.mesh.add(pack);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), bm); head.position.y = 1.72; head.castShadow = true;
+    const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.32, 1), bm); head.position.y = 1.72; head.scale.set(0.9, 1, 0.86); head.castShadow = true;
+    const crest = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.34, 5), am); crest.position.set(0, 2.01, -0.03); crest.rotation.x = -0.25;
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.1, 0.13), new THREE.MeshBasicMaterial({ color: 0x35eaff })); visor.position.set(0, 1.74, 0.24);
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.16, 10), am); neck.position.y = 1.46;
     const armG = new THREE.CapsuleGeometry(0.1, 0.55, 3, 8);
@@ -156,7 +160,7 @@ export class Game {
     for (const [leg, x] of [[l1, -0.18], [l2, 0.18]] as [THREE.Group, number][]) { const thigh = new THREE.Mesh(legG, legMat); thigh.position.y = 0.34; thigh.castShadow = true; const knee = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), bm); knee.position.set(0, 0.1, 0.05); const boot = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.18, 0.38), bm); boot.position.set(0, -0.03, 0.09); leg.add(thigh, knee, boot); leg.position.set(x, 0.03, 0); }
     P.sword.position.set(0, -0.72, 0.1); P.sword.rotation.x = Math.PI / 2; P.rArm.add(P.sword);
     P.gun.position.set(0, -0.7, 0.18); P.rArm.add(P.gun);
-    P.mesh.add(body, chest, core, neck, head, visor, P.rArm, P.lArm, l1, l2); P.legs = [l1, l2]; this.scene.add(P.mesh);
+    P.mesh.add(body, chest, core, neck, head, crest, shoulders, visor, P.rArm, P.lArm, l1, l2); P.legs = [l1, l2]; this.scene.add(P.mesh);
     // aim reticle
     this.aimRing = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.9, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x33e0ff, transparent: true, opacity: 0.9, depthWrite: false })); this.scene.add(this.aimRing);
     const lg = new THREE.BufferGeometry().setFromPoints([V(), V()]);
@@ -453,7 +457,7 @@ export class Game {
     const fwd = V(-Math.sin(this.cam.yaw), 0, -Math.cos(this.cam.yaw)); const right = V(-fwd.z, 0, fwd.x);
     const mv = fwd.multiplyScalar(mz).addScaledVector(right, mx); const ml = mv.length();
     if (P.lockMove > 0) P.lockMove -= dt;
-    else if (ml > 0.05) { mv.divideScalar(Math.max(1, ml)); const sp = K.has('shift') ? 30 : 20; P.pos.addScaledVector(mv, sp * dt); P.facing.copy(mv).normalize(); }
+    else if (ml > 0.05) { mv.divideScalar(Math.max(1, ml)); const sp = K.has('shift') || this.touchSprint ? 36 : 20; P.pos.addScaledVector(mv, sp * dt); P.facing.copy(mv).normalize(); }
     P.vel.y -= 32 * dt; P.pos.y += P.vel.y * dt; if (P.pos.y <= 0) { P.pos.y = 0; P.vel.y = 0; P.grounded = true; }
     if (P.vel.x || P.vel.z) { P.pos.x += P.vel.x * dt; P.pos.z += P.vel.z * dt; }
     const playerRadius = Math.hypot(P.pos.x, P.pos.z); if (playerRadius > 1320) { P.pos.x *= 1320 / playerRadius; P.pos.z *= 1320 / playerRadius; }
@@ -461,7 +465,7 @@ export class Game {
     // anim
     const A = P.anim; A.t += dt; const ak = A.d ? Math.min(1, A.t / A.d) : 1;
     P.rArm.rotation.set(0, 0, 0); P.lArm.rotation.set(0, 0, 0);
-    const moving = ml > 0.05 && P.grounded; const gait = Math.sin(this.time * (K.has('shift') ? 13 : 9));
+    const moving = ml > 0.05 && P.grounded; const gait = Math.sin(this.time * (K.has('shift') || this.touchSprint ? 15 : 9));
     if (P.legs) { P.legs[0].rotation.x = moving ? gait * 0.42 : 0; P.legs[1].rotation.x = moving ? -gait * 0.42 : 0; }
     if (ak < 1) {
       if (A.type === 'slash') { P.rArm.rotation.x = -2.6 + ak * 3.2; P.rArm.rotation.z = 0.6 - ak; }
