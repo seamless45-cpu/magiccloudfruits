@@ -272,7 +272,7 @@ function spiralTexture() {
 /** 25 km hurricane with calm eye, towering eyewall, spiral bands, rain-wall mist & outward wind. */
 export class Hurricane implements Effect {
   t = 0; grp = new THREE.Group(); disk: THREE.Mesh; disk2: THREE.Mesh; wall: THREE.InstancedMesh; tex: THREE.Texture; pos: THREE.Vector3; dir: THREE.Vector3; dmgT = 0;
-  eye = 250; wallR = 1500; R = 12500;
+  eye = 320; wallR = 2600; R = 12500;
   constructor(public g: any, at: THREE.Vector3, dir: THREE.Vector3, public life = 300, public dmg = 4000) {
     this.pos = at.clone().setY(0); this.dir = dir.clone().setY(0).normalize();
     this.tex = spiralTexture();
@@ -280,8 +280,8 @@ export class Hurricane implements Effect {
     this.disk = mk(1800, this.R * 2, 0.95); this.disk2 = mk(700, this.R * 1.1, 0.6);
     const n = Math.round(90 * g.settings.clouds) + 20;
     this.wall = new THREE.InstancedMesh(PUFF_GEO, new THREE.MeshStandardMaterial({ color: 0xcfd4dc, roughness: 1, transparent: true, opacity: 0.9, emissive: 0x15181e }), n);
-    for (let i = 0; i < n; i++) { const a = (i / n) * 6.28 * 2; const r = this.eye + rnd(40, 260) + (i % 3) * 120; const y = rnd(480, 3200);
-      _p.set(Math.cos(a) * r, y, Math.sin(a) * r); _s.set(rnd(180, 360), rnd(280, 600), rnd(180, 360)); _m.compose(_p, _q.identity(), _s); this.wall.setMatrixAt(i, _m); }
+    for (let i = 0; i < n; i++) { const a = (i / n) * 6.28 * 2; const r = this.eye + rnd(80, 700) + (i % 3) * 400; const y = rnd(480, 3200);
+      _p.set(Math.cos(a) * r, y, Math.sin(a) * r); _s.set(rnd(240, 520), rnd(280, 600), rnd(240, 520)); _m.compose(_p, _q.identity(), _s); this.wall.setMatrixAt(i, _m); }
     this.wall.frustumCulled = false;
     this.grp.add(this.disk, this.disk2, this.wall); this.grp.position.copy(this.pos); g.scene.add(this.grp);
   }

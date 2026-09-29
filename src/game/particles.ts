@@ -91,9 +91,9 @@ export class ParticleSystem {
     (this.geo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
   }
   update(dt: number, t: number) {
-    const p = this.pos, v = this.vel;
+    const p = this.pos, v = this.vel; let dirty = false;
     for (let n = this.active.length - 1; n >= 0; n--) {
-      const i = this.active[n];
+      const i = this.active[n]; dirty = true;
       this.life[i] -= dt;
       const i3 = i * 3;
       if (this.life[i] <= 0) {
@@ -131,7 +131,7 @@ export class ParticleSystem {
       this.alpha[i] = this.baseAlpha[i] * Math.min(1, k * 2.5) * Math.min(1, (1 - k) * 12 + 0.2);
       this.size[i] = this.baseSize[i] * (1 + this.grow[i] * (1 - k));
     }
-    if (this.active.length > 0) {
+    if (dirty) {
       (this.geo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
       (this.geo.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;
       (this.geo.attributes.aAlpha as THREE.BufferAttribute).needsUpdate = true;
