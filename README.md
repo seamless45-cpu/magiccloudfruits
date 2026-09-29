@@ -21,6 +21,15 @@ npm run build && python3 serve.py          # http://localhost:5173
 cached page while the server is down — the situation where a page sits on its boot
 screen forever waiting for a script that no longer exists.
 
+Routes it serves: `/` and `/index.html` (the game), `/safe` (game in low-graphics safe
+mode), and any other path. Requests for old dev-server paths such as `/src/main.tsx`
+are answered with a small script that forwards the page to the current build instead of
+a 404, which rescues a browser still holding a page from an earlier dev session.
+
+The built page loads **nothing** from the network except the document itself: no
+scripts, styles, fonts or icons are fetched separately, so a blocked or 404-ing asset
+can never blank the screen or delay the first frame.
+
 The dev server binds to all interfaces (`server.host: true`) and accepts any
 `Host` header (`server.allowedHosts: true`) so it also works behind sandbox /
 tunnel / preview domains. Vite 7 rejects unknown hosts by default, which shows up

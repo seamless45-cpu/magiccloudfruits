@@ -22,13 +22,9 @@
       #boot .btn:hover { background: rgba(51,224,255,.3); }
       @keyframes d { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
     </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Loaded non-blocking: a blocked or slow font CDN must never delay first paint
-         (the game falls back to system fonts until these arrive). -->
-    <link rel="stylesheet" media="print" onload="this.media='all'"
-      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" />
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" /></noscript>
+    <!-- No external requests at all: the page loads nothing but the document itself, so a
+         blocked or 404-ing CDN can never show up as a console error or delay first paint. -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%2333e0ff'/%3E%3C/svg%3E" />
   </head>
   <body>
     <div id="root"></div>
@@ -38,8 +34,8 @@
         <div class="msg" id="boot-msg">Booting arena<span class="dots"></span></div>
         <div class="hint" id="boot-hint"></div>
         <div class="actions" id="boot-actions">
-          <button type="button" class="btn" onclick="location.reload()">RETRY</button>
-          <button type="button" class="btn" onclick="location.href = location.pathname + '?safe=1'">SAFE MODE</button>
+          <button type="button" class="btn" onclick="go('/?r=' + Date.now())">RETRY</button>
+          <button type="button" class="btn" onclick="go('/?safe=1&r=' + Date.now())">SAFE MODE</button>
         </div>
         <noscript>
           <div class="msg" style="margin-top:14px">JavaScript is disabled in this browser.</div>
@@ -60,6 +56,11 @@
         var root = function () { return document.getElementById('root'); };
         var mounted = function () { return !!(root() && root().childElementCount > 0); };
         var started = function () { return !!(window.__appStarted || mounted()); };
+        // Retry navigates to "/" with a cache-buster; safe mode adds ?safe=1. Query strings are
+        // enough on their own: if a proxy strips them we land on "/", which the server answers
+        // with the current build (it sends no-store), so nothing here can 404 or loop.
+        // /index.html and /safe also work when the server sees them (see serve.py).
+        window.go = function (path) { location.href = path; };
         var setMsg = function (html) {
           var m = document.getElementById('boot-msg');
           if (m && !mounted()) m.innerHTML = html;
@@ -87,9 +88,11 @@
 
           if (scriptFailed) {
             setMsg('The game script could not be loaded.');
-            hint.innerHTML = 'The page loaded, but ' + listed + ' was not fetched - usually the ' +
-              'dev/preview server has stopped. Start it again, then press RETRY:' +
-              '<br><code>npm install &amp;&amp; npm run dev</code> &nbsp;or&nbsp; <code>python3 serve.py</code>';
+            hint.innerHTML = 'The page loaded, but ' + listed + ' was not fetched - usually this is a ' +
+              'cached page from an earlier session while the server has stopped or changed.' +
+              '<br>Press RETRY. If that keeps failing, force a fresh copy with <b>Ctrl+Shift+R</b> ' +
+              '(Cmd+Shift+R on Mac).' +
+              '<br>To restart the server: <code>npm run build &amp;&amp; python3 serve.py</code>';
           } else if (cameUp) {
             setMsg('The engine loaded but the arena did not appear.');
             hint.innerHTML = 'The game script ran, so this is a graphics or setup problem (low-end GPU, ' +

@@ -47,9 +47,16 @@ const devicePreset = (): GraphicsSettings => {
   return weak ? { ...defaultSettings(), ...PRESETS.medium, preset: 'medium' } : defaultSettings();
 };
 
+/** Safe mode is reachable by path (`/safe`) as well as by query, because a proxy that
+ *  strips query strings would otherwise make the escape hatch unreachable. */
+const safeRequested = () => {
+  const p = location.pathname.replace(/\/+$/, '');
+  return p.endsWith('/safe') || p.endsWith('/arena') || new URLSearchParams(location.search).has('safe');
+};
+
 const initialSettings = (): GraphicsSettings => {
   try {
-    if (new URLSearchParams(location.search).has('safe')) return safeSettings();
+    if (safeRequested()) return safeSettings();
     const stored = localStorage.getItem('f1090gfx');
     return stored ? clampSettings(JSON.parse(stored)) : devicePreset();
   } catch {
