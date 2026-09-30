@@ -440,7 +440,7 @@ export class Microburst implements Effect {
       const count = Math.min(120, Math.floor(this.particleAcc)); this.particleAcc -= count;
       for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1;
         const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,x=emitter.x+Math.cos(a)*r,z=emitter.z+Math.sin(a)*r,localWind=g.windAt(V(x,base,z));
-        g.smoke.spawn(x,base,z,localWind.x+rnd(-8,8),-86,localWind.z+rnd(-8,8),0xf0f3f8,rnd(14,30),base/70*1.65+rnd(1.8,3),{alpha:0.25*k,spread:0.82,drag:0.1,grow:1.6,turb:6,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true}); }
+        g.smoke.spawn(x,base,z,localWind.x+rnd(-8,8),-86,localWind.z+rnd(-8,8),0xf0f3f8,rnd(14,30),2,{alpha:0.25*k,spread:0.82,drag:0.04,groundDrag:0.55,grow:1.6,turb:6,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true}); }
       const wallR = Math.min(this.size, (this.t - 5) * 60);
       // GEO.torus is already horizontal; scale its ground-plane axes into a broad oval.
       this.ringMesh.scale.set(wallR*1.42, 1, wallR*.78); (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0.25;

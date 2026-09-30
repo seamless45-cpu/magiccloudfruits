@@ -39,7 +39,7 @@ void main(){
 
 export interface SpawnOpts {
   grav?: number; drag?: number; grow?: number; alpha?: number; turb?: number;
-  ox?: number; oz?: number; spread?: number; fade?: number; windX?: number; windZ?: number; windResponse?: number; windDynamic?: boolean;
+  ox?: number; oz?: number; spread?: number; fade?: number; groundDrag?: number; windX?: number; windZ?: number; windResponse?: number; windDynamic?: boolean;
 }
 
 /** Ring-buffer GPU point particle system with fluid-ish turbulence & ground outflow. */
@@ -48,7 +48,7 @@ export class ParticleSystem {
   pos: Float32Array; vel: Float32Array; col: Float32Array; size: Float32Array; alpha: Float32Array;
   life: Float32Array; maxLife: Float32Array; baseAlpha: Float32Array; grav: Float32Array; drag: Float32Array;
   grow: Float32Array; turb: Float32Array; ox: Float32Array; oz: Float32Array; spread: Float32Array; baseSize: Float32Array;
-  windX: Float32Array; windZ: Float32Array; windResponse: Float32Array; windDynamic: Uint8Array; windClock: Float32Array; windSampler?: (x:number,y:number,z:number) => THREE.Vector3; active: number[] = []; activeAt: Int32Array;
+  windX: Float32Array; windZ: Float32Array; windResponse: Float32Array; windDynamic: Uint8Array; windClock: Float32Array; groundDrag: Float32Array; outflowStarted: Uint8Array; windSampler?: (x:number,y:number,z:number) => THREE.Vector3; active: number[] = []; activeAt: Int32Array;
   geo: THREE.BufferGeometry; points: THREE.Points; mat: THREE.ShaderMaterial;
   density = 1;
   constructor(cap: number, additive: boolean) {
@@ -56,7 +56,7 @@ export class ParticleSystem {
     this.pos = new Float32Array(cap * 3); this.vel = new Float32Array(cap * 3); this.col = new Float32Array(cap * 3);
     this.size = new Float32Array(cap); this.alpha = new Float32Array(cap); this.life = new Float32Array(cap);
     this.maxLife = new Float32Array(cap); this.baseAlpha = new Float32Array(cap); this.grav = new Float32Array(cap);
-    this.drag = new Float32Array(cap); this.grow = new Float32Array(cap); this.turb = new Float32Array(cap);
+    this.drag = new Float32Array(cap); this.grow = new Float32Array(cap); this.turb = new Float32Array(cap); this.groundDrag = new Float32Array(cap); this.outflowStarted = new Uint8Array(cap);
     this.ox = new Float32Array(cap); this.oz = new Float32Array(cap); this.spread = new Float32Array(cap); this.baseSize = new Float32Array(cap);
     this.windX = new Float32Array(cap); this.windZ = new Float32Array(cap); this.windResponse = new Float32Array(cap); this.windDynamic = new Uint8Array(cap); this.windClock = new Float32Array(cap); this.activeAt = new Int32Array(cap); this.activeAt.fill(-1);
     this.geo = new THREE.BufferGeometry();
@@ -85,7 +85,7 @@ export class ParticleSystem {
     this.size[i] = size; this.baseSize[i] = size; this.life[i] = life; this.maxLife[i] = life;
     this.baseAlpha[i] = o.alpha ?? 1; this.alpha[i] = this.baseAlpha[i];
     this.grav[i] = o.grav ?? 0; this.drag[i] = o.drag ?? 0; this.grow[i] = o.grow ?? 0; this.turb[i] = o.turb ?? 0;
-    this.ox[i] = o.ox ?? x; this.oz[i] = o.oz ?? z; this.spread[i] = o.spread ?? 0;
+    this.ox[i] = o.ox ?? x; this.oz[i] = o.oz ?? z; this.spread[i] = o.spread ?? 0; this.groundDrag[i] = o.groundDrag ?? 0; this.outflowStarted[i] = 0;
     this.windX[i] = o.windX ?? 0; this.windZ[i] = o.windZ ?? 0; this.windResponse[i] = o.windResponse ?? 0; this.windDynamic[i] = o.windDynamic ? 1 : 0; this.windClock[i] = Math.random() * 0.3;
     if (this.activeAt[i] < 0) { this.activeAt[i] = this.active.length; this.active.push(i); }
     (this.geo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
@@ -132,7 +132,14 @@ export class ParticleSystem {
           let dx = p[i3] - this.ox[i], dz = p[i3 + 2] - this.oz[i];
           const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
           const vy = Math.abs(v[i3 + 1]);
-          v[i3] += dx * vy * sp; v[i3 + 2] += dz * vy * sp; v[i3 + 1] = vy * 0.05;
+          v[i3] += dx * vy * sp; v[i3 + 2] += dz * vy * sp;
+          if (this.groundDrag[i] > 0) {
+            if (!this.outflowStarted[i]) {
+              this.outflowStarted[i] = 1; this.drag[i] = this.groundDrag[i];
+              this.windResponse[i] = 0; this.windDynamic[i] = 0; this.turb[i] = 0;
+            }
+            v[i3 + 1] = 0;
+          } else v[i3 + 1] = vy * 0.05;
         } else { v[i3 + 1] *= -0.3; v[i3] *= 0.7; v[i3 + 2] *= 0.7; }
       }
       const k = this.life[i] / this.maxLife[i];
