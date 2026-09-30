@@ -427,17 +427,20 @@ export class Microburst implements Effect {
   }
   update(dt: number) {
     const g = this.g; this.t += dt;
-    const merge = Math.min(1, Math.max(0, (this.t - 2.5) / 2.5));
-    this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge * 0.85), 0, this.pos.z + this.offs[i].z * (1 - merge * 0.85)); });
+    const mergeRaw = Math.min(1, Math.max(0, (this.t - 2.5) / 2.5));
+    const merge = mergeRaw * mergeRaw * (3 - 2 * mergeRaw);
+    this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge), 0, this.pos.z + this.offs[i].z * (1 - merge)); });
     if (this.t > 5 && this.t < 15) {
-      const k = Math.min(1, (this.t - 5) / 0.5); const base = this.cells[0].base * 0.7; const dens = g.settings.particles;
+      const k = Math.min(1, (this.t - 5) / 0.5), source = this.cells[0], emitter = source.mesh.position;
+      // Tie the falling curtain to the merged cloud's actual lower edge and footprint.
+      const base = Math.max(4, source.base - source.R * 0.23), emissionR = source.R * 1.05, dens = g.settings.particles;
       // Fixed-rate, low-discrepancy sampling keeps the descending cloud curtain continuous
       // across frame rates without making particle density depend on refresh rate.
       this.particleAcc += dt * 3000 * dens;
       const count = Math.min(120, Math.floor(this.particleAcc)); this.particleAcc -= count;
       for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1;
-        const a=u*6.28318530718,r=Math.sqrt(v)*this.size*.48,x=this.pos.x+Math.cos(a)*r,z=this.pos.z+Math.sin(a)*r,localWind=g.windAt(V(x,base,z));
-        g.smoke.spawn(x,base,z,localWind.x+rnd(-8,8),-86,localWind.z+rnd(-8,8),0xf0f3f8,rnd(14,30),base/70*1.65+rnd(1.8,3),{alpha:0.25*k,spread:0.82,drag:0.1,grow:1.6,turb:6,ox:this.pos.x,oz:this.pos.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true}); }
+        const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,x=emitter.x+Math.cos(a)*r,z=emitter.z+Math.sin(a)*r,localWind=g.windAt(V(x,base,z));
+        g.smoke.spawn(x,base,z,localWind.x+rnd(-8,8),-86,localWind.z+rnd(-8,8),0xf0f3f8,rnd(14,30),base/70*1.65+rnd(1.8,3),{alpha:0.25*k,spread:0.82,drag:0.1,grow:1.6,turb:6,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true}); }
       const wallR = Math.min(this.size, (this.t - 5) * 60);
       // GEO.torus is already horizontal; scale its ground-plane axes into a broad oval.
       this.ringMesh.scale.set(wallR*1.42, 1, wallR*.78); (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0.25;

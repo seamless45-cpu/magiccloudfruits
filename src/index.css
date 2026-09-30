@@ -188,3 +188,14 @@ input[type=range] { accent-color:#e9e2cf; }
 @media (max-width:1239px) { .slot { flex-basis:48px; } }
 @media (orientation:landscape) and (max-height:560px) { .slot { flex-basis:36px; } }
 @media (orientation:landscape) and (max-height:430px) { .slot { flex-basis:32px; } }
+
+/* Typography refresh: legible IBM Plex Sans for reading, bold Rajdhani for game-facing display. */
+body { font-family:var(--font-ui); font-weight:400; letter-spacing:.01em; font-kerning:normal; text-rendering:optimizeLegibility; }
+button,input,select { font-family:inherit; }
+.font-orb { font-family:var(--font-display); font-weight:700; letter-spacing:.055em; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; }
+.sf-panel { font-family:var(--font-ui); line-height:1.32; }
+.title-card h1 { font-family:var(--font-display); font-weight:700; letter-spacing:.105em !important; }
+.telemetry-cell span { font-family:var(--font-ui); font-weight:600; letter-spacing:.055em; }
+.telemetry-cell b { font-family:var(--font-display); font-weight:700; font-variant-numeric:tabular-nums; }
+.skill-row { font-family:var(--font-ui); }
+.slot-name { font-family:var(--font-ui); font-weight:600; letter-spacing:0; }
