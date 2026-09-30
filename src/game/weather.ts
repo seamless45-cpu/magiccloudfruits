@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Effect } from './types';
-import { rnd, V, addMat, explosion, GEO } from './effects';
+import { rnd, V, addMat, explosion } from './effects';
 import { ParticleSystem } from './particles';
 
 const PUFF_GEO = new THREE.SphereGeometry(1, 12, 8);
@@ -411,23 +411,23 @@ export class Flood implements Effect {
 
 /** Microburst: scattered cells form, merge, then a 145 mph downburst gust with an expanding rain wall. */
 export class Microburst implements Effect {
-  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; dmgT = 0; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
+  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; dmgT = 0; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {
-    for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * size * 0.78, 0, Math.sin(a) * size * 0.78); this.offs.push(off);
-      const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 1.05, life: 16, grow: 2.2, densityScale: 2.5, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
+    const cloudSize = size * 0.7; // keep the source cloud compact; the outflow can travel well beyond its edge.
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * cloudSize * 0.78, 0, Math.sin(a) * cloudSize * 0.78); this.offs.push(off);
+      const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: cloudSize * 1.05, life: 16, grow: 2.2, densityScale: 2.5, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
     // A slow-growing central tower fills the join as the six cells merge, so the burst
     // never leaves a hollow center for its falling mist to appear detached from.
-    const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: size * 1.8, life: 16, grow: 3, densityScale: 3, rain: 0, shade: 0.9 });
+    const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: cloudSize * 1.8, life: 16, grow: 3, densityScale: 3, rain: 0, shade: 0.9 });
     this.cells.push(core); this.offs.push(V()); g.add(core);
-    this.ringMesh = new THREE.Mesh(GEO.torus, new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0, depthWrite: false })); this.ringMesh.position.set(pos.x, 1.2, pos.z); g.scene.add(this.ringMesh);
   }
   audioMix() { const k=this.t>5&&this.t<15?Math.min(1,(this.t-5)/.5)*Math.min(1,(15-this.t)/1):0; return {wind:.8*k,rain:.22*k,hail:0}; }
   windAt(at: THREE.Vector3) {
     if (this.t < 5 || this.t > 15) return null;
-    const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz), radius = this.size * 7.2;
+    const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz), radius = this.size * 1.8 * 8;
     if (dist >= radius || dist < 1) return null;
     // Radial downburst outflow with a broad, outward-moving gust-front pulse.
-    const front = Math.min(radius, (22 + (this.t - 5) * 34) * 4), width = Math.max(72, this.size * 1.12);
+    const front = Math.min(radius, (22 + (this.t - 5) * 34) * 8), width = Math.max(144, this.size * 2.24);
     const shell = Math.exp(-Math.pow((dist - front) / width, 2));
     const falloff = Math.pow(Math.max(0, 1 - dist / radius), 0.45);
     const speed = 145 * 0.44704 * falloff * (0.62 + 0.38 * shell);
@@ -450,25 +450,22 @@ export class Microburst implements Effect {
       for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1,w=(seq*.5698402909980532+this.dustSeed*.63)%1;
         const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,dx=Math.cos(a)*r,dz=Math.sin(a)*r,x=emitter.x+dx,z=emitter.z+dz,y=topY*(.08+.92*w),len=Math.hypot(dx,dz)||1,localWind=g.windAt(V(x,y,z)),out=rnd(4,12);
         g.smoke.spawn(x,y,z,localWind.x+dx/len*out+rnd(-3,3),-rnd(42,78),localWind.z+dz/len*out+rnd(-3,3),0xe1e6eb,rnd(20,36),2,{alpha:0.32*k,spread:1.84,drag:0.06,groundDrag:0.36,grow:1.7,turb:4,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:1.1,windDynamic:true,densityManaged:true}); }
-      const wallR = Math.min(this.size * 4, (this.t - 5) * 240);
-      // GEO.torus is already horizontal; scale its ground-plane axes into a broad oval.
-      this.ringMesh.scale.set(wallR*1.42, 1, wallR*.78); (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0.25;
       const dp = Math.hypot(g.player.pos.x - this.pos.x, g.player.pos.z - this.pos.z); if (dp < this.size * 1.5) g.shakeRaw(4 * (1 - dp / (this.size * 1.5)) + 0.5, 0.1);
       this.dmgT += dt; const tick = this.dmgT > 0.2; if (tick) this.dmgT = 0;
       for (const e of g.enemies) {
         if (e.dead) continue;
         const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z, d = Math.hypot(dx, dz);
-        if (d >= 1 && d < this.size * 1.8) {
+        if (d >= 1 && d < this.size * 1.8 * 8) {
           // Apply the surface wind as real outward displacement, not only as a visual particle force.
           const gust = this.windAt(e.pos);
           if (gust) e.pos.addScaledVector(gust, dt * 0.82);
           if (d < this.size && tick) g.damage(e, this.dmg, { noCharge: true, stun: 0.3 });
         }
       }
-    } else (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0;
+    }
     return this.t < 16;
   }
-  dispose() { this.g.scene.remove(this.ringMesh); (this.ringMesh.material as THREE.Material).dispose(); }
+  dispose() {}
 }
 
 export { addMat };
