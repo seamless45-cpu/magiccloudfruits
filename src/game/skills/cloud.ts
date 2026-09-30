@@ -72,6 +72,9 @@ export const CLOUD_FRUIT: ItemDef = {
     } },
     { name: 'Storm Suppression', cd: 5, info: 'Cells spawn faster & faster (15+) · 30s', cast: (g) => {
       const N = 18, anchor = g.player.pos.clone();
+      // Broad parent cell forms one continuous canopy under the smaller delayed towers.
+      // This bridges the visual sky gaps rather than relying only on puff density.
+      g.add(new StormCloud(g, { pos: anchor.clone(), kind: 'cell', size: 460, life: 34, grow: 3.6, densityScale: 1.3, shade: 0.86, rain: 0, rainDmg: 0, bolts: 0, hail: 0 }));
       for (let i = 0; i < N; i++) {
         const t = 30 * (1 - Math.sqrt(1 - i / N)) * 0.9;
         // Keep delayed cells near the cast point in a compact, evenly spaced cluster.

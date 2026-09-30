@@ -7,6 +7,7 @@ export class GameAudio {
   enabled = true;
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private uiGain: GainNode | null = null;
   private windGain: GainNode | null = null;
   private rainGain: GainNode | null = null;
   private hailGain: GainNode | null = null;
@@ -26,6 +27,10 @@ export class GameAudio {
     if (ctx && master) {
       master.gain.cancelScheduledValues(ctx.currentTime);
       master.gain.setTargetAtTime(enabled ? 0.72 : 0.0001, ctx.currentTime, enabled ? 0.055 : 0.12);
+      if (this.uiGain) {
+        this.uiGain.gain.cancelScheduledValues(ctx.currentTime);
+        this.uiGain.gain.setTargetAtTime(enabled ? 0.82 : 0.0001, ctx.currentTime, enabled ? 0.025 : 0.08);
+      }
     }
   }
 
@@ -52,6 +57,8 @@ export class GameAudio {
     if (!AudioCtor) return;
     const ctx = new AudioCtor() as AudioContext; this.ctx = ctx;
     this.master = ctx.createGain(); this.master.gain.value = 0.0001; this.master.connect(ctx.destination);
+    // UI feedback gets its own direct bus so ambience fades can never bury a brief click/transition cue.
+    this.uiGain = ctx.createGain(); this.uiGain.gain.value = this.enabled ? 0.82 : 0.0001; this.uiGain.connect(ctx.destination);
     const frames = Math.ceil(ctx.sampleRate * 4);
     this.noiseBuffer = ctx.createBuffer(1, frames, ctx.sampleRate);
     const data = this.noiseBuffer.getChannelData(0);
@@ -110,7 +117,7 @@ export class GameAudio {
   uiSound(kind: UiSoundKind = 'click') {
     if (!this.enabled) return;
     this.unlock();
-    const ctx=this.ctx, master=this.master; if(!ctx||!master)return;
+    const ctx=this.ctx, output=this.uiGain; if(!ctx||!output)return;
     const profile: Record<UiSoundKind,{from:number;to:number;duration:number;volume:number;type:OscillatorType}> = {
       click:{from:680,to:390,duration:.075,volume:.12,type:'triangle'},
       open:{from:300,to:760,duration:.2,volume:.13,type:'triangle'},
@@ -124,8 +131,8 @@ export class GameAudio {
     osc.type=p.type; osc.frequency.setValueAtTime(p.from,now); osc.frequency.exponentialRampToValueAtTime(p.to,now+p.duration);
     filter.type='lowpass'; filter.frequency.setValueAtTime(kind==='transition'?900:3200,now); filter.frequency.exponentialRampToValueAtTime(kind==='transition'?180:700,now+p.duration);
     gain.gain.setValueAtTime(.0001,now); gain.gain.linearRampToValueAtTime(p.volume,now+Math.min(.018,p.duration*.2)); gain.gain.exponentialRampToValueAtTime(.0001,now+p.duration);
-    osc.connect(filter); filter.connect(gain); gain.connect(master); osc.start(now); osc.stop(now+p.duration+.02);
-    if(kind==='open'||kind==='close'||kind==='transition') this.noiseSweep(kind==='transition'?2200:1500,kind==='transition'?120:420,kind==='transition'?.62:.2,kind==='transition'?.14:.085);
+    osc.connect(filter); filter.connect(gain); gain.connect(output); osc.start(now); osc.stop(now+p.duration+.02);
+    if(kind==='open'||kind==='close'||kind==='transition') this.noiseSweep(kind==='transition'?2200:1500,kind==='transition'?120:420,kind==='transition'?.62:.2,kind==='transition'?.14:.085,0,output);
   }
 
   gustFront(distance=0,intensity=1) {
@@ -138,12 +145,12 @@ export class GameAudio {
     osc.connect(filter);filter.connect(gain);gain.connect(master);osc.start(now);osc.stop(now+1.55);
   }
 
-  private noiseSweep(from:number,to:number,duration:number,volume:number,delay=0) {
-    const ctx=this.ctx,master=this.master,buffer=this.noiseBuffer;if(!ctx||!master||!buffer)return;
+  private noiseSweep(from:number,to:number,duration:number,volume:number,delay=0,output?:AudioNode) {
+    const ctx=this.ctx,sink=output??this.master,buffer=this.noiseBuffer;if(!ctx||!sink||!buffer)return;
     const now=ctx.currentTime+delay,source=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
     source.buffer=buffer;filter.type='bandpass';filter.Q.value=.65;filter.frequency.setValueAtTime(from,now);filter.frequency.exponentialRampToValueAtTime(to,now+duration);
     gain.gain.setValueAtTime(.0001,now);gain.gain.linearRampToValueAtTime(volume,now+.06);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);
-    source.connect(filter);filter.connect(gain);gain.connect(master);source.start(now,0,duration);source.stop(now+duration+.02);
+    source.connect(filter);filter.connect(gain);gain.connect(sink);source.start(now,0,duration);source.stop(now+duration+.02);
   }
 
   /** Delayed filtered thunder roll, with distance-based propagation and attenuation. */
