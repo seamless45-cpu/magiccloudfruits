@@ -10,7 +10,7 @@ interface Puff { x: number; y: number; z: number; r: number; fy: number; stage: 
 export type CloudKind = 'cumulus' | 'cell' | 'stratus' | 'nimbo' | 'squall' | 'derecho' | 'supercell' | 'hail';
 
 export interface CloudOpts {
-  pos: THREE.Vector3; kind: CloudKind; size: number; life: number; vel?: THREE.Vector3; grow?: number;
+  pos: THREE.Vector3; kind: CloudKind; size: number; life: number; vel?: THREE.Vector3; grow?: number; densityScale?: number;
   rain?: number; rainDmg?: number; hail?: number; hailDmg?: number; hailShatter?: number; hailShatterDmg?: number;
   bolts?: number; boltDmg?: number; superChance?: number; superMul?: number; superName?: string;
   tornado?: boolean; tornadoRate?: number; wind?: number; windDmg?: number; supercellChance?: number;
@@ -41,7 +41,7 @@ export class StormCloud implements Effect {
   addPuff(x: number, y: number, z: number, r: number, stage: number, shade: number, fy = 1) { this.puffs.push({ x, y, z, r, fy, stage, shade }); }
   build() {
     const R = this.R, b = this.base, k = this.o.kind, dens = this.g.settings.clouds;
-    const N = (n: number) => Math.max(3, Math.round(n * dens));
+    const N = (n: number) => Math.max(3, Math.round(n * dens * (this.o.densityScale ?? 1)));
     const disk=(i:number,n:number,radius:number,phase=0):[number,number]=>{const rr=Math.sqrt((i+.5)/n)*radius,a=i*2.399963229728653+phase;return [Math.cos(a)*rr,Math.sin(a)*rr];};
     if (k === 'cumulus' || k === 'cell' || k === 'supercell' || k === 'hail') {
       const n0=N(16),n1=N(14),n2=N(12),n3=N(20);
@@ -414,10 +414,10 @@ export class Microburst implements Effect {
   t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; dmgT = 0; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {
     for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * size * 0.78, 0, Math.sin(a) * size * 0.78); this.offs.push(off);
-      const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 0.82, life: 16, grow: 2.2, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
+      const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 1.05, life: 16, grow: 2.2, densityScale: 2.5, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
     // A slow-growing central tower fills the join as the six cells merge, so the burst
     // never leaves a hollow center for its falling mist to appear detached from.
-    const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: size * 1.6, life: 16, grow: 3.5, rain: 0, shade: 0.9 });
+    const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: size * 1.8, life: 16, grow: 3, densityScale: 3, rain: 0, shade: 0.9 });
     this.cells.push(core); this.offs.push(V()); g.add(core);
     this.ringMesh = new THREE.Mesh(GEO.torus, new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0, depthWrite: false })); this.ringMesh.position.set(pos.x, 1.2, pos.z); g.scene.add(this.ringMesh);
   }
@@ -431,7 +431,7 @@ export class Microburst implements Effect {
   }
   update(dt: number) {
     const g = this.g; this.t += dt;
-    const mergeRaw = Math.min(1, Math.max(0, (this.t - 2.5) / 2.5));
+    const mergeRaw = Math.min(1, Math.max(0, (this.t - 1.5) / 2));
     const merge = mergeRaw * mergeRaw * (3 - 2 * mergeRaw);
     this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge), 0, this.pos.z + this.offs[i].z * (1 - merge)); });
     if (this.t > 5 && this.t < 15) {
