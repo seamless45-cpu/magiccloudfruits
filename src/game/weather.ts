@@ -79,7 +79,7 @@ export class StormCloud implements Effect {
       else { const nx = x * cs - z * sn, nz = x * sn + z * cs; x = nx; z = nz; }
       // Broad horizontal puffs make Cloud Fruit storms read as deep, continuous weather systems.
       // Puff centers and a modest height scale keep every cloud base suspended above the field.
-      const puffY = Math.max(p.y, p.r * s * p.fy * 1.18 + 80);
+      const puffY = Math.max(p.y, p.r * s * p.fy * 1.18 * bulge + 80);
       _p.set(x * 1.12, puffY, z * 1.12); _s.set(p.r * s * 1.62 * bulge, p.r * s * p.fy * 1.18 * bulge, p.r * s * 1.62 * bulge);
       _m.compose(_p, _q.identity(), _s); this.mesh.setMatrixAt(i, _m);
     });
