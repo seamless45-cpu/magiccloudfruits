@@ -424,9 +424,13 @@ export class Microburst implements Effect {
   audioMix() { const k=this.t>5&&this.t<15?Math.min(1,(this.t-5)/.5)*Math.min(1,(15-this.t)/1):0; return {wind:.8*k,rain:.22*k,hail:0}; }
   windAt(at: THREE.Vector3) {
     if (this.t < 5 || this.t > 15) return null;
-    const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz);
-    if (dist >= this.size * 1.8 || dist < 1) return null;
-    const speed = 76 * (1 - dist / (this.size * 1.8));
+    const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz), radius = this.size * 1.8;
+    if (dist >= radius || dist < 1) return null;
+    // Radial downburst outflow with a broad, outward-moving gust-front pulse.
+    const front = Math.min(radius, 22 + (this.t - 5) * 34), width = Math.max(18, this.size * 0.28);
+    const shell = Math.exp(-Math.pow((dist - front) / width, 2));
+    const falloff = Math.pow(Math.max(0, 1 - dist / radius), 0.45);
+    const speed = 145 * 0.44704 * falloff * (0.62 + 0.38 * shell);
     return V(dx / dist * speed, 0, dz / dist * speed);
   }
   update(dt: number) {
@@ -445,14 +449,22 @@ export class Microburst implements Effect {
       const count = Math.floor(this.particleAcc); this.particleAcc -= count;
       for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1,w=(seq*.5698402909980532+this.dustSeed*.63)%1;
         const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,dx=Math.cos(a)*r,dz=Math.sin(a)*r,x=emitter.x+dx,z=emitter.z+dz,y=topY*(.08+.92*w),len=Math.hypot(dx,dz)||1,localWind=g.windAt(V(x,y,z)),out=rnd(4,12);
-        g.smoke.spawn(x,y,z,localWind.x+dx/len*out+rnd(-3,3),-rnd(42,78),localWind.z+dz/len*out+rnd(-3,3),0xe1e6eb,rnd(20,36),2,{alpha:0.32*k,spread:0.18,drag:0.06,groundDrag:0.75,grow:1.7,turb:4,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:1.1,windDynamic:true,densityManaged:true}); }
+        g.smoke.spawn(x,y,z,localWind.x+dx/len*out+rnd(-3,3),-rnd(42,78),localWind.z+dz/len*out+rnd(-3,3),0xe1e6eb,rnd(20,36),2,{alpha:0.32*k,spread:0.46,drag:0.06,groundDrag:0.75,grow:1.7,turb:4,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:1.1,windDynamic:true,densityManaged:true}); }
       const wallR = Math.min(this.size, (this.t - 5) * 60);
       // GEO.torus is already horizontal; scale its ground-plane axes into a broad oval.
       this.ringMesh.scale.set(wallR*1.42, 1, wallR*.78); (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0.25;
       const dp = Math.hypot(g.player.pos.x - this.pos.x, g.player.pos.z - this.pos.z); if (dp < this.size * 1.5) g.shakeRaw(4 * (1 - dp / (this.size * 1.5)) + 0.5, 0.1);
       this.dmgT += dt; const tick = this.dmgT > 0.2; if (tick) this.dmgT = 0;
-      for (const e of g.enemies) { if (e.dead) continue; const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z; const d = Math.hypot(dx, dz) || 1;
-        if (d < this.size) { const f = 145 * 0.44704 * 0.35 * (1 - d / this.size * 0.5); e.pos.x += dx / d * f * dt; e.pos.z += dz / d * f * dt; if (tick) g.damage(e, this.dmg, { noCharge: true, stun: 0.3 }); } }
+      for (const e of g.enemies) {
+        if (e.dead) continue;
+        const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z, d = Math.hypot(dx, dz);
+        if (d >= 1 && d < this.size * 1.8) {
+          // Apply the surface wind as real outward displacement, not only as a visual particle force.
+          const gust = this.windAt(e.pos);
+          if (gust) e.pos.addScaledVector(gust, dt * 0.82);
+          if (d < this.size && tick) g.damage(e, this.dmg, { noCharge: true, stun: 0.3 });
+        }
+      }
     } else (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0;
     return this.t < 16;
   }
