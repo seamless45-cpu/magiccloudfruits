@@ -38,7 +38,7 @@ export class Game {
   cam = { yaw: Math.PI, pitch: 0.42, dist: 22, targetDist: 22 }; firstPerson = false;
   shakes: { pos: THREE.Vector3 | null; i: number; d: number; t: number }[] = [];
   aim = V(0, 0, 30); mouse = new THREE.Vector2(); ray = new THREE.Raycaster(); aimRing!: THREE.Mesh; aimLine!: THREE.Line;
-  keys = new Set<string>(); joy = { x: 0, y: 0 }; isTouch = false; touchAim = false; touchSprint = false;
+  keys = new Set<string>(); joy = { x: 0, y: 0 }; isTouch = false; touchAim = false; touchSprint = false; joystickActive = false;
   items: ItemDef[] = ITEMS; equipped = -1; cds: Record<string, CdState[]> = {};
   m1 = { t: 0, combo: 0, last: 0, lag: 0 };
   buffs: Record<string, number> = {};
@@ -301,17 +301,48 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
   };
   onPointerUp = (e: PointerEvent) => { if (e.pointerType !== 'touch') this.drag.active = false; };
   rotateCam(dx: number, dy: number) { this.cam.yaw -= dx * 0.005; this.cam.pitch = THREE.MathUtils.clamp(this.cam.pitch + dy * 0.004, -0.2, 1.45); }
+  private cameraTouches(touches: TouchList): Touch[] {
+    // HUD contacts (especially the left movement stick) are never camera pinch inputs.
+    return Array.from(touches).filter(t => {
+      const target = document.elementFromPoint(t.clientX, t.clientY);
+      return !target?.closest('.mobile-joystick, .mobile-jump, [data-panel=\"inventory\"], [data-panel=\"skills\"], [data-panel=\"zoom\"]');
+    });
+  }
   onTouch = (e: TouchEvent) => {
     e.preventDefault();
-    const ts = Array.from(e.touches);
-    if (ts.length >= 2) { const d = Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY); if (this.pinch.d > 0) this.zoomBy((this.pinch.d - d) * 0.25 * Math.max(0.5, this.cam.targetDist / 40)); this.pinch.d = d; this.drag.active = false; return; }
+    const ts = this.cameraTouches(e.touches);
+    if (ts.length >= 2 && !this.joystickActive) {
+      const d = Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
+      if (this.pinch.d > 0) this.zoomBy((this.pinch.d - d) * 0.25 * Math.max(0.5, this.cam.targetDist / 40));
+      this.pinch.d = d; this.drag.active = false; return;
+    }
     this.pinch.d = 0;
-    const t = ts[0]; if (!t) return;
-    if (e.type === 'touchstart') { this.drag = { active: true, x: t.clientX, y: t.clientY, id: t.identifier, moved: 0 }; this.updateMouse(t.clientX, t.clientY); }
-    else if (this.drag.active) { const dx = t.clientX - this.drag.x, dy = t.clientY - this.drag.y; this.drag.moved += Math.abs(dx) + Math.abs(dy); this.drag.x = t.clientX; this.drag.y = t.clientY; this.rotateCam(dx, dy); }
+    const t = (this.joystickActive && this.drag.active ? ts.find(x => x.identifier === this.drag.id) : undefined) ?? ts[0]; if (!t) { this.drag.active = false; return; }
+    if (e.type === 'touchstart' || !this.drag.active || this.drag.id !== t.identifier) {
+      this.drag = { active: true, x: t.clientX, y: t.clientY, id: t.identifier, moved: 0 };
+      this.updateMouse(t.clientX, t.clientY);
+    } else {
+      const dx = t.clientX - this.drag.x, dy = t.clientY - this.drag.y;
+      this.drag.moved += Math.abs(dx) + Math.abs(dy); this.drag.x = t.clientX; this.drag.y = t.clientY;
+      this.rotateCam(dx, dy);
+    }
   };
   onTouchEnd = (e: TouchEvent) => {
-    if (e.touches.length === 0) { if (this.drag.active && this.drag.moved < 8) { this.updateMouse(this.drag.x, this.drag.y); this.touchAim = true; this.doM1(); } this.drag.active = false; this.pinch.d = 0; }
+    const remaining = this.cameraTouches(e.touches);
+    if (remaining.length >= 2 && !this.joystickActive) {
+      this.pinch.d = Math.hypot(remaining[0].clientX - remaining[1].clientX, remaining[0].clientY - remaining[1].clientY);
+      this.drag.active = false; return;
+    }
+    if (remaining.length >= 1) {
+      const t = (this.joystickActive && this.drag.active ? remaining.find(x => x.identifier === this.drag.id) : undefined) ?? remaining[0];
+      this.pinch.d = 0; this.drag = { active: true, x: t.clientX, y: t.clientY, id: t.identifier, moved: 0 }; return;
+    }
+    const endedCameraTouch = Array.from(e.changedTouches).some(t => {
+      const target = document.elementFromPoint(t.clientX, t.clientY);
+      return !target?.closest('.mobile-joystick, .mobile-jump, [data-panel=\"inventory\"], [data-panel=\"skills\"], [data-panel=\"zoom\"]');
+    });
+    if (endedCameraTouch && this.drag.active && this.drag.moved < 8) { this.updateMouse(this.drag.x, this.drag.y); this.touchAim = true; this.doM1(); }
+    this.drag.active = false; this.pinch.d = 0;
   };
   pollGamepad(dt: number) {
     const pads = navigator.getGamepads?.(); if (!pads) return; const gp = this.gamepadIdx !== null ? pads[this.gamepadIdx] : Array.from(pads).find(p => p);
