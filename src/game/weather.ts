@@ -411,7 +411,7 @@ export class Flood implements Effect {
 
 /** Microburst: scattered cells form, merge, then a 145 mph downburst gust with an expanding rain wall. */
 export class Microburst implements Effect {
-  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; dmgT = 0; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
+  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; shaft: THREE.Mesh; shaftMat: THREE.ShaderMaterial; dmgT = 0; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {
     for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * size * 0.78, 0, Math.sin(a) * size * 0.78); this.offs.push(off);
       const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 1.05, life: 16, grow: 2.2, densityScale: 2.5, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
@@ -420,6 +420,25 @@ export class Microburst implements Effect {
     const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: size * 1.8, life: 16, grow: 3, densityScale: 3, rain: 0, shade: 0.9 });
     this.cells.push(core); this.offs.push(V()); g.add(core);
     this.ringMesh = new THREE.Mesh(GEO.torus, new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0, depthWrite: false })); this.ringMesh.position.set(pos.x, 1.2, pos.z); g.scene.add(this.ringMesh);
+    // Continuous, soft-edged precipitation/mist shaft bridges the cloud base to the ground.
+    // Individual smoke sprites add texture, but must not be solely responsible for filling this gap.
+    const shaftGeo = new THREE.CylinderGeometry(0.58, 1, 1, 48, 12, true);
+    this.shaftMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uAlpha: { value: 0 } },
+      vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+      fragmentShader: `
+        varying vec2 vUv; uniform float uTime; uniform float uAlpha;
+        void main(){
+          float topFade=1.0-smoothstep(0.78,1.0,vUv.y);
+          float bottomFade=smoothstep(0.0,0.045,vUv.y);
+          float billow=0.78+0.16*sin(vUv.x*74.0+sin(vUv.y*23.0-uTime*1.2)*1.8+uTime*0.4)
+                           +0.06*sin(vUv.x*131.0-vUv.y*39.0+uTime*0.8);
+          float alpha=uAlpha*topFade*bottomFade*clamp(billow,0.35,1.0);
+          gl_FragColor=vec4(0.72,0.75,0.78,alpha);
+        }`,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+    });
+    this.shaft = new THREE.Mesh(shaftGeo, this.shaftMat); this.shaft.renderOrder = 3; g.scene.add(this.shaft);
   }
   audioMix() { const k=this.t>5&&this.t<15?Math.min(1,(this.t-5)/.5)*Math.min(1,(15-this.t)/1):0; return {wind:.8*k,rain:.22*k,hail:0}; }
   windAt(at: THREE.Vector3) {
@@ -434,10 +453,18 @@ export class Microburst implements Effect {
     const mergeRaw = Math.min(1, Math.max(0, (this.t - 1.5) / 2));
     const merge = mergeRaw * mergeRaw * (3 - 2 * mergeRaw);
     this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge), 0, this.pos.z + this.offs[i].z * (1 - merge)); });
+    const source = this.cells[this.cells.length - 1];
+    const shaftHeight = source.base + source.R * 0.5;
+    const shaftGrow = THREE.MathUtils.smoothstep(this.t, 2.2, 3.4);
+    const shaftFade = Math.min(1, Math.max(0, (15 - this.t) / 1.25));
+    this.shaft.position.set(source.mesh.position.x, shaftHeight * 0.5, source.mesh.position.z);
+    this.shaft.scale.set(source.R * 1.15, shaftHeight, source.R * 1.15);
+    this.shaftMat.uniforms.uTime.value = this.t;
+    this.shaftMat.uniforms.uAlpha.value = 0.34 * shaftGrow * shaftFade;
     if (this.t > 5 && this.t < 15) {
       const k = Math.min(1, (this.t - 5) / 0.5), source = this.cells[this.cells.length - 1], emitter = source.mesh.position;
       // Tie the falling curtain to the merged tower's actual lower edge and footprint.
-      const base = Math.max(4, source.base - source.R * 0.23), emissionR = source.R * 1.05;
+      const base = shaftHeight, emissionR = source.R * 1.05;
       // Use a stratified, deterministic spray: scale the rate once for graphics density,
       // then bypass per-particle random thinning so the curtain doesn't develop holes.
       const density = Math.max(0, Math.min(1, g.settings.particles));
@@ -456,7 +483,7 @@ export class Microburst implements Effect {
     } else (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0;
     return this.t < 16;
   }
-  dispose() { this.g.scene.remove(this.ringMesh); (this.ringMesh.material as THREE.Material).dispose(); }
+  dispose() { this.g.scene.remove(this.ringMesh, this.shaft); (this.ringMesh.material as THREE.Material).dispose(); this.shaft.geometry.dispose(); this.shaftMat.dispose(); }
 }
 
 export { addMat };
