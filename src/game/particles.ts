@@ -31,10 +31,11 @@ float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
 void main(){
   vec2 c = gl_PointCoord - 0.5;
   float d = length(c);
-  if(d>0.5) discard;
-  float n = h(floor(gl_PointCoord*6.0)) * 0.25;
-  float a = smoothstep(0.5, 0.0, d + n*0.3);
-  gl_FragColor = vec4(vColor, a * vAlpha);
+  float n = h(floor(gl_PointCoord*8.0));
+  float edge = 0.44 + (n - 0.5) * 0.08;
+  float a = 1.0 - smoothstep(edge - 0.18, edge, d);
+  float mottling = 0.88 + 0.12 * h(floor(gl_PointCoord*13.0));
+  gl_FragColor = vec4(vColor, a * mottling * vAlpha);
 }`;
 
 export interface SpawnOpts {

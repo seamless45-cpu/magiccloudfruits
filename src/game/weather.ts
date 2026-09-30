@@ -411,7 +411,7 @@ export class Flood implements Effect {
 
 /** Microburst: scattered cells form, merge, then a 145 mph downburst gust with an expanding rain wall. */
 export class Microburst implements Effect {
-  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; mistMesh: THREE.InstancedMesh; mistMaterial: THREE.MeshBasicMaterial; mistCap = 220; mistCursor = 0; mistAcc = 0; mistAge = new Float32Array(220); mistPos = new Float32Array(660); mistVel = new Float32Array(660); mistOrigin = new Float32Array(440); mistSize = new Float32Array(220); mistOutflow = new Uint8Array(220); dmgT = 0; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
+  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; dmgT = 0; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {
     for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * size * 0.78, 0, Math.sin(a) * size * 0.78); this.offs.push(off);
       const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 1.05, life: 16, grow: 2.2, densityScale: 2.5, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
@@ -420,15 +420,6 @@ export class Microburst implements Effect {
     const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: size * 1.8, life: 16, grow: 3, densityScale: 3, rain: 0, shade: 0.9 });
     this.cells.push(core); this.offs.push(V()); g.add(core);
     this.ringMesh = new THREE.Mesh(GEO.torus, new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0, depthWrite: false })); this.ringMesh.position.set(pos.x, 1.2, pos.z); g.scene.add(this.ringMesh);
-    // A ragged volume of short-lived mist puffs fills the cloud-to-ground gap without a geometric cone.
-    this.mistMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.26, depthWrite: false, vertexColors: true });
-    this.mistMesh = new THREE.InstancedMesh(PUFF_GEO, this.mistMaterial, this.mistCap);
-    this.mistMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.mistMesh.frustumCulled = false; this.mistMesh.renderOrder = 4;
-    this.mistAge.fill(-1);
-    const hidden = _m.makeScale(0, 0, 0);
-    for (let i = 0; i < this.mistCap; i++) { this.mistMesh.setMatrixAt(i, hidden); this.mistMesh.setColorAt(i, _c.setHex(0xc8cdd1)); }
-    this.mistMesh.instanceMatrix.needsUpdate = true; if (this.mistMesh.instanceColor) this.mistMesh.instanceColor.needsUpdate = true;
-    g.scene.add(this.mistMesh);
   }
   audioMix() { const k=this.t>5&&this.t<15?Math.min(1,(this.t-5)/.5)*Math.min(1,(15-this.t)/1):0; return {wind:.8*k,rain:.22*k,hail:0}; }
   windAt(at: THREE.Vector3) {
@@ -443,53 +434,18 @@ export class Microburst implements Effect {
     const mergeRaw = Math.min(1, Math.max(0, (this.t - 1.5) / 2));
     const merge = mergeRaw * mergeRaw * (3 - 2 * mergeRaw);
     this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge), 0, this.pos.z + this.offs[i].z * (1 - merge)); });
-    const source = this.cells[this.cells.length - 1], emitter = source.mesh.position;
-    const mistFade = Math.min(1, Math.max(0, (this.t - 3) / 0.5)) * Math.min(1, Math.max(0, (15 - this.t) / 1.5));
-    this.mistMaterial.opacity = 0.28 * mistFade;
-    const density = Math.max(0, Math.min(1, g.settings.particles));
-    if (this.t > 3.2 && this.t < 14) {
-      this.mistAcc += dt * 110 * density;
-      const puffCount = Math.floor(this.mistAcc); this.mistAcc -= puffCount;
-      const topY = source.base + source.R * 0.5, spreadR = source.R * 1.05;
-      for (let n = 0; n < puffCount; n++) {
-        const i = this.mistCursor; this.mistCursor = (this.mistCursor + 1) % this.mistCap; const i3 = i * 3;
-        const seq = ++this.dustSeq, u = (seq * 0.6180339887498949 + this.dustSeed) % 1, v = (seq * 0.7548776662466927 + this.dustSeed * 0.29) % 1;
-        const a = u * Math.PI * 2, r = Math.sqrt(v) * spreadR, x = emitter.x + Math.cos(a) * r, z = emitter.z + Math.sin(a) * r;
-        const wind = g.windAt(V(x, topY, z));
-        this.mistPos[i3] = x; this.mistPos[i3 + 1] = topY; this.mistPos[i3 + 2] = z;
-        this.mistVel[i3] = wind.x + rnd(-5, 5); this.mistVel[i3 + 1] = -95; this.mistVel[i3 + 2] = wind.z + rnd(-5, 5);
-        this.mistOrigin[i * 2] = emitter.x; this.mistOrigin[i * 2 + 1] = emitter.z;
-        this.mistSize[i] = rnd(13, 25); this.mistAge[i] = 0; this.mistOutflow[i] = 0;
-        const shade = rnd(0.78, 0.94); this.mistMesh.setColorAt(i, _c.setRGB(shade, shade * 1.015, shade * 1.03));
-      }
-    }
-    for (let i = 0; i < this.mistCap; i++) {
-      if (this.mistAge[i] < 0) continue;
-      const i3 = i * 3; this.mistAge[i] += dt;
-      if (this.mistAge[i] >= 2) { this.mistAge[i] = -1; _m.makeScale(0, 0, 0); this.mistMesh.setMatrixAt(i, _m); continue; }
-      if (this.mistPos[i3 + 1] <= 0.5 && !this.mistOutflow[i]) {
-        this.mistPos[i3 + 1] = 0.5; const dx = this.mistPos[i3] - this.mistOrigin[i * 2], dz = this.mistPos[i3 + 2] - this.mistOrigin[i * 2 + 1], len = Math.hypot(dx, dz) || 1;
-        this.mistVel[i3] += dx / len * 95 * 0.72; this.mistVel[i3 + 2] += dz / len * 95 * 0.72; this.mistVel[i3 + 1] = 0; this.mistOutflow[i] = 1;
-      }
-      this.mistPos[i3] += this.mistVel[i3] * dt; this.mistPos[i3 + 1] = Math.max(0.5, this.mistPos[i3 + 1] + this.mistVel[i3 + 1] * dt); this.mistPos[i3 + 2] += this.mistVel[i3 + 2] * dt;
-      if (this.mistOutflow[i]) { const slow = Math.exp(-1.35 * dt); this.mistVel[i3] *= slow; this.mistVel[i3 + 2] *= slow; }
-      const lifeFade = Math.min(1, this.mistAge[i] / 0.15, (2 - this.mistAge[i]) / 0.35), size = this.mistSize[i] * Math.max(0, lifeFade);
-      _p.set(this.mistPos[i3], this.mistPos[i3 + 1], this.mistPos[i3 + 2]); _s.set(size, size * 0.72, size); _m.compose(_p, _q.identity(), _s); this.mistMesh.setMatrixAt(i, _m);
-    }
-    this.mistMesh.instanceMatrix.needsUpdate = true;
-    if (this.mistMesh.instanceColor) this.mistMesh.instanceColor.needsUpdate = true;
     if (this.t > 5 && this.t < 15) {
       const k = Math.min(1, (this.t - 5) / 0.5), source = this.cells[this.cells.length - 1], emitter = source.mesh.position;
-      // Tie the falling curtain to the merged tower's actual lower edge and footprint.
-      const base = source.base + source.R * 0.5, emissionR = source.R * 1.05;
+      // Seed soft smoke throughout the full cloud-to-ground volume, not from one point that makes a cone.
+      const topY = source.base + source.R * 0.5, emissionR = source.R * 1.05;
       // Use a stratified, deterministic spray: scale the rate once for graphics density,
       // then bypass per-particle random thinning so the curtain doesn't develop holes.
       const density = Math.max(0, Math.min(1, g.settings.particles));
       this.particleAcc += dt * 4500 * density;
       const count = Math.floor(this.particleAcc); this.particleAcc -= count;
-      for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1;
-        const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,x=emitter.x+Math.cos(a)*r,z=emitter.z+Math.sin(a)*r,localWind=g.windAt(V(x,base,z));
-        g.smoke.spawn(x,base,z,localWind.x+rnd(-8,8),-86,localWind.z+rnd(-8,8),0xc4ced7,rnd(18,34),2,{alpha:0.48*k,spread:0.82,drag:0.04,groundDrag:0.55,grow:1.6,turb:6,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true,densityManaged:true}); }
+      for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1,w=(seq*.5698402909980532+this.dustSeed*.63)%1;
+        const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,dx=Math.cos(a)*r,dz=Math.sin(a)*r,x=emitter.x+dx,z=emitter.z+dz,y=topY*(.08+.92*w),len=Math.hypot(dx,dz)||1,localWind=g.windAt(V(x,y,z)),out=rnd(4,12);
+        g.smoke.spawn(x,y,z,localWind.x+dx/len*out+rnd(-3,3),-rnd(42,78),localWind.z+dz/len*out+rnd(-3,3),0xe1e6eb,rnd(20,36),2,{alpha:0.32*k,spread:0.18,drag:0.06,groundDrag:0.75,grow:1.7,turb:4,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:1.1,windDynamic:true,densityManaged:true}); }
       const wallR = Math.min(this.size, (this.t - 5) * 60);
       // GEO.torus is already horizontal; scale its ground-plane axes into a broad oval.
       this.ringMesh.scale.set(wallR*1.42, 1, wallR*.78); (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0.25;
@@ -500,7 +456,7 @@ export class Microburst implements Effect {
     } else (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0;
     return this.t < 16;
   }
-  dispose() { this.g.scene.remove(this.ringMesh, this.mistMesh); (this.ringMesh.material as THREE.Material).dispose(); this.mistMesh.dispose(); this.mistMaterial.dispose(); }
+  dispose() { this.g.scene.remove(this.ringMesh); (this.ringMesh.material as THREE.Material).dispose(); }
 }
 
 export { addMat };
