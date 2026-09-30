@@ -105,8 +105,58 @@ export default function App() {
   const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(() => !!document.fullscreenElement || !!(document as any).webkitFullscreenElement);
+  const [fullscreenError, setFullscreenError] = useState('');
+  const [musicName, setMusicName] = useState('');
+  const [musicVolume, setMusicVolumeValue] = useState(0.35);
+  const [musicRate, setMusicRateValue] = useState(1);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicError, setMusicError] = useState('');
   const lastControlSoundAt = useRef(0);
   const toggleSound = () => { const next=!soundEnabled; game?.audio.setEnabled(next); setSoundEnabled(next); if (next) game?.audio.uiSound('toggle'); };
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(!!document.fullscreenElement || !!(document as any).webkitFullscreenElement);
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    document.addEventListener('webkitfullscreenchange', syncFullscreen as EventListener);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreen);
+      document.removeEventListener('webkitfullscreenchange', syncFullscreen as EventListener);
+    };
+  }, []);
+  const toggleFullscreen = async () => {
+    try {
+      const doc = document as any;
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+        const exit = doc.exitFullscreen ?? doc.webkitExitFullscreen;
+        if (!exit) throw new Error('Fullscreen exit is unavailable.');
+        await exit.call(doc);
+      } else {
+        const root = document.documentElement as any;
+        const enter = root.requestFullscreen ?? root.webkitRequestFullscreen;
+        if (!enter) throw new Error('Fullscreen is not supported by this browser.');
+        await enter.call(root);
+      }
+      setFullscreenError('');
+    } catch (error) {
+      setFullscreenError(error instanceof Error ? error.message : 'Fullscreen could not be changed.');
+    }
+  };
+  const loadMusicFile = (file: File) => {
+    if (!game) { setMusicError('Audio engine is still starting. Try again in a moment.'); return; }
+    if (!file.type.startsWith('audio/') && !/\.(mp3|wav|ogg|opus|flac|aac|m4a|aiff?)$/i.test(file.name)) {
+      setMusicError('Choose a supported audio file.'); return;
+    }
+    setMusicError('');
+    game.audio.loadMusic(file).then(() => { setMusicName(file.name); setMusicPlaying(true); })
+      .catch(error => setMusicError(error instanceof Error ? error.message : 'This audio file could not be played.'));
+  };
+  const changeMusicVolume = (value: number) => { const next = Math.max(0, Math.min(1, value)); setMusicVolumeValue(next); game?.audio.setMusicVolume(next); };
+  const changeMusicRate = (value: number) => { const next = Math.max(0.5, Math.min(1.5, value)); setMusicRateValue(next); game?.audio.setMusicPlaybackRate(next); };
+  const toggleMusic = async () => {
+    if (!game || !musicName) return;
+    try { setMusicPlaying(await game.audio.toggleMusic()); setMusicError(''); }
+    catch (error) { setMusicError(error instanceof Error ? error.message : 'Playback could not be changed.'); }
+  };
   const enterArena = () => {
     if (!game || leavingTitle) return;
     game.audio.unlock(); game.paused = false; setLeavingTitle(true);
@@ -123,7 +173,9 @@ export default function App() {
       if (now - lastControlSoundAt.current < 85) return;
       lastControlSoundAt.current = now;
       game?.audio.uiSound('slider');
-    } else if (control instanceof HTMLSelectElement && control.dataset.uiSound !== 'none') {
+    } else if (control instanceof HTMLInputElement && control.type === 'file') {
+      game?.audio.uiSound('open');
+    } else if (control instanceof HTMLSelectElement) {
       game?.audio.uiSound('toggle');
     }
   };
@@ -324,7 +376,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {showSettings && showGui && <Settings settings={settings} closing={closingSettings} onChange={changeSettings} onClose={closeSettings} onExited={finishSettingsClose} />}
+      {showSettings && showGui && <Settings settings={settings} closing={closingSettings} onChange={changeSettings} onClose={closeSettings} onExited={finishSettingsClose} isFullscreen={isFullscreen} fullscreenError={fullscreenError} onToggleFullscreen={toggleFullscreen} musicAvailable={!!game} musicName={musicName} musicVolume={musicVolume} musicRate={musicRate} musicPlaying={musicPlaying} musicError={musicError} onMusicFile={loadMusicFile} onMusicVolume={changeMusicVolume} onMusicRate={changeMusicRate} onToggleMusic={toggleMusic} />}
       {showUpdates && showTitle && <UpdateLog closing={closingUpdates} onClose={closeUpdates} onExited={finishUpdatesClose} />}
       {game && snap && !showTitle && (
         <button className={`gui-toggle ${showGui ? 'gui-toggle-visible' : 'gui-toggle-hidden'}`} onClick={toggleGui} data-ui-sound={showGui ? "close" : "open"} aria-label={showGui ? 'Hide interface' : 'Show interface'} title={showGui ? 'Hide interface' : 'Show interface'}>

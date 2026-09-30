@@ -23,10 +23,17 @@ export function Inventory({ game, equipped }: { game: Game; equipped: number }) 
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="flex items-center justify-between gap-3 py-1 border-b border-cyan-300/10 text-[12px]"><span className="text-cyan-100/80">{label}</span><span className="flex items-center gap-2">{children}</span></label>;
+  return <div className="settings-row flex items-center justify-between gap-3 py-1 border-b border-cyan-300/10 text-[12px]"><span className="text-cyan-100/80">{label}</span><span className="flex items-center gap-2">{children}</span></div>;
 }
 
-export function Settings({ settings, closing, onChange, onClose, onExited }: { settings: GraphicsSettings; closing: boolean; onChange: (s: GraphicsSettings) => void; onClose: () => void; onExited: () => void }) {
+type SettingsProps = {
+  settings: GraphicsSettings; closing: boolean; onChange: (s: GraphicsSettings) => void; onClose: () => void; onExited: () => void;
+  isFullscreen: boolean; fullscreenError: string; onToggleFullscreen: () => void;
+  musicAvailable: boolean; musicName: string; musicVolume: number; musicRate: number; musicPlaying: boolean; musicError: string;
+  onMusicFile: (file: File) => void; onMusicVolume: (value: number) => void; onMusicRate: (value: number) => void; onToggleMusic: () => void;
+};
+
+export function Settings({ settings, closing, onChange, onClose, onExited, isFullscreen, fullscreenError, onToggleFullscreen, musicAvailable, musicName, musicVolume, musicRate, musicPlaying, musicError, onMusicFile, onMusicVolume, onMusicRate, onToggleMusic }: SettingsProps) {
   const [interpolationMethodsOpen, setInterpolationMethodsOpen] = useState(false);
   const [lightningSettingsOpen, setLightningSettingsOpen] = useState(false);
   const set = <K extends keyof GraphicsSettings>(k: K, v: GraphicsSettings[K]) => onChange({ ...settings, [k]: v });
@@ -42,6 +49,10 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
       <span className="sf-switch-state" aria-hidden="true">{active ? 'ON' : 'OFF'}</span>
     </button>;
   };
+  const musicRange = (value: number, min: number, max: number, label: string, format: (n: number) => string, onValue: (n: number) => void) => {
+    const fill = `${Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))}%`;
+    return <><input type="range" min={min} max={max} step="0.01" value={value} onChange={e => onValue(+e.target.value)} className="sf-range w-28" style={{ '--range-fill': fill } as CSSProperties} aria-label={label} /><span className="sf-range-value w-12 text-right font-orb text-[10px]">{format(value)}</span></>;
+  };
   return (
     <div className={`ui-modal-shell absolute inset-0 grid place-items-center bg-black/70 pointer-events-auto z-50 ${closing ? 'ui-modal-closing' : ''}`} onPointerDown={e => e.stopPropagation()} onAnimationEnd={e => { if (e.target === e.currentTarget && closing) onExited(); }}>
       <div className="ui-modal-backdrop absolute inset-0" onClick={onClose} />
@@ -50,7 +61,9 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
         <div className="flex gap-1 mb-2">
           {(['low', 'medium', 'high', 'ultra'] as const).map(p => <button key={p} className={`sf-btn flex-1 py-1 text-[10px] font-orb ${settings.preset === p ? 'on' : ''}`} onClick={() => onChange({ ...settings, ...PRESETS[p], preset: p })} data-ui-sound="toggle">{p.toUpperCase()}</button>)}
         </div>
-        <div className="settings-section mt-4 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">GAMEPLAY</div>
+        <div className="settings-section mt-4 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">DISPLAY + GAMEPLAY</div>
+        <Row label="Fullscreen mode"><button type="button" className="sf-btn fullscreen-control px-2 py-1 text-[9px] font-orb" onClick={onToggleFullscreen} aria-pressed={isFullscreen} data-ui-sound="toggle">{isFullscreen ? 'EXIT FULLSCREEN' : 'ENTER FULLSCREEN'}</button></Row>
+        {fullscreenError && <p role="status" className="text-[10px] text-amber-200/80 py-1">{fullscreenError}</p>}
         <Row label="Sandbox Mode">{tog('sandbox')}</Row>
         <p className="text-[10px] text-cyan-200/45 py-1">Unlimited health · incoming damage disabled · all skill cooldowns reset to zero.</p>
         <div className="settings-section mt-3 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">GRAPHICS</div>
@@ -94,6 +107,22 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
         <Row label="Positional Shake">{tog('positionShake')}</Row>
         <Row label="Rotational Shake">{tog('rotationShake')}</Row>
         <Row label="Show FPS">{tog('showFps')}</Row>
+        <div className="settings-section mt-4 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">AUDIO // LOCAL MUSIC DECK</div>
+        <Row label="Audio track">
+          <label className={`sf-file-picker ${!musicAvailable ? 'is-disabled' : ''}`}>
+            <input type="file" accept="audio/*,.mp3,.wav,.ogg,.opus,.flac,.aac,.m4a,.aiff" aria-label="Upload local music track" disabled={!musicAvailable} onChange={e => { const file = e.target.files?.[0]; if (file) onMusicFile(file); e.currentTarget.value = ''; }} />
+            <span>{musicName ? 'CHANGE TRACK' : 'LOAD TRACK'}</span><b aria-hidden="true">↥</b>
+          </label>
+        </Row>
+        <Row label="Now playing"><span className="music-track-name" title={musicName || 'No local track selected'}>{musicName || 'NO TRACK LOADED'}</span></Row>
+        <Row label="Transport + loop">
+          <button type="button" className="sf-btn music-transport px-2 py-1 text-[9px] font-orb" onClick={onToggleMusic} disabled={!musicName} data-ui-sound="toggle" aria-label={musicPlaying ? 'Pause music' : 'Play music'}>{musicPlaying ? 'PAUSE ‖' : 'PLAY ▷'}</button>
+          <span className="music-loop-status" aria-label="Looping is always on"><i aria-hidden="true" />LOOP ON</span>
+        </Row>
+        <Row label="Music volume">{musicRange(musicVolume, 0, 1, 'Music volume', v => `${Math.round(v * 100)}%`, onMusicVolume)}</Row>
+        <Row label="Playback speed">{musicRange(musicRate, 0.5, 1.5, 'Music playback speed', v => `${v.toFixed(2)}×`, onMusicRate)}</Row>
+        <p className="text-[10px] text-cyan-200/50 py-1">Playback rate shifts pitch with speed. Volume and speed move in 0.01 steps; repeat stays locked on.</p>
+        {musicError && <p role="alert" className="text-[10px] text-rose-200/90 py-1">{musicError}</p>}
         <p className="text-[10px] text-cyan-200/50 mt-2">Settings apply instantly. Lightning segments re-rotate every 0.01s via GPU-expanded ribbons (no geometry rebuilds).</p>
       </div>
     </div>

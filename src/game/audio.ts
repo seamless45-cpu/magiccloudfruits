@@ -19,6 +19,12 @@ export class GameAudio {
   private applied: WeatherSoundMix = { wind: -1, rain: -1, hail: -1 };
   private noiseBuffer: AudioBuffer | null = null;
   private masterArmed = false;
+  private musicElement: HTMLAudioElement | null = null;
+  private musicSource: MediaElementAudioSourceNode | null = null;
+  private musicGain: GainNode | null = null;
+  private musicUrl: string | null = null;
+  private musicVolume = 0.35;
+  private musicRate = 1;
 
   setEnabled(enabled: boolean) {
     this.enabled = enabled;
@@ -113,7 +119,45 @@ export class GameAudio {
     }
   }
 
-  /** Procedural console feedback plus broadband mechanical sweeps; no external audio assets. */
+  /** Load a user-selected local track, route it through the dedicated music fader, and loop it indefinitely. */
+  loadMusic(file: File): Promise<void> {
+    this.unlock();
+    const ctx = this.ctx, master = this.master;
+    if (!ctx || !master) return Promise.reject(new Error('Web Audio is unavailable on this device.'));
+    const element = this.musicElement ?? new Audio();
+    if (!this.musicSource || !this.musicGain) {
+      this.musicSource = ctx.createMediaElementSource(element);
+      this.musicGain = ctx.createGain(); this.musicGain.gain.value = this.musicVolume;
+      this.musicSource.connect(this.musicGain); this.musicGain.connect(master);
+      this.musicElement = element;
+    }
+    element.pause();
+    const media = element as HTMLAudioElement & { webkitPreservesPitch?: boolean; mozPreservesPitch?: boolean };
+    media.preservesPitch = false; media.webkitPreservesPitch = false; media.mozPreservesPitch = false;
+    element.loop = true; element.playbackRate = this.musicRate;
+    const nextUrl = URL.createObjectURL(file), previousUrl = this.musicUrl;
+    element.src = nextUrl; this.musicUrl = nextUrl; element.load();
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
+    return element.play().then(() => undefined);
+  }
+
+  setMusicVolume(value: number) {
+    this.musicVolume = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0.35));
+    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(this.musicVolume, this.ctx.currentTime, 0.025);
+  }
+
+  setMusicPlaybackRate(value: number) {
+    this.musicRate = Math.max(0.5, Math.min(1.5, Number.isFinite(value) ? value : 1));
+    if (this.musicElement) this.musicElement.playbackRate = this.musicRate;
+  }
+
+  async toggleMusic(): Promise<boolean> {
+    if (!this.musicElement?.src) return false;
+    if (this.musicElement.paused) { await this.musicElement.play(); return true; }
+    this.musicElement.pause(); return false;
+  }
+
+  /** Procedural console feedback with distinct synthesized chirps and filtered tactical sweeps. */
   uiSound(kind: UiSoundKind = 'click') {
     if (!this.enabled) return;
     this.unlock();
@@ -130,9 +174,14 @@ export class GameAudio {
     };
     const p=profile[kind], now=ctx.currentTime, osc=ctx.createOscillator(), filter=ctx.createBiquadFilter(), gain=ctx.createGain();
     osc.type=p.type; osc.frequency.setValueAtTime(p.from,now); osc.frequency.exponentialRampToValueAtTime(p.to,now+p.duration);
-    filter.type='lowpass'; filter.frequency.setValueAtTime(kind==='transition'?900:kind==='slider'?5200:3200,now); filter.frequency.exponentialRampToValueAtTime(kind==='transition'?180:kind==='slider'?2600:700,now+p.duration);
+    filter.type='lowpass'; filter.Q.value=kind==='slider'?2.4:3.6; filter.frequency.setValueAtTime(kind==='transition'?900:kind==='slider'?5200:3200,now); filter.frequency.exponentialRampToValueAtTime(kind==='transition'?180:kind==='slider'?2600:700,now+p.duration);
     gain.gain.setValueAtTime(.0001,now); gain.gain.linearRampToValueAtTime(p.volume,now+Math.min(.018,p.duration*.2)); gain.gain.exponentialRampToValueAtTime(.0001,now+p.duration);
     osc.connect(filter); filter.connect(gain); gain.connect(output); osc.start(now); osc.stop(now+p.duration+.02);
+    // A quiet inharmonic overtone adds the glassy, instrument-panel edge without a loud arcade beep.
+    const overtone=ctx.createOscillator(), overtoneGain=ctx.createGain();
+    overtone.type='sine'; overtone.frequency.setValueAtTime(p.from*1.51,now); overtone.frequency.exponentialRampToValueAtTime(p.to*1.37,now+p.duration*.72);
+    overtoneGain.gain.setValueAtTime(.0001,now); overtoneGain.gain.linearRampToValueAtTime(p.volume*.19,now+Math.min(.012,p.duration*.18)); overtoneGain.gain.exponentialRampToValueAtTime(.0001,now+p.duration*.72);
+    overtone.connect(overtoneGain); overtoneGain.connect(output); overtone.start(now); overtone.stop(now+p.duration*.75);
     if(kind==='open'||kind==='close'||kind==='transition') this.noiseSweep(kind==='transition'?2200:1500,kind==='transition'?120:420,kind==='transition'?.62:.2,kind==='transition'?.14:.085,0,output);
     else if(kind==='slider') this.noiseSweep(5200,2600,.045,.012,0,output);
     else if(kind==='toggle') this.noiseSweep(3600,1800,.065,.02,0,output);
@@ -208,6 +257,11 @@ export class GameAudio {
   }
 
   dispose() {
+    this.musicElement?.pause();
+    if (this.musicElement) { this.musicElement.removeAttribute('src'); this.musicElement.load(); }
+    this.musicSource?.disconnect(); this.musicGain?.disconnect();
+    this.musicElement = null; this.musicSource = null; this.musicGain = null;
+    if (this.musicUrl) { URL.revokeObjectURL(this.musicUrl); this.musicUrl = null; }
     if (!this.ctx) return;
     const ctx = this.ctx; this.ctx = null;
     void ctx.close().catch(() => {});

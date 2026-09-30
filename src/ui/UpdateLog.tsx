@@ -1,7 +1,7 @@
 import type { AnimationEvent, CSSProperties } from 'react';
 
 const PATCHES = [
-  { tag: 'SCI-FI INTERFACE', title: 'Mechanical toggles, energy sliders, and UI sound', detail: 'Settings now use sliding-knob switches and illuminated range controls, with synthesized toggle, slider, and selection cues. Panels and tuning drawers deploy with console-style motion.' },
+  { tag: 'SCI-FI INTERFACE + AUDIO', title: 'Fullscreen, local music deck, and console feedback', detail: 'Added fullscreen controls and a local music player with always-on looping, independent volume, and pitch-following playback speed in 0.01 steps. Switches, sliders, and UI cues now use custom sci-fi styling and layered synthesized sounds.' },
   { tag: 'COMBAT FEEDBACK', title: 'Floating damage indicators', detail: 'Damage numbers pop above hit targets, critical hits stand out, and rapid repeat hits aggregate to keep the display readable.' },
   { tag: 'LIGHTNING', title: 'Taller strikes and adjustable bolt geometry', detail: 'Lightning strike columns are twice as tall. Advanced controls tune segment detail, jitter, branches, jaggedness, width, and height.' },
   { tag: 'PRESENTATION', title: 'Real boot milestones and smoother motion trails', detail: 'The loading console now advances on WebGL checks, arena construction, and the first rendered frame instead of timer-driven stages. Motion trails are softer by default and normalized across frame rates to reduce ghosting.' },
@@ -29,7 +29,7 @@ export function UpdateLog({ closing, onClose, onExited }: { closing: boolean; on
           <div>
             <div className="font-orb text-[9px] tracking-[.28em] text-emerald-200/75">FIELD BULLETIN // 30 SEP 2026</div>
             <h2 id="update-log-title" className="mt-1 font-orb text-xl sm:text-2xl tracking-[.12em] text-white">UPDATE LOG</h2>
-            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.4</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
+            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.5</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
           </div>
           <button className="sf-btn px-3 py-2 font-orb text-xs" onClick={onClose} data-ui-sound="close" aria-label="Close update log">CLOSE ×</button>
         </header>
