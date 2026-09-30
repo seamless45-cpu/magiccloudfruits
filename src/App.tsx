@@ -41,6 +41,7 @@ const clampSettings = (raw: unknown): GraphicsSettings => {
     showFps: bool(s.showFps, d.showFps),
     antialiasFxaa: bool(s.antialiasFxaa, d.antialiasFxaa),
     frameInterpolation: bool(s.frameInterpolation, d.frameInterpolation),
+    frameInterpolationMethod: s.frameInterpolationMethod === 'frameHold' ? 'frameHold' : 'linear',
     drawDistance: num(s.drawDistance, 1000, 60000, d.drawDistance),
     clouds: num(s.clouds, 0.3, 1.5, d.clouds),
   };
@@ -203,7 +204,7 @@ export default function App() {
             {snap.buffs.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{snap.buffs.map(b => <span key={b.k} className="text-[9px] font-orb px-1.5 py-0.5 border border-rose-300/50 bg-rose-500/15 text-rose-100">{b.k.toUpperCase()} {b.rem.toFixed(1)}s</span>)}</div>}
           </div>
           {help && !touch && (
-            <div data-panel="controls" className={`sf-panel p-2.5 w-full text-[10.5px] leading-snug pointer-events-auto overflow-y-auto min-h-0 ${helpClosing ? 'ui-panel-closing' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && helpClosing) { setHelp(false); setHelpClosing(false); } }}>
+            <div data-panel="controls" className={`sf-panel p-2.5 w-full text-[10.5px] leading-snug pointer-events-auto ui-scroll min-h-0 ${helpClosing ? 'ui-panel-closing' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && helpClosing) { setHelp(false); setHelpClosing(false); } }}>
               <div className="flex justify-between font-orb text-[10px] text-cyan-200 mb-1"><span>CONTROLS</span><button className="sf-btn px-1" onClick={toggleHelp} data-ui-sound="close">✕</button></div>
               <div><b className="text-cyan-300">WASD</b> move · <b className="text-cyan-300">Shift</b> sprint · <b className="text-cyan-300">Space</b> jump</div>
               <div><b className="text-cyan-300">LMB / E</b> M1 attack / fire (manual)</div>

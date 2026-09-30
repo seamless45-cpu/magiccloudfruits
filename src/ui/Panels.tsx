@@ -27,6 +27,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function Settings({ settings, closing, onChange, onClose, onExited }: { settings: GraphicsSettings; closing: boolean; onChange: (s: GraphicsSettings) => void; onClose: () => void; onExited: () => void }) {
+  const [interpolationMethodsOpen, setInterpolationMethodsOpen] = useState(false);
   const set = <K extends keyof GraphicsSettings>(k: K, v: GraphicsSettings[K]) => onChange({ ...settings, [k]: v });
   const num = (k: keyof GraphicsSettings, min: number, max: number, step: number, fmt = (v: number) => v.toFixed(2)) => (
     <><input type="range" min={min} max={max} step={step} value={settings[k] as number} onChange={e => set(k, +e.target.value as any)} className="w-28" /><span className="w-12 text-right font-orb text-[10px]">{fmt(settings[k] as number)}</span></>
@@ -35,7 +36,7 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
   return (
     <div className={`ui-modal-shell absolute inset-0 grid place-items-center bg-black/70 pointer-events-auto z-50 ${closing ? 'ui-modal-closing' : ''}`} onPointerDown={e => e.stopPropagation()} onAnimationEnd={e => { if (e.target === e.currentTarget && closing) onExited(); }}>
       <div className="ui-modal-backdrop absolute inset-0" onClick={onClose} />
-      <div data-panel="settings-dialog" className={`sf-panel relative z-[1] w-[420px] max-w-[94vw] max-h-[88vh] overflow-y-auto p-4 ${closing ? 'ui-panel-closing' : ''}`}>
+      <div data-panel="settings-dialog" className={`sf-panel ui-scroll relative z-[1] w-[420px] max-w-[94vw] max-h-[88dvh] overflow-y-auto p-4 ${closing ? 'ui-panel-closing' : ''}`}>
         <div className="flex justify-between items-center mb-2"><h2 className="font-orb text-sm sf-glow text-cyan-200">SETTINGS // ARENA SYSTEMS</h2><button className="sf-btn px-2 text-xs" onClick={onClose} data-ui-sound="close">✕</button></div>
         <div className="flex gap-1 mb-2">
           {(['low', 'medium', 'high', 'ultra'] as const).map(p => <button key={p} className={`sf-btn flex-1 py-1 text-[10px] font-orb ${settings.preset === p ? 'on' : ''}`} onClick={() => onChange({ ...settings, ...PRESETS[p], preset: p })} data-ui-sound="toggle">{p.toUpperCase()}</button>)}
@@ -50,8 +51,17 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
         <Row label="Bloom / Glow">{tog('bloom')}</Row>
         <Row label="Bloom Strength">{num('bloomStrength', 0, 2.5, 0.05)}</Row>
         <Row label="FXAA Anti-Aliasing">{tog('antialiasFxaa')}</Row>
-        <Row label="Motion Interpolation (60 Hz)">{tog('frameInterpolation')}</Row>
-        <p className="text-[10px] text-cyan-200/45 py-1">Linear motion-vector pose blending for the player, enemies, and camera. Uses a fixed 60 Hz simulation and a one-tick presentation delay; not AI or optical-flow frame generation.</p>
+        <Row label="Frame Interpolation"><div className="flex gap-1">{tog('frameInterpolation')}<button className="sf-btn px-2 text-[9px] font-orb" onClick={() => setInterpolationMethodsOpen(v => !v)} aria-expanded={interpolationMethodsOpen} aria-controls="interpolation-method-drawer" data-ui-sound="toggle">METHOD ▾</button></div></Row>
+        {interpolationMethodsOpen && <div id="interpolation-method-drawer" className="interpolation-method-drawer ui-scroll" role="group" aria-label="Frame interpolation method">
+          <div className="font-orb text-[9px] tracking-[.14em] text-cyan-100/70 mb-1.5">SELECT RENDER METHOD</div>
+          <button className={`interpolation-method ${settings.frameInterpolationMethod === 'linear' ? 'selected' : ''}`} onClick={() => set('frameInterpolationMethod', 'linear')} aria-pressed={settings.frameInterpolationMethod === 'linear'}>
+            <span className="font-orb text-[10px]">LINEAR MOTION BLEND</span><span>Blends previous and current 60 Hz poses for smoother display motion.</span>
+          </button>
+          <button className={`interpolation-method ${settings.frameInterpolationMethod === 'frameHold' ? 'selected' : ''}`} onClick={() => set('frameInterpolationMethod', 'frameHold')} aria-pressed={settings.frameInterpolationMethod === 'frameHold'}>
+            <span className="font-orb text-[10px]">FRAME HOLD / DUPLICATION</span><span>Holds the latest 60 Hz pose between simulation ticks; no in-between motion is synthesized.</span>
+          </button>
+        </div>}
+        <p className="text-[10px] text-cyan-200/45 py-1">Both methods use a fixed 60 Hz simulation for player, enemies, and camera. Linear mode adds a one-tick presentation delay; no AI or optical-flow generation is claimed.</p>
         <Row label="Particle Density">{num('particles', 0.1, 1, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
         <Row label="Debris Density">{num('debris', 0.1, 1, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
         <Row label="Cloud Detail">{num('clouds', 0.3, 1.5, 0.05, v => `${Math.round(v * 100)}%`)}</Row>

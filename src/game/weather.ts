@@ -172,9 +172,12 @@ export class StormCloud implements Effect {
       this.shaftAcc+=dt*Math.min(1800,rainOn*(this.R/40)*3*dens*60);
       const shafts=Math.min(Math.min(60,Math.max(1,Math.ceil(30*dt*60))),Math.floor(this.shaftAcc));this.shaftAcc-=shafts;if(this.shaftAcc>30)this.shaftAcc%=1;
       const rp = V();
+      const dropSourceY = o.kind === 'cell' ? this.base * 1.2 : this.base * 0.6;
       for (let i = 0; i < shafts; i++) {
         this.rainPoint(rp); const vy = -(o.kind === 'squall' || o.kind === 'derecho' ? rnd(34, 48) : rnd(14, 24)) * (0.8 + rainOn * 0.4);
-        const h = this.base * rnd(0.55, 0.95), localWind = g.windAt(rp);
+        // Cell rain used to originate inside its opaque underbase and was depth-occluded.
+        // Lift the emitter above the cloud underside so each column visibly joins the base.
+        const h = o.kind === 'cell' ? this.base * 1.2 + rnd(3, 8) : this.base * rnd(0.55, 0.95), localWind = g.windAt(rp);
         const wx = localWind.x + o.vel.x * 0.2, wz = localWind.z + o.vel.z * 0.2;
         g.smoke.spawn(rp.x, h, rp.z, wx + rnd(-2, 2), vy, wz + rnd(-2, 2), o.rainColor ?? 0xd9dee6, Math.min(135, this.R * (o.kind === 'squall' || o.kind === 'derecho' ? rnd(0.18, 0.28) : rnd(0.12, 0.22))), h / -vy + rnd(1.5, 3),
           { turb: 5, spread: 0.55, drag: 0.04, grow: 1.4, alpha: (o.kind === 'squall' || o.kind === 'derecho' ? 0.2 : 0.1) + 0.12 * Math.min(1, rainOn), ox: rp.x + rnd(-3, 3), oz: rp.z + rnd(-3, 3), windX: wx, windZ: wz, windResponse: 1.15, windDynamic: true });
@@ -182,7 +185,7 @@ export class StormCloud implements Effect {
       this.dropAcc+=dt*Math.min(3600,rainOn*this.R*.3*dens*60);
       const drops=Math.min(Math.min(120,Math.max(1,Math.ceil(60*dt*60))),Math.floor(this.dropAcc));this.dropAcc-=drops;if(this.dropAcc>60)this.dropAcc%=1;
       for (let i = 0; i < drops; i++) { this.rainPoint(rp); const w = g.windAt(rp); const wx = w.x + o.vel.x * 0.15, wz = w.z + o.vel.z * 0.15;
-        g.smoke.spawn(rp.x, this.base * 0.6, rp.z, wx, -60, wz, 0xbcd4ff, 0.35, this.base * 0.6 / 60, { alpha: 0.7, windX: wx, windZ: wz, windResponse: 2.1, windDynamic: true }); }
+        g.smoke.spawn(rp.x, dropSourceY, rp.z, wx, -60, wz, 0xbcd4ff, 0.35, dropSourceY / 60, { alpha: 0.7, windX: wx, windZ: wz, windResponse: 2.1, windDynamic: true }); }
       // rain damage every 0.05s
       this.rainTick += dt;
       while (this.rainTick >= 0.05) {

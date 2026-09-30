@@ -22,7 +22,7 @@ export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSetting
   high: { resolution: 1, shadows: true, shadowRes: 2048, bloom: true, particles: 0.85, debris: 0.85, maxBolts: 200, clouds: 1, antialiasFxaa: true, drawDistance: 40000 },
   ultra: { resolution: 1.25, shadows: true, shadowRes: 4096, bloom: true, particles: 1, debris: 1, maxBolts: 320, clouds: 1.2, antialiasFxaa: true, drawDistance: 60000 },
 };
-export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, drawDistance: 40000, clouds: 1 });
+export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, frameInterpolationMethod: 'linear', drawDistance: 40000, clouds: 1 });
 
 interface CdState { rem: number; total: number; charges: number; interval: number; regenT: number; holding: boolean }
 type Pose = { position: THREE.Vector3; rotation: THREE.Quaternion };
@@ -615,7 +615,8 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
           this.captureRenderPose(this.interpolationCurrent);
           this.interpolationAccumulator -= this.interpolationStep; steps++;
         }
-        this.blendRenderPose(this.interpolationAccumulator / this.interpolationStep); blended = true;
+        const alpha = this.settings.frameInterpolationMethod === 'frameHold' ? 1 : this.interpolationAccumulator / this.interpolationStep;
+        this.blendRenderPose(alpha); blended = true;
       } else {
         this.interpolationAccumulator = 0;
         this.update(dt);

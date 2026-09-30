@@ -426,3 +426,73 @@ button,input,select { font-family:inherit; }
 .menu-footer { padding-top:11px; border-top:1px solid rgba(112,245,223,.13); color:rgba(189,232,226,.38); font:600 7px 'Space Grotesk',sans-serif; letter-spacing:.13em; }
 .menu-control-note { border-left:2px solid rgba(112,245,223,.28); padding-left:9px; }
 @media (max-width:640px) { .main-menu-card { max-height:94vh; overflow-y:auto; padding:18px; } .menu-columns { gap:15px; } .menu-brief { padding-right:0; } .menu-threat-strip { font-size:6px; } .menu-footer { font-size:6px; } }
+
+/* Scrollable HUD rails and drawers keep every control reachable on short or narrow screens. */
+.ui-scroll {
+  min-height:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(232,225,207,.42) rgba(12,16,14,.42);
+}
+.ui-scroll::-webkit-scrollbar { width:7px; height:7px; }
+.ui-scroll::-webkit-scrollbar-track { background:rgba(12,16,14,.42); }
+.ui-scroll::-webkit-scrollbar-thumb { background:rgba(232,225,207,.42); border:2px solid rgba(12,16,14,.42); border-radius:8px; }
+.hud-rail-left,.hud-rail-right {
+  min-height:0;
+  max-height:calc(100dvh - var(--hud-bottom) - 16px);
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(232,225,207,.36) transparent;
+}
+.skill-panel { min-height:0; max-height:100%; flex:0 1 auto; }
+.skill-panel > .ui-scroll { min-height:0; flex:1 1 auto; }
+[data-panel="settings-dialog"] { max-height:min(88dvh,calc(100dvh - 16px)) !important; overscroll-behavior:contain; }
+.interpolation-method-drawer {
+  display:grid;
+  gap:6px;
+  max-height:34dvh;
+  margin:5px 0 7px;
+  padding:9px;
+  border:1px solid rgba(239,232,214,.2);
+  background:linear-gradient(145deg,rgba(8,18,17,.92),rgba(28,32,28,.92));
+  animation:method-drawer-open .22s cubic-bezier(.16,.84,.2,1) both;
+}
+@keyframes method-drawer-open { from { opacity:0; transform:translateY(-7px) scaleY(.9); transform-origin:top; } to { opacity:1; transform:translateY(0) scaleY(1); } }
+.interpolation-method {
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  padding:8px;
+  border:1px solid rgba(239,232,214,.18);
+  background:rgba(239,232,214,.035);
+  color:rgba(240,236,223,.7);
+  text-align:left;
+  font-size:10px;
+  line-height:1.35;
+}
+.interpolation-method:hover,.interpolation-method.selected { border-color:rgba(239,232,214,.52); background:rgba(239,232,214,.11); color:#f0ecdf; }
+.interpolation-method.selected { box-shadow:inset 3px 0 rgba(239,232,214,.72); }
+@media (orientation:landscape) and (max-height:560px) {
+  :root { --hud-bottom:48px; --inv-max:calc(100vw - 420px); }
+  .hud-rail-left { width:clamp(130px,34vw,225px) !important; }
+  .hud-rail-right { width:clamp(145px,38vw,255px) !important; }
+  .skill-panel { min-height:104px; max-height:min(58dvh,340px) !important; }
+  .skill-panel > .ui-scroll { gap:3px; }
+  [data-panel="settings-dialog"] { max-height:calc(100dvh - 12px) !important; }
+  [data-panel="controls"] { max-height:50dvh; }
+}
+@media (orientation:landscape) and (max-height:430px) {
+  :root { --hud-bottom:42px; --inv-max:calc(100vw - 400px); }
+  .hud-rail-left { width:clamp(124px,33vw,210px) !important; }
+  .hud-rail-right { width:clamp(142px,37vw,245px) !important; }
+  .skill-panel { min-height:96px; max-height:min(56dvh,270px) !important; }
+  .skill-panel .skill-row { height:24px !important; }
+  [data-panel="settings-dialog"] { padding:10px !important; }
+  .interpolation-method-drawer { max-height:28dvh; }
+}

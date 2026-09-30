@@ -39,13 +39,13 @@ export function SkillBar({ game, equipped, touch }: { game: Game; equipped: numb
   );
   const held = (i: number, down: boolean) => (down ? game.pressSkill(i) : game.releaseSkill(i));
   return (
-    <div data-panel="skills" className={`sf-panel w-full flex-none min-h-0 flex flex-col p-2 pointer-events-auto ${closing ? 'ui-panel-closing' : ''}`} onPointerDown={e => e.stopPropagation()} onAnimationEnd={e => { if (e.target === e.currentTarget && closing) { setClosing(false); setOpen(false); } }} style={{ maxHeight: '100%' }}>
+    <div data-panel="skills" className={`sf-panel skill-panel w-full min-h-0 flex flex-col p-2 pointer-events-auto ${closing ? 'ui-panel-closing' : ''}`} onPointerDown={e => e.stopPropagation()} onAnimationEnd={e => { if (e.target === e.currentTarget && closing) { setClosing(false); setOpen(false); } }}>
       <div className="flex items-center justify-between mb-1.5 shrink-0">
         <div className="font-orb text-[10px] sf-glow truncate" style={{ color: item.color }}>{item.glyph} {item.name.toUpperCase()}</div>
         <button className="sf-btn text-[10px] px-1.5 leading-4" onClick={() => setClosing(true)} data-ui-sound="close" title="Close">✕</button>
       </div>
       {item.passive && <div className="text-[9px] text-cyan-200/60 mb-1 leading-tight">PASSIVE · {item.passive}</div>}
-      <div className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto pr-0.5">
+      <div className="ui-scroll flex flex-col gap-1 flex-1 min-h-0 pr-0.5">
         {item.skills.map((s, i) => (
           <div key={item.id + i} ref={el => { rows.current[i] = el; }} className="skill-row flex items-center gap-1.5 pr-1.5 h-[26px]" title={s.info}>
             <div ref={el => { fills.current[i] = el; }} className="skill-fill" style={{ transform: 'scaleX(0)' }} />

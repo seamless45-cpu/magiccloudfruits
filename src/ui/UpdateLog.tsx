@@ -4,7 +4,8 @@ const PATCHES = [
   { tag: 'ENEMIES', title: 'Three new arena archetypes', detail: 'Gale Stalkers rush in, Storm Casters fire aimed energy shots, and armored Cloudbreakers resist knockback.' },
   { tag: 'STORM SUPPRESSION', title: 'Rolling cell behavior restored; underbase rain coverage fixed', detail: 'Removed the extra parent canopy and restored rolling cell deployments around the player. Precipitation now spans the full visible underbase (1.3× the nominal cloud radius) instead of leaving its outer edge dry.' },
   { tag: 'QUAKE + POLE', title: 'Bigger colliding tsunami walls; two Pole techniques', detail: 'Seaquake waves are five times wider and taller, detonate when converging waves collide, and Pole gains Thunder Lance and Storm Vault.' },
-  { tag: 'GRAPHICS', title: 'Optional motion-vector interpolation', detail: 'Toggle fixed-60 Hz simulation with linear pose blending for the player, enemies, and camera. This is engine-side interpolation, not AI or optical-flow generation.' },
+  { tag: 'GRAPHICS + HUD', title: 'Interpolation method drawer and scrollable panels', detail: 'Choose linear pose blending or frame hold/duplication. HUD rails and dialogs now scroll on short displays, with landscape layouts reflowed to preserve skill-panel space.' },
+  { tag: 'PRECIPITATION', title: 'Raised cell-cloud particle emitters', detail: 'Storm Suppression rain particles now start above the opaque cloud underbase, reducing depth-occlusion gaps without raising particle counts.' },
   { tag: 'MAIN MENU', title: 'Operations console redesign', detail: 'A split field briefing and operation selector adds live status readouts, threat intelligence, and clearer navigation.' },
   { tag: 'AUDIO + TRANSITIONS', title: 'Dedicated feedback bus', detail: 'UI clicks and arena transitions bypass ambience fades; added a distinct Storm Caster shot cue and sharper menu transitions.' },
   { tag: 'PERFORMANCE', title: 'Lighter interface motion', detail: 'Removed painted masks, filters and continuous skill-row shimmer while keeping the larger panel and HUD transitions.' },
@@ -24,11 +25,11 @@ export function UpdateLog({ closing, onClose, onExited }: { closing: boolean; on
           <div>
             <div className="font-orb text-[9px] tracking-[.28em] text-emerald-200/75">FIELD BULLETIN // 30 SEP 2026</div>
             <h2 id="update-log-title" className="mt-1 font-orb text-xl sm:text-2xl tracking-[.12em] text-white">UPDATE LOG</h2>
-            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.1</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
+            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.2</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
           </div>
           <button className="sf-btn px-3 py-2 font-orb text-xs" onClick={onClose} data-ui-sound="close" aria-label="Close update log">CLOSE ×</button>
         </header>
-        <div className="update-log-list mt-4 max-h-[58vh] space-y-2 overflow-y-auto pr-1">
+        <div className="update-log-list ui-scroll mt-4 max-h-[58dvh] space-y-2 pr-1">
           {PATCHES.map((patch, i) => <article key={patch.title} className="update-entry" style={{ '--entry-index': i } as CSSProperties}>
             <div className="update-entry-index font-orb">0{i + 1}</div>
             <div className="min-w-0"><div className="font-orb text-[8px] tracking-[.18em] text-amber-300/85">{patch.tag}</div><h3 className="mt-1 text-sm font-semibold text-slate-50">{patch.title}</h3><p className="mt-1 text-[11px] leading-relaxed text-slate-300/75">{patch.detail}</p></div>
