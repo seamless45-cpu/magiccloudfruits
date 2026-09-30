@@ -22,7 +22,10 @@
       #boot .status-dot { width:7px; height:7px; flex:0 0 7px; border-radius:50%; background:#c8ae77; box-shadow:0 0 12px rgba(200,174,119,.72); animation:boot-dot 1.4s ease-in-out infinite; }
       #boot .msg { color:#e7e3d7; font-size:13px; line-height:1.55; letter-spacing:.015em; }
       #boot .boot-progress { position:relative; height:3px; margin:15px auto 0; overflow:hidden; border-radius:4px; background:rgba(239,232,214,.12); }
-      #boot .boot-progress i { position:absolute; inset:0 auto 0 -38%; width:38%; border-radius:inherit; background:linear-gradient(90deg,transparent,#dfd0aa 50%,transparent); animation:boot-sweep 1.7s cubic-bezier(.4,0,.6,1) infinite; }
+      #boot .boot-progress-row { display:flex; align-items:center; gap:10px; margin-top:14px; }
+      #boot .boot-progress { position:relative; flex:1; min-width:0; height:4px; margin:0; overflow:hidden; border-radius:4px; background:rgba(239,232,214,.09); }
+      #boot .boot-progress i { position:absolute; inset:0 auto 0 0; width:var(--boot-progress,6%); border-radius:inherit; background:linear-gradient(90deg,#9b8554,#f0ecdf); transition:width .38s cubic-bezier(.2,.7,.2,1); }
+      #boot .boot-percent { min-width:29px; color:rgba(239,232,214,.55); text-align:right; font:600 8px 'Space Grotesk','IBM Plex Sans',sans-serif; font-variant-numeric:tabular-nums; }
       #boot .hint { margin-top:14px; color:#b8b2a4; font-size:12px; line-height:1.6; }
       #boot code { padding:1px 5px; border-radius:4px; background:rgba(255,255,255,.06); color:#e4cc96; }
       #boot .actions { display:none; justify-content:center; gap:10px; margin-top:18px; }
@@ -47,12 +50,14 @@
       #boot .boot-phase { color:#d8c799; white-space:nowrap; }
       #boot .boot-status { justify-content:flex-start; min-height:28px; margin-top:17px; }
       #boot .msg { font-size:13px; }
-      #boot .boot-progress { height:4px; margin:14px 0 0; background:rgba(239,232,214,.09); }
-      #boot .boot-progress i { background:linear-gradient(90deg,transparent,#c8ae77 42%,#f0ecdf 52%,#c8ae77 62%,transparent); }
+      #boot .boot-progress-row { margin-top:14px; }
       #boot .boot-modules { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin-top:18px; }
       #boot .boot-module { min-width:0; padding:9px 8px; border:1px solid rgba(239,232,214,.13); background:linear-gradient(150deg,rgba(239,232,214,.055),rgba(0,0,0,.12)); }
       #boot .boot-module b { display:block; margin-bottom:5px; color:rgba(239,232,214,.4); font:600 7px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.12em; }
       #boot .boot-module span { display:block; color:#e6e0d1; font:600 8px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.08em; white-space:nowrap; }
+      #boot .boot-module[data-state='active'] { border-color:rgba(200,174,119,.48); background:linear-gradient(150deg,rgba(200,174,119,.12),rgba(0,0,0,.12)); }
+      #boot .boot-module[data-state='ready'] { border-color:rgba(153,190,155,.4); }
+      #boot .boot-module[data-state='ready'] span { color:#c5ddc1; }
       #boot .boot-footer { grid-column:1/-1; display:flex; justify-content:space-between; gap:12px; padding-top:11px; border-top:1px solid rgba(239,232,214,.12); color:rgba(239,232,214,.35); font:600 7px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.13em; }
       #boot .hint { margin-top:13px; font-size:11px; }
       #boot .actions { justify-content:flex-start; }
@@ -75,13 +80,13 @@
           <div class="boot-code">LOCAL BUILD<br>GRAPHICS · WEATHER · COMBAT</div>
         </div>
         <div class="boot-main">
-          <div class="boot-topline"><span>ARENA SYSTEMS INITIALIZATION</span><span class="boot-phase" id="boot-phase">PREPARING</span></div>
-          <div class="boot-status"><span class="status-dot" aria-hidden="true"></span><div class="msg" id="boot-msg">Preparing the arena<span class="dots"></span></div></div>
-          <div class="boot-progress" aria-hidden="true"><i></i></div>
+          <div class="boot-topline"><span>ARENA SYSTEMS INITIALIZATION</span><span class="boot-phase" id="boot-phase">DOCUMENT</span></div>
+          <div class="boot-status"><span class="status-dot" aria-hidden="true"></span><div class="msg" id="boot-msg">Loading the application module<span class="dots"></span></div></div>
+          <div class="boot-progress-row"><div class="boot-progress" id="boot-progress" role="progressbar" aria-label="Game initialization" aria-valuemin="0" aria-valuemax="100" aria-valuenow="6"><i></i></div><span class="boot-percent" id="boot-percent">06%</span></div>
           <div class="boot-modules" aria-hidden="true">
-            <div class="boot-module"><b>01 / ENGINE</b><span>WEBGL2 CORE</span></div>
-            <div class="boot-module"><b>02 / WORLD</b><span>FIELD ASSEMBLY</span></div>
-            <div class="boot-module"><b>03 / SYSTEMS</b><span>READY CHECK</span></div>
+            <div class="boot-module" data-boot-stage="engine" data-state="pending"><b>01 / ENGINE</b><span>LOAD APP MODULE</span></div>
+            <div class="boot-module" data-boot-stage="world" data-state="pending"><b>02 / WORLD</b><span>AWAITING GPU</span></div>
+            <div class="boot-module" data-boot-stage="systems" data-state="pending"><b>03 / SYSTEMS</b><span>STANDBY</span></div>
           </div>
           <div class="hint" id="boot-hint"></div>
           <div class="actions" id="boot-actions">
@@ -89,7 +94,7 @@
             <button type="button" class="btn" onclick="go('/?safe=1&r=' + Date.now())">SAFE MODE</button>
           </div>
         </div>
-        <div class="boot-footer"><span>MAGIC CLOUD // FIELD CONSOLE</span><span>INITIALIZING<span class="dots"></span></span></div>
+        <div class="boot-footer"><span>MAGIC CLOUD // FIELD CONSOLE</span><span id="boot-footer-phase">WAITING FOR MODULE</span></div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx" onerror="window.__bootScriptFailed = true"></script>
@@ -109,21 +114,55 @@
         // with the current build (it sends no-store), so nothing here can 404 or loop.
         // /index.html and /safe also work when the server sees them (see serve.py).
         window.go = function (path) { location.href = path; };
+        var updateBoot = function (progress, phaseName, message) {
+          progress = Math.max(0, Math.min(100, Math.round(progress)));
+          window.__arenaBootProgress = progress;
+          var boot = document.getElementById('boot');
+          if (!boot) return;
+          boot.style.setProperty('--boot-progress', progress + '%');
+          var bar = document.getElementById('boot-progress');
+          if (bar) bar.setAttribute('aria-valuenow', String(progress));
+          var percent = document.getElementById('boot-percent');
+          if (percent) percent.textContent = String(progress).padStart(2, '0') + '%';
+          var phase = document.getElementById('boot-phase');
+          if (phase) phase.textContent = phaseName;
+          var msg = document.getElementById('boot-msg');
+          if (msg && message) msg.textContent = message;
+          var footer = document.getElementById('boot-footer-phase');
+          if (footer) footer.textContent = window.__arenaBootReady ? 'INITIALIZED' : phaseName;
+          var targets = { engine: 52, world: 78, systems: 100 };
+          var labels = {
+            engine: ['LOAD APP MODULE', 'CHECKING WEBGL2', 'WEBGL2 AVAILABLE'],
+            world: ['AWAITING GPU', 'BUILDING ARENA', 'ARENA ASSEMBLED'],
+            systems: ['STANDBY', 'FIRST FRAME', 'FIRST FRAME OK']
+          };
+          Object.keys(targets).forEach(function (key) {
+            var node = document.querySelector('[data-boot-stage="' + key + '"]');
+            if (!node) return;
+            var target = targets[key];
+            var state = progress >= target ? 'ready' : progress >= target - 24 ? 'active' : 'pending';
+            node.setAttribute('data-state', state);
+            var value = node.querySelector('span');
+            if (value) value.textContent = labels[key][state === 'ready' ? 2 : state === 'active' ? 1 : 0];
+          });
+        };
+        window.__arenaBootUpdate = updateBoot;
+        updateBoot(6, 'DOCUMENT', 'Loading the application module');
         var setMsg = function (html) {
           var m = document.getElementById('boot-msg');
-          if (m && !mounted()) m.innerHTML = html;
+          if (m && !window.__arenaBootReady) m.innerHTML = html;
         };
 
-        // Progress feedback: a slow first load must not look like a freeze.
+        // These watchdog messages describe a genuine wait; they never advance the progress bar.
         window.__bootTimer = setTimeout(function () {
-          if (!started()) { setMsg('Loading the graphics engine<span class="dots"></span>'); var phase = document.getElementById('boot-phase'); if (phase) phase.textContent = 'ENGINE'; }
+          if (!started()) { updateBoot(6, 'NETWORK WAIT', 'Still waiting for the application module'); }
         }, 1200);
         window.__bootSlowTimer = setTimeout(function () {
-          if (!mounted()) { setMsg('Assembling the arena<span class="dots"></span>'); var phase = document.getElementById('boot-phase'); if (phase) phase.textContent = 'WORLD'; }
+          if (started() && !window.__arenaBootReady) { setMsg('WebGL setup is taking longer than expected'); }
         }, 4000);
 
         setTimeout(function () {
-          if (mounted()) return;
+          if (window.__arenaBootReady) return;
           var hint = document.getElementById('boot-hint');
           if (!hint) return;
 
@@ -134,7 +173,13 @@
           var cameUp = !!window.__appStarted;   // module executed but React never committed
           var listed = list.length ? '<code>' + list.join('</code>, <code>') + '</code>' : 'its script';
 
-          if (scriptFailed) {
+          if (mounted() && !window.__arenaBootReady) {
+            var phase = document.getElementById('boot-phase'); if (phase) phase.textContent = 'RENDER WAIT';
+            var footer = document.getElementById('boot-footer-phase'); if (footer) footer.textContent = 'RENDER WAIT';
+            setMsg('The app is open but WebGL has not presented its first frame');
+            hint.innerHTML = 'The game interface loaded, but the renderer has not completed its first frame. This can happen during a slow shader compile or when graphics settings exceed the device.' +
+              '<br>Wait a little longer, press SAFE MODE to retry with lighter graphics, or press RETRY.';
+          } else if (scriptFailed) {
             setMsg('The game script could not be loaded.');
             hint.innerHTML = 'The page loaded, but ' + listed + ' was not fetched - usually this is a ' +
               'cached page from an earlier session while the server has stopped or changed.' +

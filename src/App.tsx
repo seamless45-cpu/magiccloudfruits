@@ -8,6 +8,9 @@ import { UpdateLog } from './ui/UpdateLog';
 
 type Snap = ReturnType<Game['snapshot']>;
 const fmt = (n: number) => (n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n.toFixed(0));
+const reportBoot = (progress: number, phase: string, message: string) => {
+  (window as any).__arenaBootUpdate?.(progress, phase, message);
+};
 
 /** `?safe=1` starts with minimal graphics: a heavy preset can stall or fail to boot on weak GPUs. */
 const safeSettings = (): GraphicsSettings => ({ ...defaultSettings(), ...PRESETS.low, preset: 'low' });
@@ -43,7 +46,7 @@ const clampSettings = (raw: unknown): GraphicsSettings => {
     frameInterpolation: bool(s.frameInterpolation, d.frameInterpolation),
     frameInterpolationMethod: s.frameInterpolationMethod === 'frameHold' ? 'frameHold' : 'linear',
     motionBlur: bool(s.motionBlur, d.motionBlur),
-    motionBlurStrength: num(s.motionBlurStrength, 0.5, 0.96, d.motionBlurStrength),
+    motionBlurStrength: num(s.motionBlurStrength, 0.4, 0.86, d.motionBlurStrength),
     lightningSegments: num(s.lightningSegments, 6, 36, d.lightningSegments),
     lightningJitter: num(s.lightningJitter, 0, 2.5, d.lightningJitter),
     lightningBranches: num(s.lightningBranches, 0, 6, d.lightningBranches),
@@ -123,18 +126,28 @@ export default function App() {
   const onGuiCloseAnimationEnd = (e: AnimationEvent<HTMLDivElement>) => { if (e.target === e.currentTarget && guiClosing) { setShowGui(false); setGuiClosing(false); } };
 
   useEffect(() => {
-    // Cross-fade the HTML safety loader into React's title card instead of cutting between them.
+    // Keep the HTML safety loader in place until Game reports its first successful render.
+    // This makes the hand-off reflect a real renderer milestone rather than React mounting.
     const boot = document.getElementById('boot');
-    clearTimeout((window as unknown as { __bootTimer?: number }).__bootTimer);
-    clearTimeout((window as unknown as { __bootSlowTimer?: number }).__bootSlowTimer);
     if (!boot) return;
-    const frame = requestAnimationFrame(() => boot.classList.add('boot-leaving'));
-    const remove = window.setTimeout(() => boot.remove(), 560);
-    return () => { cancelAnimationFrame(frame); clearTimeout(remove); };
-  }, []);
+    const finish = () => {
+      if (boot.classList.contains('boot-leaving')) return;
+      requestAnimationFrame(() => boot.classList.add('boot-leaving'));
+      window.setTimeout(() => boot.remove(), 560);
+    };
+    const onReady = () => finish();
+    window.addEventListener('arena-ready', onReady, { once: true });
+    if ((window as any).__arenaBootReady) finish();
+    if (fatal) {
+      reportBoot((window as any).__arenaBootProgress ?? 6, 'ERROR', 'Renderer could not start · showing diagnostics');
+      finish();
+    }
+    return () => window.removeEventListener('arena-ready', onReady);
+  }, [fatal]);
 
   useEffect(() => {
     // Pre-flight: three.js r150+ needs WebGL2. Report precisely what is missing instead of a black screen.
+    reportBoot(34, 'GPU CHECK', 'Checking WebGL2 support');
     const probe = document.createElement('canvas');
     const gl2 = probe.getContext('webgl2') as WebGL2RenderingContext | null;
     if (!gl2) {
@@ -142,6 +155,7 @@ export default function App() {
       setFatal(`WebGL2 context unavailable (WebGL1 ${gl1 ? 'present' : 'absent'}) · ${navigator.userAgent}`);
       return;
     }
+    reportBoot(52, 'GPU READY', 'WebGL2 available · preparing the arena renderer');
     try { (gl2.getExtension('WEBGL_lose_context') as { loseContext?: () => void } | null)?.loseContext?.(); } catch { /* ignore */ }
     const onErr = (e: ErrorEvent) => setFatal(f => f ?? `Uncaught error: ${e.message || 'unknown'} (${e.filename}:${e.lineno})`);
     const onRej = (e: PromiseRejectionEvent) => setFatal(f => f ?? `Unhandled rejection: ${String((e as PromiseRejectionEvent).reason)}`);
@@ -153,6 +167,7 @@ export default function App() {
       return;
     }
     g.onFatal = m => setFatal(`Render loop stopped — ${m}`);
+    reportBoot(78, 'WORLD BUILT', 'Arena systems assembled · waiting for first frame');
     setGame(g); (window as any).game = g;
     let tid = 0;
     g.onToast = (m, c) => { const id = ++tid; setToasts(t => [...t.slice(-4), { id, m, c }]); setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2200); };

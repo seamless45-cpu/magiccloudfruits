@@ -64,8 +64,8 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
         </div>}
         <p className="text-[10px] text-cyan-200/45 py-1">Both methods use a fixed 60 Hz simulation for player, enemies, and camera. Linear mode adds a one-tick presentation delay; no AI or optical-flow generation is claimed.</p>
         <Row label="Jelly Motion Blur">{tog('motionBlur')}</Row>
-        <Row label="Trail Retention">{num('motionBlurStrength', 0.5, 0.96, 0.02, v => `${Math.round(v * 100)}%`)}</Row>
-        <p className="text-[10px] text-cyan-200/45 py-1">Lightweight after-image trail; uses post-processing when supported.</p>
+        <Row label="Trail Retention">{num('motionBlurStrength', 0.4, 0.86, 0.02, v => `${Math.round(v * 100)}%`)}</Row>
+        <p className="text-[10px] text-cyan-200/45 py-1">Soft after-image, time-scaled for consistent trails across frame rates. Lower retention reduces ghosting during quick turns.</p>
         <Row label="Advanced Lightning"><button className="sf-btn px-2 text-[9px] font-orb" onClick={() => setLightningSettingsOpen(v => !v)} aria-expanded={lightningSettingsOpen} aria-controls="advanced-lightning-settings" data-ui-sound="toggle">{lightningSettingsOpen ? 'CLOSE −' : 'TUNE +'}</button></Row>
         {lightningSettingsOpen && <div id="advanced-lightning-settings" className="lightning-settings-drawer ui-scroll" role="group" aria-label="Advanced lightning settings">
           <Row label="Segments / detail">{num('lightningSegments', 6, 36, 2, v => `${v}`)}</Row>

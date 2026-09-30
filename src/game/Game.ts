@@ -23,7 +23,7 @@ export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSetting
   high: { resolution: 1, shadows: true, shadowRes: 2048, bloom: true, particles: 0.85, debris: 0.85, maxBolts: 200, clouds: 1, antialiasFxaa: true, drawDistance: 40000 },
   ultra: { resolution: 1.25, shadows: true, shadowRes: 4096, bloom: true, particles: 1, debris: 1, maxBolts: 320, clouds: 1.2, antialiasFxaa: true, drawDistance: 60000 },
 };
-export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, frameInterpolationMethod: 'linear', motionBlur: false, motionBlurStrength: 0.88, lightningSegments: 18, lightningJitter: 1, lightningBranches: 2, lightningJaggedness: 1, lightningWidth: 1, lightningHeight: 1, drawDistance: 40000, clouds: 1 });
+export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, frameInterpolationMethod: 'linear', motionBlur: false, motionBlurStrength: 0.72, lightningSegments: 18, lightningJitter: 1, lightningBranches: 2, lightningJaggedness: 1, lightningWidth: 1, lightningHeight: 1, drawDistance: 40000, clouds: 1 });
 
 interface CdState { rem: number; total: number; charges: number; interval: number; regenT: number; holding: boolean }
 type Pose = { position: THREE.Vector3; rotation: THREE.Quaternion };
@@ -50,7 +50,7 @@ export class Game {
   fps = 60; fpsAcc = 0; fpsN = 0;
   private readonly interpolationStep = 1 / 60; private interpolationAccumulator = 0;
   private interpolationPrevious: RenderPose | null = null; private interpolationCurrent: RenderPose | null = null;
-  private settingsApplied = false; private afterimageWarmup = 0;
+  private settingsApplied = false; private afterimageWarmup = 0; private bootFrameReported = false;
   damageIndicators: { id: number; targetId: number; amount: number; pos: THREE.Vector3; age: number; crit: boolean }[] = [];
   private nextDamageIndicator = 1;
   overlay = { color: '#000', a: 0, fade: 0 };
@@ -85,7 +85,7 @@ export class Game {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.9, 0.5, 0.82); this.composer.addPass(this.bloom);
     this.fxaa = new ShaderPass(FXAAShader); this.composer.addPass(this.fxaa);
-    this.afterimage = new AfterimagePass(0.88); this.composer.addPass(this.afterimage);
+    this.afterimage = new AfterimagePass(0.72); this.composer.addPass(this.afterimage);
     this.composer.addPass(new OutputPass());
     for (const it of this.items) this.cds[it.id] = it.skills.map(s => ({ rem: 0, total: s.cd, charges: s.charges?.max ?? 0, interval: 0, regenT: 0, holding: false }));
     for (let i = 0; i < 48; i++) this.enemies.push(new Enemy(this, 'normal'));
@@ -627,7 +627,7 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
   loop = () => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
-    const now = performance.now(); const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
+    const now = performance.now(); const frameDelta = Math.max(0, (now - this.last) / 1000); const dt = Math.min(0.05, frameDelta); this.last = now;
     this.fpsAcc += dt; this.fpsN++; if (this.fpsAcc > 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
     let blended = false;
     try {
@@ -651,9 +651,23 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
         }
       }
       if ((this.settings.bloom || this.settings.antialiasFxaa || this.settings.motionBlur) && this.halfFloat) {
-        if (this.afterimageWarmup > 0 && this.settings.motionBlur) { this.afterimage.damp = 0; this.composer.render(); this.afterimageWarmup--; this.afterimage.damp = this.settings.motionBlurStrength; }
-        else this.composer.render();
+        if (this.afterimageWarmup > 0 && this.settings.motionBlur) {
+          // Seed the history buffer with the current image when enabled; otherwise the first
+          // blurred frame can pull stale pixels from an earlier use of the pass.
+          this.afterimage.damp = 0; this.composer.render(); this.afterimageWarmup--;
+        } else {
+          // The Afterimage pass retains a fraction per rendered frame. Scale that fraction
+          // to elapsed time so its trail length stays consistent at different frame rates.
+          this.afterimage.damp = Math.pow(this.settings.motionBlurStrength, Math.min(frameDelta, 0.25) * 60);
+          this.composer.render();
+        }
       } else this.renderer.render(this.scene, this.camera);
+      if (!this.bootFrameReported) {
+        this.bootFrameReported = true;
+        (window as any).__arenaBootReady = true;
+        (window as any).__arenaBootUpdate?.(100, 'READY', 'First frame rendered · arena ready');
+        window.dispatchEvent(new Event('arena-ready'));
+      }
     } catch (e) {
       // A failure in the render loop would otherwise leave a silently frozen/black scene.
       this.disposed = true; cancelAnimationFrame(this.raf);
