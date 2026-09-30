@@ -74,6 +74,7 @@ export default function App() {
   const [settings, setSettings] = useState<GraphicsSettings>(initialSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [showTitle, setShowTitle] = useState(true);
+  const [leavingTitle, setLeavingTitle] = useState(false);
   const [showGui, setShowGui] = useState(true);
   const [help, setHelp] = useState(true);
   const [showTelemetry, setShowTelemetry] = useState(true);
@@ -81,11 +82,20 @@ export default function App() {
   const [fatal, setFatal] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const toggleSound = () => { const next=!soundEnabled; game?.audio.setEnabled(next); setSoundEnabled(next); };
+  const enterArena = () => {
+    if (!game || leavingTitle) return;
+    game.audio.unlock(); game.paused = false; setLeavingTitle(true);
+  };
 
   useEffect(() => {
-    // React has mounted: retire the inline boot screen from index.html.
+    // Cross-fade the HTML safety loader into React's title card instead of cutting between them.
+    const boot = document.getElementById('boot');
     clearTimeout((window as unknown as { __bootTimer?: number }).__bootTimer);
-    document.getElementById('boot')?.remove();
+    clearTimeout((window as unknown as { __bootSlowTimer?: number }).__bootSlowTimer);
+    if (!boot) return;
+    const frame = requestAnimationFrame(() => boot.classList.add('boot-leaving'));
+    const remove = window.setTimeout(() => boot.remove(), 560);
+    return () => { cancelAnimationFrame(frame); clearTimeout(remove); };
   }, []);
 
   useEffect(() => {
@@ -205,15 +215,15 @@ export default function App() {
         </div>
       )}
       {showTitle && !fatal && (
-        <div className="title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto">
+        <div className={`title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto ${leavingTitle ? 'title-screen-exit' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && leavingTitle) setShowTitle(false); }}>
           <div className="title-card sf-panel w-full max-w-[560px] p-7 sm:p-10 text-center">
             <div className="title-mark mx-auto mb-6"><span>MC</span><i /></div>
             <p className="font-orb text-[10px] tracking-[.34em] text-cyan-200/60 mb-3">OPEN FIELD // COMBAT SIMULATION</p>
             <h1 className="font-orb text-3xl sm:text-5xl font-bold tracking-[.12em] text-white sf-glow">MAGIC CLOUD</h1>
             <p className="mt-3 text-sm sm:text-base text-cyan-100/65">Choose your power. Take the arena.</p>
             <div className="title-rule my-7" />
-            <button className="play-btn font-orb px-10 py-4 text-sm tracking-[.2em]" onClick={() => { game?.audio.unlock(); setShowTitle(false); game && (game.paused = false); }}>
-              <span className="play-icon">▶</span> ENTER ARENA
+            <button className="play-btn font-orb px-10 py-4 text-sm tracking-[.2em]" onClick={enterArena} disabled={!game || leavingTitle}>
+              <span className="play-icon">▶</span> {leavingTitle ? 'ENTERING ARENA' : 'ENTER ARENA'}
             </button>
             <div className="mt-4 flex justify-center gap-3">
               <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setShowSettings(true)}>SETTINGS</button>

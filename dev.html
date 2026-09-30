@@ -6,26 +6,36 @@
     <title>MagicCloud — Open Field Combat Arena</title>
     <!-- Inline so the page is never a white screen, even if every external request fails. -->
     <style>
-      html, body { margin: 0; height: 100%; background: #202c32; color: #f2ecdd;
-        font-family: 'IBM Plex Sans', system-ui, sans-serif; }
-      #boot { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; overflow:hidden; background: radial-gradient(ellipse at 50% 42%, #536775 0%, #374650 42%, #202c32 100%); }
-      #boot:before,#boot:after { content:''; position:absolute; width:min(70vw,520px); aspect-ratio:1; border:1px solid rgba(242,235,216,.13); transform:rotate(45deg); animation: boot-orbit 22s linear infinite; }
-      #boot:after { width:min(84vw,680px); border-color:rgba(242,235,216,.07); animation-duration:34s; animation-direction:reverse; }
-      #boot .box { position:relative; z-index:1; padding:36px 42px; border:1px solid rgba(243,235,216,.3); background:rgba(30,39,40,.78); box-shadow:0 20px 80px #0009,inset 0 0 26px #33e0ff0c; clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px); animation: boot-enter .8s ease both; }
-      #boot .box:after { content:''; display:block; width:100px; height:2px; margin:25px auto 0; background:#e5d5af; box-shadow:0 0 15px #dfd0aa; animation: boot-pulse 1.8s ease-in-out infinite; }
-      @keyframes boot-orbit { to { transform:rotate(405deg); } } @keyframes boot-enter { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } } @keyframes boot-pulse { 50% { opacity:.3; width:58px; } }
-      #boot .box { max-width: 620px; }
-      #boot .title { font-family:'Rajdhani','IBM Plex Sans',sans-serif; font-size: 15px; font-weight:700; text-shadow:0 0 18px rgba(236,222,190,.35); letter-spacing: .18em; color: #f4eedf; margin-bottom: 10px; }
-      #boot .msg { font-size: 13px; line-height: 1.6; color: #e3dfd3; }
-      #boot .hint { font-size: 12px; line-height: 1.6; color: #b8b2a4; margin-top: 10px; }
-      #boot code { color: #ffd479; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; }
-      .dots::after { content: ''; animation: d 1.2s steps(4, end) infinite; }
-      #boot .actions { display: none; justify-content: center; gap: 10px; margin-top: 16px; }
-      #boot .btn { font: inherit; font-size: 12px; letter-spacing: .12em; color: #f1ebdd; cursor: pointer;
-        background: linear-gradient(180deg, rgba(228,218,194,.18), rgba(228,218,194,.05));
-        border: 1px solid rgba(240,230,210,.4); border-radius: 3px; padding: 7px 18px; }
-      #boot .btn:hover { background: rgba(228,218,194,.26); }
-      @keyframes d { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+      html, body { margin:0; height:100%; background:#202923; color:#f0ecdf; font-family:'IBM Plex Sans',system-ui,sans-serif; }
+      #boot { position:fixed; z-index:1000; inset:0; display:grid; place-items:center; padding:22px; overflow:hidden; text-align:center; background:radial-gradient(ellipse at 50% 38%,#46564e 0%,#303a35 48%,#1c2421 100%); transition:opacity .52s cubic-bezier(.22,.75,.25,1),visibility .52s; }
+      #boot.boot-leaving { opacity:0; visibility:hidden; pointer-events:none; }
+      #boot:before,#boot:after { content:''; position:absolute; width:min(72vw,540px); aspect-ratio:1; border:1px solid rgba(239,232,214,.13); transform:rotate(45deg); animation:boot-orbit 26s linear infinite; }
+      #boot:after { width:min(88vw,720px); border-color:rgba(239,232,214,.07); animation-duration:38s; animation-direction:reverse; }
+      #boot .box { position:relative; z-index:1; width:min(100%,520px); padding:clamp(26px,6vw,44px); border:1px solid rgba(239,232,214,.27); border-radius:18px; background:linear-gradient(145deg,rgba(46,55,49,.9),rgba(27,34,30,.94)); backdrop-filter:blur(18px); box-shadow:0 30px 90px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.08); animation:boot-enter .72s cubic-bezier(.16,.8,.25,1) both; }
+      #boot .boot-mark { position:relative; display:grid; place-items:center; width:54px; height:54px; margin:0 auto 22px; transform:rotate(45deg); border:1px solid rgba(239,232,214,.58); color:#f0ecdf; box-shadow:0 0 28px rgba(239,232,214,.12),inset 0 0 18px rgba(239,232,214,.08); }
+      #boot .boot-mark:before { content:''; position:absolute; inset:6px; border:1px solid rgba(239,232,214,.2); animation:boot-mark-spin 14s linear infinite; }
+      #boot .boot-mark span { transform:rotate(-45deg); font:700 14px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.08em; }
+      #boot .kicker { margin-bottom:7px; color:rgba(239,232,214,.56); font:600 9px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.23em; }
+      #boot .title { margin:0; color:#f0ecdf; font:700 clamp(24px,6vw,34px) 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.1em; text-shadow:0 0 26px rgba(239,232,214,.13); }
+      #boot .subtitle { margin-top:7px; color:#c8ae77; font:600 10px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.2em; }
+      #boot .boot-status { display:flex; justify-content:center; align-items:center; gap:9px; min-height:26px; margin-top:24px; }
+      #boot .status-dot { width:7px; height:7px; flex:0 0 7px; border-radius:50%; background:#c8ae77; box-shadow:0 0 12px rgba(200,174,119,.72); animation:boot-dot 1.4s ease-in-out infinite; }
+      #boot .msg { color:#e7e3d7; font-size:13px; line-height:1.55; letter-spacing:.015em; }
+      #boot .boot-progress { position:relative; height:3px; margin:15px auto 0; overflow:hidden; border-radius:4px; background:rgba(239,232,214,.12); }
+      #boot .boot-progress i { position:absolute; inset:0 auto 0 -38%; width:38%; border-radius:inherit; background:linear-gradient(90deg,transparent,#dfd0aa 50%,transparent); animation:boot-sweep 1.7s cubic-bezier(.4,0,.6,1) infinite; }
+      #boot .hint { margin-top:14px; color:#b8b2a4; font-size:12px; line-height:1.6; }
+      #boot code { padding:1px 5px; border-radius:4px; background:rgba(255,255,255,.06); color:#e4cc96; }
+      #boot .actions { display:none; justify-content:center; gap:10px; margin-top:18px; }
+      #boot .btn { padding:8px 18px; border:1px solid rgba(239,232,214,.32); border-radius:7px; background:rgba(239,232,214,.08); color:#f0ecdf; cursor:pointer; font:600 11px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.08em; transition:background .16s,transform .16s; }
+      #boot .btn:hover { transform:translateY(-1px); background:rgba(239,232,214,.17); }
+      .dots:after { content:''; animation:d 1.2s steps(4,end) infinite; }
+      @keyframes boot-orbit { to { transform:rotate(405deg); } }
+      @keyframes boot-mark-spin { to { transform:rotate(360deg); } }
+      @keyframes boot-enter { from { opacity:0; transform:translateY(14px) scale(.98); } to { opacity:1; transform:none; } }
+      @keyframes boot-sweep { to { transform:translateX(365%); } }
+      @keyframes boot-dot { 50% { opacity:.45; transform:scale(.72); } }
+      @keyframes d { 0% { content:''; } 25% { content:'.'; } 50% { content:'..'; } 75% { content:'...'; } }
+      @media (prefers-reduced-motion:reduce) { #boot *,#boot:before,#boot:after { animation-duration:.01ms !important; animation-iteration-count:1 !important; } #boot { transition:none; } }
     </style>
     <!-- No external requests at all: the page loads nothing but the document itself, so a
          blocked or 404-ing CDN can never show up as a console error or delay first paint. -->
@@ -35,8 +45,12 @@
     <div id="root"></div>
     <div id="boot">
       <div class="box">
-        <div class="title">MAGIC CLOUD // OPEN FIELD</div>
-        <div class="msg" id="boot-msg">Booting arena<span class="dots"></span></div>
+        <div class="boot-mark" aria-hidden="true"><span>MC</span></div>
+        <div class="kicker">FIELD OPERATIONS / BOOT SEQUENCE</div>
+        <div class="title">MAGIC CLOUD</div>
+        <div class="subtitle">OPEN FIELD COMBAT ARENA</div>
+        <div class="boot-status"><span class="status-dot" aria-hidden="true"></span><div class="msg" id="boot-msg">Preparing the arena<span class="dots"></span></div></div>
+        <div class="boot-progress" aria-hidden="true"><i></i></div>
         <div class="hint" id="boot-hint"></div>
         <div class="actions" id="boot-actions">
           <button type="button" class="btn" onclick="go('/?r=' + Date.now())">RETRY</button>
