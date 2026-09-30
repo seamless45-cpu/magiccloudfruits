@@ -33,7 +33,7 @@ export const CLOUD_FRUIT: ItemDef = {
   } },
   skills: [
     { name: 'Cumulus Growth', cd: 5, info: '10s growth humilis→Cb · 35% supercell · 2min', cast: (g) => {
-      for (let i = 0; i < 3; i++) { const p = around(g.player.pos, 220); g.add(new StormCloud(g, { pos: p, kind: 'cumulus', size: rnd(140, 220), life: 120, grow: 10, rain: 0.8, rainDmg: 260, supercellChance: 0.35, boltDmg: 9000, hailDmg: 22000, hailShatter: 0.6, hailShatterDmg: 0.4 })); }
+      for (let i = 0; i < 3; i++) { const p = around(g.player.pos, 220); g.add(new StormCloud(g, { pos: p, kind: 'cumulus', size: rnd(260, 380), life: 120, grow: 10, rain: 0.8, rainDmg: 260, supercellChance: 0.35, boltDmg: 9000, hailDmg: 22000, hailShatter: 0.6, hailShatterDmg: 0.4 })); }
       g.toast('CUMULUS GROWTH', '#e6eef8');
     } },
     { name: 'Atmospheric Instability', cd: 5, info: 'Elevated squall shelf 2.6×0.9km · 10m/s · 120mph', cast: (g) => {

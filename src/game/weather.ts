@@ -50,8 +50,20 @@ export class StormCloud implements Effect {
       for (let i = 0; i < n2; i++) { const [x,z]=disk(i,n2,R*.3,1.4); this.addPuff(x,b+R*rnd(.7,1.4),z,R*rnd(.2,.28),rnd(.45,.72),rnd(.9,1)); }
       for (let i = 0; i < n3; i++) { const [x,z]=disk(i,n3,R*1.25,2.1); this.addPuff(x+R*.25,b+R*rnd(1.5,1.7),z,R*rnd(.28,.4),rnd(.72,.98),rnd(.88,1),.3); }
       // Overlapping core puffs close the visual gaps above the rain/hail column and tornado origin.
-      const nc=N(26);for (let i = 0; i < nc; i++) { const [x,z]=disk(i,nc,R*.52,.37);
-        this.addPuff(x,b+R*rnd(.18,1.15),z,R*rnd(.17,.25),rnd(.08,.68),rnd(.62,.84),rnd(.72,1.05)); }
+      if(k==='supercell'||k==='cumulus'){
+        const nc=N(k==='supercell'?38:32);for (let i = 0; i < nc; i++) { const [x,z]=disk(i,nc,R*.58,.37);
+          this.addPuff(x,b+R*rnd(.12,1.2),z,R*rnd(.18,.27),rnd(.06,.7),rnd(.62,.84),rnd(.72,1.05)); }
+      } else {
+        const nc=N(26);for(let i=0;i<nc;i++){const [x,z]=disk(i,nc,R*.52,.37);this.addPuff(x,b+R*rnd(.18,1.15),z,R*rnd(.17,.25),rnd(.08,.68),rnd(.62,.84),rnd(.72,1.05));}
+      }
+      if(k==='supercell'||k==='cumulus'){
+        // Broad, flattened anvil canopy: it develops late on Cumulonimbus and fills the supercell crown.
+        const na=N(k==='supercell'?42:30);for(let i=0;i<na;i++){const [x,z]=disk(i,na,R*(k==='supercell'?1.55:1.42),2.8);
+          this.addPuff(x,b+R*rnd(1.48,1.8),z,R*rnd(.28,.4),rnd(.72,.9),rnd(.82,.96),rnd(.18,.27));}
+      }
+      // Explicit supercells also carry a dense, suspended wall-cloud base.
+      if(k==='supercell'){const nw=N(18);for(let i=0;i<nw;i++){const [x,z]=disk(i,nw,R*.2,.1);
+        this.addPuff(x,b+R*rnd(.08,.3),z,R*rnd(.2,.29),0,rnd(.38,.52),rnd(.48,.66));}}
       this.addPuff(0, b + R * 1.85, 0, R * 0.25, 0.9, 1); // overshooting top
     } else if (k === 'stratus' || k === 'nimbo') {
       const n = k === 'nimbo' ? Math.max(18,N(36)) : Math.max(9,N(16));
@@ -76,16 +88,19 @@ export class StormCloud implements Effect {
     const cs = Math.cos(spin), sn = Math.sin(spin);
     const lineRot = this.o.kind === 'squall' || this.o.kind === 'derecho' ? Math.atan2(this.dir.x, this.dir.z) : 0;
     const cr = Math.cos(lineRot), sr = Math.sin(lineRot);
+    const mature=THREE.MathUtils.clamp((gr-.42)/.58,0,1), matureEase=mature*mature*(3-2*mature);
+    const spread=this.isSuper?(this.o.kind==='cumulus'?1.68:1.52):this.o.kind==='cumulus'?1+0.58*matureEase:1;
+    const height=this.isSuper?1.42:this.o.kind==='cumulus'?1+0.36*matureEase:1;
     this.puffs.forEach((p, i) => {
       const s = Math.max(0, Math.min(1, (gr - p.stage) / 0.14));
       const bulge = 1 + 0.04 * Math.sin(this.t * 0.8 + i);
       let x = p.x, z = p.z;
       if (lineRot) { const nx = x * cr + z * sr, nz = -x * sr + z * cr; x = nx; z = nz; }
       else { const nx = x * cs - z * sn, nz = x * sn + z * cs; x = nx; z = nz; }
-      // Broad horizontal puffs make Cloud Fruit storms read as deep, continuous weather systems.
-      // Puff centers and a modest height scale keep every cloud base suspended above the field.
-      const puffY = Math.max(p.y, p.r * s * p.fy * 1.18 * bulge + 80);
-      _p.set(x * 1.12, puffY, z * 1.12); _s.set(p.r * s * 1.62 * bulge, p.r * s * p.fy * 1.18 * bulge, p.r * s * 1.62 * bulge);
+      // Preserve a raised base while scaling the cloud vertically; flattened canopy puffs form the anvil.
+      const rawY = Math.max(p.y, p.r * s * p.fy * 1.18 * bulge + 80);
+      const puffY=this.base+(rawY-this.base)*height;
+      _p.set(x * 1.12 * spread, puffY, z * 1.12 * spread); _s.set(p.r * s * 1.62 * bulge * spread, p.r * s * p.fy * 1.18 * bulge * height, p.r * s * 1.62 * bulge * spread);
       _m.compose(_p, _q.identity(), _s); this.mesh.setMatrixAt(i, _m);
     });
     this.mesh.instanceMatrix.needsUpdate = true;
@@ -113,8 +128,12 @@ export class StormCloud implements Effect {
       const cross=u*2-1,fwd=(this.o.bow??0)*this.o.depth!*(1-cross*cross)-this.o.depth!*(.05+v*.55);
       return out.set(c.x,0,c.z).addScaledVector(this.side,cross*this.o.length!/2).addScaledVector(this.dir,fwd);
     }
-    const a=u*6.28318530718,r=Math.sqrt(v)*this.R*(this.o.kind==='nimbo'?.85:.5);
+    const a=u*6.28318530718,r=Math.sqrt(v)*this.rainRadius();
     return out.set(c.x+Math.cos(a)*r,0,c.z+Math.sin(a)*r);
+  }
+  rainRadius() {
+    const factor = this.o.kind === 'nimbo' ? 0.85 : (this.o.kind === 'cumulus' || this.isSuper) ? 0.75 : 0.5;
+    return this.R * factor;
   }
   inRain(p: THREE.Vector3) {
     const c = this.mesh.position;
@@ -122,7 +141,8 @@ export class StormCloud implements Effect {
       const rel = V(p.x - c.x, 0, p.z - c.z); const u = rel.dot(this.side) / (this.o.length! / 2); if (Math.abs(u) > 1) return false;
       const f = rel.dot(this.dir) - (this.o.bow ?? 0) * this.o.depth! * (1 - u * u); return f < 0 && f > -this.o.depth! * 0.65;
     }
-    return Math.hypot(p.x - c.x, p.z - c.z) < this.R * (this.o.kind === 'nimbo' ? 0.85 : 0.55);
+    const damageRadius = this.rainRadius() * (this.o.kind === 'nimbo' ? 1 : 1.1);
+    return Math.hypot(p.x - c.x, p.z - c.z) < damageRadius;
   }
   update(dt: number) {
     const g = this.g, o = this.o; this.t += dt;
