@@ -14,7 +14,7 @@ import { ITEMS } from './items';
 import { V, rnd, slashMesh, Timed } from './effects';
 
 export const SKILL_KEYS = ['z', 'x', 'c', 'v', 'b', 'f', 'g', 'n', 'm', 'l', 'k', 'j'];
-export const MAX_ZOOM = 300, MIN_ZOOM = 4;
+export const MAX_ZOOM = 900, MIN_ZOOM = 4;
 
 export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSettings>> = {
   low: { resolution: 0.6, shadows: false, shadowRes: 1024, bloom: false, particles: 0.35, debris: 0.35, maxBolts: 60, clouds: 0.5, antialiasFxaa: false, drawDistance: 12000 },
@@ -98,7 +98,7 @@ export class Game {
     // sky dome
     const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
       vertexShader: 'varying vec3 vp; void main(){ vp=position; vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.); gl_Position=p.xyww; }',
-      fragmentShader: 'varying vec3 vp; void main(){ float h=normalize(vp).y; vec3 top=vec3(0.42,0.58,0.68), horizon=vec3(0.88,0.82,0.69), glow=vec3(0.98,0.9,0.77); vec3 col = h>0.? mix(glow,mix(horizon,top,smoothstep(0.02,0.72,h)),smoothstep(0.,0.2,h)) : horizon*0.82; gl_FragColor=vec4(col,1.); }' }));
+      fragmentShader: 'varying vec3 vp; void main(){ vec3 d=normalize(vp); float h=max(d.y,0.); vec3 zenith=vec3(0.24,0.43,0.57), upper=vec3(0.48,0.66,0.76), horizon=vec3(0.87,0.82,0.72), warm=vec3(1.0,0.88,0.71); float haze=pow(1.0-h,3.2); vec3 col=mix(horizon,upper,smoothstep(0.0,0.32,h)); col=mix(col,zenith,smoothstep(0.28,0.92,h)); col=mix(col,warm,clamp(haze*0.16,0.0,0.2)); vec3 sunDir=normalize(vec3(0.43,0.75,0.50)); float mu=dot(d,sunDir); float halo=pow(max(mu,0.0),22.0)*0.16+pow(max(mu,0.0),110.0)*0.45; float disc=1.0-smoothstep(0.99988,0.99995,mu); col+=vec3(1.0,0.88,0.68)*(halo+disc*1.4); float under=clamp(-d.y,0.0,1.0); col=mix(col,horizon*0.72,under*0.55); gl_FragColor=vec4(col,1.); }' }));
     sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = -10; sky.onBeforeRender = () => sky.position.copy(this.camera.position); this.scene.add(sky);
     // Sun-baked grassland floor with broad irregular sand regions and fine dry-earth grain.
     const gmat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });

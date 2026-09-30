@@ -47,6 +47,9 @@ export class StormCloud implements Effect {
       for (let i = 0; i < N(14); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.4; this.addPuff(Math.cos(a) * r, b + R * rnd(0.2, 0.7), Math.sin(a) * r, R * rnd(0.22, 0.32), rnd(0.2, 0.45), rnd(0.8, 0.95)); }
       for (let i = 0; i < N(12); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.3; this.addPuff(Math.cos(a) * r, b + R * rnd(0.7, 1.4), Math.sin(a) * r, R * rnd(0.2, 0.28), rnd(0.45, 0.72), rnd(0.9, 1)); }
       for (let i = 0; i < N(20); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 1.25; this.addPuff(Math.cos(a) * r + R * 0.25, b + R * rnd(1.5, 1.7), Math.sin(a) * r, R * rnd(0.28, 0.4), rnd(0.72, 0.98), rnd(0.88, 1), 0.3); }
+      // Overlapping core puffs close the visual gaps above the rain/hail column and tornado origin.
+      for (let i = 0; i < N(26); i++) { const a=Math.random()*6.28, r=Math.sqrt(Math.random())*R*.52;
+        this.addPuff(Math.cos(a)*r,b+R*rnd(.18,1.15),Math.sin(a)*r,R*rnd(.17,.25),rnd(.08,.68),rnd(.62,.84),rnd(.72,1.05)); }
       this.addPuff(0, b + R * 1.85, 0, R * 0.25, 0.9, 1); // overshooting top
     } else if (k === 'stratus' || k === 'nimbo') {
       const n = k === 'nimbo' ? N(26) : N(7);
@@ -227,40 +230,54 @@ export class StormCloud implements Effect {
   dispose() { this.g.scene.remove(this.mesh); this.mesh.dispose(); this.mat.dispose(); }
 }
 
-/** Tornado: analytic swirling particle funnel + condensation cone + suction. */
+/** Tornado: dense helical condensation funnel, turbulent dust, and realistic suction. */
 export class Tornado implements Effect {
-  t = 0; ps: ParticleSystem; cone: THREE.Mesh; pos = V(); wander = V(); ang: Float32Array; hgt: Float32Array; spd: Float32Array; N: number; dmgT = 0;
+  t = 0; ps: ParticleSystem; cone: THREE.Mesh; cloudPuffs: THREE.InstancedMesh; pos = V(); wander = V(); ang: Float32Array; hgt: Float32Array; spd: Float32Array; N: number; puffN: number; puffH: Float32Array; puffPhase: Float32Array; puffSize: Float32Array; dmgT = 0;
   constructor(public g: any, public cloud: StormCloud | null, public baseR: number, public mph: number, public life: number, fixed?: THREE.Vector3, public dmg = 2500) {
-    this.N = Math.round(900 * g.settings.particles) + 100;
+    this.N = Math.round(540 * g.settings.particles) + 100;
     this.ps = new ParticleSystem(this.N, false); g.scene.add(this.ps.points);
     this.ps.mat.uniforms.uScale.value = g.smoke.mat.uniforms.uScale.value;
     this.ang = new Float32Array(this.N); this.hgt = new Float32Array(this.N); this.spd = new Float32Array(this.N);
     for (let i = 0; i < this.N; i++) { this.ang[i] = Math.random() * 6.28; this.hgt[i] = Math.random(); this.spd[i] = rnd(0.6, 1.2);
       const c = rnd(0.45, 0.75); this.ps.col[i * 3] = c; this.ps.col[i * 3 + 1] = c * 0.97; this.ps.col[i * 3 + 2] = c * 0.93; this.ps.life[i] = 1e9; this.ps.maxLife[i] = 1e9; }
-    this.cone = new THREE.Mesh(new THREE.CylinderGeometry(1, 0.2, 1, 24, 8, true).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x777a80, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false, roughness: 1 }));
+    this.puffN=Math.max(96,Math.round(150*g.settings.clouds)); this.puffH=new Float32Array(this.puffN);this.puffPhase=new Float32Array(this.puffN);this.puffSize=new Float32Array(this.puffN);
+    const puffMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,transparent:true,opacity:.3,depthWrite:false,emissive:0x111315});
+    this.cloudPuffs=new THREE.InstancedMesh(PUFF_GEO,puffMat,this.puffN);this.cloudPuffs.frustumCulled=false;this.cloudPuffs.castShadow=false;
+    for(let i=0;i<this.puffN;i++){const strand=i%4,step=Math.floor(i/4),steps=Math.ceil(this.puffN/4);
+      this.puffH[i]=Math.min(1,(step+rnd(-.25,.25))/Math.max(1,steps-1));this.puffPhase[i]=strand*Math.PI*.5+rnd(-.18,.18);this.puffSize[i]=baseR*rnd(.48,.78);
+      const shade=rnd(.52,.76);this.cloudPuffs.setColorAt(i,_c.setRGB(shade,shade*1.015,shade*1.04));}
+    this.cloudPuffs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);if(this.cloudPuffs.instanceColor)this.cloudPuffs.instanceColor.needsUpdate=true;g.scene.add(this.cloudPuffs);
+    this.cone = new THREE.Mesh(new THREE.CylinderGeometry(1,0.12,1,40,10,true).translate(0,0.5,0), new THREE.MeshStandardMaterial({ color:0x777a80, transparent:true, opacity:0.16, side:THREE.DoubleSide, depthWrite:false, roughness:1 }));
     g.scene.add(this.cone);
     if (cloud) { const a = Math.random() * 6.28; this.pos.set(cloud.mesh.position.x + Math.cos(a) * cloud.R * 0.1, 0, cloud.mesh.position.z + Math.sin(a) * cloud.R * 0.1); }
     else if (fixed) this.pos.copy(fixed);
   }
+  audioMix(){const k=Math.min(1,this.t/1.5)*Math.min(1,(this.life-this.t)/1.5);return {wind:Math.min(1,this.mph/220)*.68*k,rain:.18*k,hail:0};}
   update(dt: number) {
     const g = this.g; this.t += dt;
-    const H = this.cloud ? this.cloud.base * 0.8 : 120;
+    const H = this.cloud ? Math.max(120,this.cloud.base*1.08) : 180;
     if (this.cloud) { const cp = this.cloud.mesh.position; this.wander.x += (cp.x - this.pos.x) * 0.02 + rnd(-2, 2); this.wander.z += (cp.z - this.pos.z) * 0.02 + rnd(-2, 2); this.wander.multiplyScalar(0.95); this.pos.addScaledVector(this.wander, dt); this.pos.addScaledVector(this.cloud.o.vel, dt); }
     const k = Math.min(1, this.t / 1.5) * Math.min(1, (this.life - this.t) / 1.5);
     const topR = this.baseR * 4.5, w = this.mph * 0.447; // tangential m/s
+    this.cloudPuffs.position.copy(this.pos);(this.cloudPuffs.material as THREE.MeshStandardMaterial).opacity=.32*k;
+    for(let i=0;i<this.puffN;i++){const h=this.puffH[i],r=this.baseR*(.58+3.85*h*h)*(1+.035*Math.sin(this.t*2+i));
+      const a=this.puffPhase[i]+h*Math.PI*10+this.t*(4.5-h*2.6),size=this.puffSize[i]*(.82+.25*h);
+      _p.set(Math.cos(a)*r,Math.max(size*.82,h*H),Math.sin(a)*r);_s.set(size*(1+.12*Math.sin(i*3.1)),size*.9,size*(1+.12*Math.cos(i*2.7)));
+      _m.compose(_p,_q.identity(),_s);this.cloudPuffs.setMatrixAt(i,_m);}
+    this.cloudPuffs.instanceMatrix.needsUpdate=true;
     for (let i = 0; i < this.N; i++) {
       const h = this.hgt[i]; const r = (this.baseR + (topR - this.baseR) * h * h) * (0.8 + 0.4 * Math.sin(i));
       this.ang[i] += (w / Math.max(3, r)) * this.spd[i] * dt;
       this.hgt[i] += dt * 0.12 * this.spd[i]; if (this.hgt[i] > 1) this.hgt[i] = 0;
       const i3 = i * 3;
       this.ps.pos[i3] = this.pos.x + Math.cos(this.ang[i]) * r; this.ps.pos[i3 + 1] = h * H; this.ps.pos[i3 + 2] = this.pos.z + Math.sin(this.ang[i]) * r;
-      this.ps.size[i] = (this.baseR * 1.4 + h * this.baseR * 3) * k; this.ps.alpha[i] = 0.35 * k * (h < 0.08 ? 1.4 : 1);
+      this.ps.size[i] = (this.baseR * 0.75 + h * this.baseR * 2.5) * k; this.ps.alpha[i] = 0.26 * k * (h < 0.08 ? 1.35 : 1);
     }
     ['position', 'aColor', 'aSize', 'aAlpha'].forEach(n => (this.ps.geo.attributes[n] as THREE.BufferAttribute).needsUpdate = true);
-    this.cone.position.copy(this.pos); this.cone.scale.set(topR * 0.8 * k, H, topR * 0.8 * k); this.cone.rotation.y += dt * 3;
-    // debris cloud at base
-    if (Math.random() < 0.6) { const a = Math.random() * 6.28; g.debris.spawn(this.pos.x + Math.cos(a) * this.baseR * 2, 1, this.pos.z + Math.sin(a) * this.baseR * 2, -Math.sin(a) * w * 0.3, rnd(10, 30), Math.cos(a) * w * 0.3, rnd(0.2, 0.7), 0x5a4a3a, 3); }
-    // suction + continuous damage
+    this.cone.position.copy(this.pos); this.cone.scale.set(topR * 0.72 * k, H, topR * 0.72 * k); this.cone.rotation.y += dt * 2.4;
+    // A broader, wind-driven debris ring anchors the funnel to the ground.
+    if (Math.random() < 0.8) { const a = Math.random() * 6.28, wv=g.windAt(this.pos);
+      g.debris.spawn(this.pos.x + Math.cos(a) * this.baseR * rnd(1.4,2.4), 1, this.pos.z + Math.sin(a) * this.baseR * rnd(1.4,2.4), wv.x+rnd(-4,4), rnd(8,24), wv.z+rnd(-4,4), rnd(0.2,0.65), 0x655a4c, 2.8); }
     this.dmgT += dt; const tick = this.dmgT >= 0.1; if (tick) this.dmgT = 0;
     const suck = this.baseR * 7;
     for (const e of g.enemies) {
@@ -271,7 +288,7 @@ export class Tornado implements Effect {
     const pd = Math.hypot(g.player.pos.x - this.pos.x, g.player.pos.z - this.pos.z); if (pd < 150) g.shakeRaw((1 - pd / 150) * 2, 0.1);
     return this.t < this.life;
   }
-  dispose() { this.g.scene.remove(this.ps.points, this.cone); this.ps.geo.dispose(); this.ps.mat.dispose(); this.cone.geometry.dispose(); (this.cone.material as THREE.Material).dispose(); }
+  dispose() { this.g.scene.remove(this.ps.points, this.cone, this.cloudPuffs); this.ps.geo.dispose(); this.ps.mat.dispose(); (this.cloudPuffs.material as THREE.Material).dispose(); this.cone.geometry.dispose(); (this.cone.material as THREE.Material).dispose(); }
 }
 
 function spiralTexture() {

@@ -76,7 +76,7 @@ at `--hud-bottom`, so a wide inventory wraps instead of covering the skill list.
 | --- | --- |
 | `WASD` / arrows | Move · `Shift` sprint · `Space` jump |
 | LMB or `E` | Attack / fire (manual) |
-| RMB drag | Orbit camera · wheel, `+`/`-`, `PgUp`/`PgDn` zoom (4–300 m) |
+| RMB drag | Orbit camera · wheel, `+`/`-`, `PgUp`/`PgDn` zoom (4–900 m) |
 | `Z X C V B F G N M L K J` | Skills (hold for charge skills) |
 | `1`–`9`, `0`, `-` | Equip / unequip items |
 | `O` or `Esc` | Graphics settings · `H` help |

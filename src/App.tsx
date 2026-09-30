@@ -161,7 +161,7 @@ export default function App() {
               <div className="flex justify-between font-orb text-[10px] text-cyan-200 mb-1"><span>CONTROLS</span><button className="sf-btn px-1" onClick={() => setHelp(false)}>✕</button></div>
               <div><b className="text-cyan-300">WASD</b> move · <b className="text-cyan-300">Shift</b> sprint · <b className="text-cyan-300">Space</b> jump</div>
               <div><b className="text-cyan-300">LMB / E</b> M1 attack / fire (manual)</div>
-              <div><b className="text-cyan-300">RMB drag</b> orbit · <b className="text-cyan-300">P</b> view · <b className="text-cyan-300">Wheel / +/- / PgUp/PgDn</b> zoom (≤300m)</div>
+              <div><b className="text-cyan-300">RMB drag</b> orbit · <b className="text-cyan-300">P</b> view · <b className="text-cyan-300">Wheel / +/- / PgUp/PgDn</b> zoom (≤900m)</div>
               <div><b className="text-cyan-300">Z X C V B F G N M L K J</b> skills (hold for charge skills)</div>
               <div><b className="text-cyan-300">1-9, 0, -</b> equip / unequip · <b className="text-cyan-300">O/Esc</b> graphics · <b className="text-cyan-300">H</b> help</div>
               <div className="text-cyan-200/60 mt-1">Controller: LS move · RS orbit · LT zoom in · Select zoom out · RT fire · A jump · X/Y/B/LB/RB/D-pad skills · Start cycle item</div>
