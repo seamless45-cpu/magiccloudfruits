@@ -85,6 +85,10 @@ export class StormCloud implements Effect {
     });
     this.mesh.instanceMatrix.needsUpdate = true;
   }
+  audioMix() {
+    const fade=Math.min(1,Math.max(0,(this.o.life-this.t)/3)), wet=Math.min(1,this.o.rain*.48)*this.growth*fade;
+    return {wind:Math.max((this.o.wind??0)/165,wet*.35)*this.growth*fade,rain:wet,hail:Math.min(1,this.o.hail/5)*this.growth*fade};
+  }
   windAt(pos: THREE.Vector3) {
     const { wind = 0, length = 1, depth = 1, bow = 0 } = this.o;
     if (wind <= 0 || this.t >= this.o.life) return null;
@@ -176,6 +180,7 @@ export class StormCloud implements Effect {
         const top = V(rp.x + rnd(-20, 20), this.base * 2.7, rp.z + rnd(-20, 20));
         const col = isSuper ? (mul >= 12 ? 0xff66ff : 0xaaddff) : 0xcfe0ff;
         for (let k = 0; k < (isSuper ? 3 : 1); k++) g.bolt(top, rp, { color: col, width: isSuper ? (mul >= 12 ? 3.2 : 1.8) : 0.8, life: isSuper ? 0.6 : 0.3, segs: 18, jag: 0.045, branches: isSuper ? 3 : 2 });
+        g.audio.thunder(rp.distanceTo(g.player.pos), isSuper ? 1.25 : 0.75);
         const r = isSuper ? (mul >= 12 ? 22 : 12) : 6;
         g.damageRadius(rp, r, (o.boltDmg ?? 3000) * mul * (o.dmgMul ?? 1), { stun: 0.4, noCharge: true });
         if (isSuper) explosion(g, rp, r, { core: 0xffffff, mid: col, ring: col, smoke: 0x333344, debrisCount: 10 });
@@ -188,10 +193,12 @@ export class StormCloud implements Effect {
       this.hailT += dt * o.hail * 10 * Math.max(0.3, dens);
       while (this.hailT >= 1) {
         this.hailT -= 1;
-        const rp = this.rainPoint(V()); const h = this.base * 0.7; const vy = 45; const tt = h / vy;
-        g.fx.spawn(rp.x, h, rp.z, 0, -vy, 0, 0xeaf6ff, 0.9, tt, {});
+        const rp = this.rainPoint(V()); const h = this.base * 0.7; const w=g.windAt(rp);
+        const vy=rnd(34,50), tt=h/vy, stoneSize=rnd(.24,.56)*(o.kind==='hail'?1.15:1);
+        g.hail.spawn(rp.x,h,rp.z,w.x,-vy,w.z,stoneSize,tt+.12);
         const dmg = (o.hailDmg ?? 8000) * (o.dmgMul ?? 1), sh = o.hailShatter ?? 0.6, shd = o.hailShatterDmg ?? 0.4;
         g.after(tt, () => {
+          g.audio.hailImpact(rp.distanceTo(g.player.pos));
           g.damageRadius(rp, 2.5, dmg, { noCharge: true });
           if (Math.random() < sh) { for (let i = 0; i < 5; i++) g.debris.spawn(rp.x, 0.4, rp.z, rnd(-6, 6), rnd(3, 7), rnd(-6, 6), 0.12, 0xdff4ff, 1.2); g.damageRadius(rp, 5, dmg * shd, { noCharge: true }); }
         });
@@ -300,6 +307,7 @@ export class Hurricane implements Effect {
     this.wall.frustumCulled = false;
     this.grp.add(this.disk, this.disk2, this.wall); this.grp.position.copy(this.pos); g.scene.add(this.grp);
   }
+  audioMix() { const k=Math.min(1,this.t/4)*Math.min(1,(this.life-this.t)/5); return {wind:.9*k,rain:.72*k,hail:0}; }
   windAt(at: THREE.Vector3) {
     const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz);
     if (dist < this.eye * 0.6 || dist > this.R) return null;
@@ -363,6 +371,7 @@ export class Microburst implements Effect {
       const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 0.55, life: 16, grow: 2.2, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
     this.ringMesh = new THREE.Mesh(GEO.torus, new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0, depthWrite: false })); this.ringMesh.position.set(pos.x, 3, pos.z); g.scene.add(this.ringMesh);
   }
+  audioMix() { const k=this.t>5&&this.t<15?Math.min(1,(this.t-5)/.5)*Math.min(1,(15-this.t)/1):0; return {wind:.8*k,rain:.22*k,hail:0}; }
   windAt(at: THREE.Vector3) {
     if (this.t < 5 || this.t > 15) return null;
     const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz);

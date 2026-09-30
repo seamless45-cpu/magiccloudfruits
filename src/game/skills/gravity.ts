@@ -21,7 +21,7 @@ export const GRAVITY_FRUIT: ItemDef = {
       const grp = new THREE.Group(); grp.position.set(0, 3, 0);
       const rings = [0, 1, 2].map(i => { const m = new THREE.Mesh(GEO.torus, addMat(0x9a4cff, 0.8)); m.rotation.x = i * 0.9; grp.add(m); return m; });
       const core = new THREE.Mesh(GEO.sphere, addMat(0x1a0030, 0.9)); grp.add(core);
-      g.add(new Timed(g, grp, 1.6, (k, t, dt) => {
+      g.add(new Timed(g, grp, 1.6, (k, _t, dt) => {
         rings.forEach((r, i) => { r.scale.setScalar(20 * (1 - k) + 3); r.rotation.y += dt * (3 + i); r.rotation.z += dt * 2; });
         core.scale.setScalar(2 + k * 6);
         for (const e of caught) if (!e.dead) { e.pos.lerp(V(rnd(-3, 3), 0, rnd(-3, 3)), Math.min(1, dt * 4)); e.stun = Math.max(e.stun, 0.3); }
@@ -50,7 +50,7 @@ export const GRAVITY_FRUIT: ItemDef = {
         const tg = tgts[i % Math.max(1, tgts.length)] ?? null; const pos = g.player.pos.clone().setY(2);
         const grp = new THREE.Group(); const sph = new THREE.Mesh(GEO.sphere, alphaMat(0x2a0850, 0.55)); const rim = new THREE.Mesh(GEO.torus, addMat(0xb070ff, 0.9)); grp.add(sph, rim);
         let booms = 0, bt = 0; const fixed = around(g.player.pos, 30);
-        g.add(new Timed(g, grp, 2.6, (k, t, dt) => {
+        g.add(new Timed(g, grp, 2.6, (_k, t, dt) => {
           const aimP = tg && !tg.dead ? tg.pos : fixed;
           pos.lerp(V(aimP.x, 2, aimP.z), Math.min(1, dt * 6)); grp.position.copy(pos);
           const R = g.aoe(9); sph.scale.setScalar(R * (0.4 + 0.1 * Math.sin(t * 20))); rim.scale.setScalar(R * 0.6); rim.rotation.x += dt * 5; rim.rotation.y += dt * 3;
@@ -63,7 +63,7 @@ export const GRAVITY_FRUIT: ItemDef = {
     { name: 'Gravitational Punch', cd: 10, info: 'Pull, charged punch · 10m knock · 4×4 bolts on land', cast: (g) => {
       faceAim(g); g.anim('charge', 0.8); g.player.lockMove = 1.0; const P = g.player;
       const orb = new THREE.Mesh(GEO.sphere, addMat(0x9a50ff, 0.8)); const grp = new THREE.Group(); grp.add(orb);
-      g.add(new Timed(g, grp, 0.8, (k, t, dt) => { grp.position.copy(g.handPos()); orb.scale.setScalar(0.3 + k * 1.6);
+      g.add(new Timed(g, grp, 0.8, (k, _t, dt) => { grp.position.copy(g.handPos()); orb.scale.setScalar(0.3 + k * 1.6);
         const R = g.aoe(10) * 1.6; for (const e of g.enemies) if (!e.dead && e.pos.distanceTo(P.pos) < R) { e.pos.lerp(P.pos.clone().addScaledVector(P.facing, 3), Math.min(1, dt * 3)); e.stun = Math.max(e.stun, 0.3); }
         for (let i = 0; i < 6; i++) { const a = Math.random() * 6.28, r = rnd(4, 12); g.fx.spawn(P.pos.x + Math.cos(a) * r, rnd(0.5, 4), P.pos.z + Math.sin(a) * r, -Math.cos(a) * r * 3, 0, -Math.sin(a) * r * 3, 0xc090ff, 0.5, 0.3, {}); } }));
       g.after(0.8, () => {
@@ -114,9 +114,9 @@ export const GRAVITY_BLADE: ItemDef = {
       const mat = new THREE.MeshStandardMaterial({ color: 0x4a4038, roughness: 0.95, flatShading: true, emissive: 0x2a1040 });
       for (let i = 0; i < 26; i++) { const m = new THREE.Mesh(GEO.rock, mat); m.scale.setScalar(rnd(1.5, 3)); m.castShadow = true; grp.add(m); rocks.push({ m, off: V(rnd(-22, 22), 0, rnd(-22, 22)), h: rnd(10, 22) }); }
       const planner = new TargetPlanner(); let fired = 0, ft = 0;
-      g.add(new Timed(g, grp, 1.2 + 26 * 0.15 + 0.2, (k, t, dt) => {
+      g.add(new Timed(g, grp, 1.2 + 26 * 0.15 + 0.2, (_k, t, dt) => {
         const P = g.player.pos;
-        rocks.forEach((r, i) => { if (!r.m.visible) return; const rise = Math.min(1, t / 1.2); r.m.position.set(P.x + r.off.x, r.h * (1 - Math.pow(1 - rise, 3)), P.z + r.off.z); r.m.rotation.x += dt; r.m.rotation.y += dt * 1.3;
+        rocks.forEach((r, _i) => { if (!r.m.visible) return; const rise = Math.min(1, t / 1.2); r.m.position.set(P.x + r.off.x, r.h * (1 - Math.pow(1 - rise, 3)), P.z + r.off.z); r.m.rotation.x += dt; r.m.rotation.y += dt * 1.3;
           if (t < 1.2 && Math.random() < 0.3) g.debris.spawn(r.m.position.x, 0.5, r.m.position.z, rnd(-3, 3), rnd(4, 9), rnd(-3, 3), 0.3, 0x4a4038, 1.5); });
         if (t > 1.2) { ft += dt; while (ft >= 0.15 && fired < 26) { ft -= 0.15; const r = rocks[fired++]; r.m.visible = false; const from = r.m.position.clone();
           const e = planner.pick(g, P, 250, 22000); const tp = e ? e.pos.clone().setY(0) : around(P, 40);
@@ -142,7 +142,7 @@ export const GRAVITY_BLADE: ItemDef = {
           if (mega) g.toast('MEGA DEATH SLASH ×2600%', '#ff80ff');
         };
         g.add(new Projectile(g, { pos: P, vel: tp.clone().sub(P).normalize().multiplyScalar(speed), mesh: grp, homing: () => (e && !e.dead ? e.pos.clone().setY(1) : null), turn: 20, hitR: mega ? 3 : 1.8, hitGround: false, life: 3,
-          onHit: (hp) => onHit(hp), trail: (p, dt, self) => { grp.lookAt(p.clone().add(self.o.vel)); g.fx.spawn(p.x, p.y, p.z, 0, 0, 0, mega ? 0xff60ff : 0xa070ff, mega ? 2.5 : 1.2, 0.2, {}); } }));
+          onHit: (hp) => onHit(hp), trail: (p, _dt, self) => { grp.lookAt(p.clone().add(self.o.vel)); g.fx.spawn(p.x, p.y, p.z, 0, 0, 0, mega ? 0xff60ff : 0xa070ff, mega ? 2.5 : 1.2, 0.2, {}); } }));
       });
     } },
     { name: 'Super Slashes', cd: 4, info: 'Slash storm /0.01s · 50m · 3s · bleed stacks', cast: (g) => {

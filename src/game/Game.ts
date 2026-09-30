@@ -5,7 +5,8 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
-import { ParticleSystem, DebrisSystem } from './particles';
+import { ParticleSystem, DebrisSystem, HailSystem } from './particles';
+import { GameAudio } from './audio';
 import { Bolt, boltStats, type BoltOpts } from './lightning';
 import { Enemy } from './enemies';
 import type { Effect, HitOpts, GraphicsSettings, ItemDef } from './types';
@@ -31,6 +32,7 @@ export class Game {
   fx: ParticleSystem; smoke: ParticleSystem; debris: DebrisSystem;
   effects: Effect[] = []; timers: { t: number; fn: () => void }[] = [];
   enemies: Enemy[] = []; time = 0; pauseEnemies = 0;
+  audio = new GameAudio(); hail!: HailSystem;
   settings: GraphicsSettings;
   player = { pos: V(0, 0, 0), vel: V(), facing: V(0, 0, 1), hp: 50000, maxHp: 50000, invincible: 0, mesh: new THREE.Group(), rArm: new THREE.Group(), lArm: new THREE.Group(), sword: new THREE.Group(), gun: new THREE.Group(), legs: [] as THREE.Group[], anim: { type: '', t: 0, d: 0 }, grounded: true, lockMove: 0 };
   cam = { yaw: Math.PI, pitch: 0.42, dist: 22, targetDist: 22 }; firstPerson = false;
@@ -69,6 +71,7 @@ export class Game {
     this.scene.fog = new THREE.FogExp2(0xb7b09a, 0.00055);
     this.buildWorld();
     this.fx = new ParticleSystem(30000, true); this.smoke = new ParticleSystem(26000, false); this.smoke.windSampler = (x, y, z) => this.windAt(V(x, y, z)); this.debris = new DebrisSystem(2500);
+    this.hail = new HailSystem(this.scene, pos => this.windAt(pos));
     this.scene.add(this.fx.points, this.smoke.points, this.debris.mesh);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -272,6 +275,7 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
   setZoom(m: number) { this.cam.targetDist = THREE.MathUtils.clamp(m, MIN_ZOOM, MAX_ZOOM); }
   onKeyDown = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'SELECT') return;
+    this.audio.unlock();
     const k = e.key.toLowerCase();
     if (this.keys.has(k)) return; this.keys.add(k);
     const si = SKILL_KEYS.indexOf(k); if (si >= 0) this.pressSkill(si);
@@ -284,6 +288,7 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
   onKeyUp = (e: KeyboardEvent) => { const k = e.key.toLowerCase(); this.keys.delete(k); const si = SKILL_KEYS.indexOf(k); if (si >= 0) this.releaseSkill(si); };
   updateMouse(x: number, y: number) { const r = this.renderer.domElement.getBoundingClientRect(); this.mouse.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); }
   onPointerDown = (e: PointerEvent) => {
+    this.audio.unlock();
     if (e.pointerType === 'touch') return;
     this.updateMouse(e.clientX, e.clientY);
     if (e.button === 2 || e.button === 1) { this.drag = { active: true, x: e.clientX, y: e.clientY, id: e.pointerId, moved: 0 }; }
@@ -557,7 +562,13 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     // enemies & effects
     for (const e of this.enemies) e.update(dt);
     for (let i = this.effects.length - 1; i >= 0; i--) { const ef = this.effects[i]; let alive = false; try { alive = ef.update(dt); } catch (err) { console.error(err); } if (!alive) { ef.dispose(); this.effects.splice(i, 1); } }
-    this.fx.update(dt, this.time); this.smoke.update(dt, this.time); this.debris.update(dt);
+    let windMix=0, rainMix=0, hailMix=0;
+    for (const effect of this.effects) {
+      const profile=(effect as Effect & { audioMix?: () => { wind:number; rain:number; hail:number } }).audioMix?.();
+      if(profile){windMix=Math.min(1,windMix+profile.wind*.32);rainMix=Math.min(1,rainMix+profile.rain*.3);hailMix=Math.min(1,hailMix+profile.hail*.35);}
+    }
+    this.audio.setWeatherMix({wind:windMix,rain:rainMix,hail:hailMix});
+    this.fx.update(dt, this.time); this.smoke.update(dt, this.time); this.debris.update(dt); this.hail.update(dt);
     this.flashLight.intensity = this.flashI * 400; this.flashI *= Math.pow(0.001, dt);
     const cut = this.time - 3; while (this.stats.dmgWin.length && this.stats.dmgWin[0].t < cut) this.stats.dmgWin.shift();
     if (this.overlay.a > 0) this.overlay.a = Math.max(0, this.overlay.a - dt * this.overlay.fade);
@@ -600,6 +611,6 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     this.disposed = true; cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.resize); window.removeEventListener('keydown', this.onKeyDown); window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('pointermove', this.onPointerMove); window.removeEventListener('pointerup', this.onPointerUp);
-    this.renderer.dispose(); this.renderer.domElement.remove();
+    this.audio.dispose(); this.hail.dispose(); this.renderer.dispose(); this.renderer.domElement.remove();
   }
 }

@@ -78,6 +78,8 @@ export default function App() {
   const [help, setHelp] = useState(true);
   const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const toggleSound = () => { const next=!soundEnabled; game?.audio.setEnabled(next); setSoundEnabled(next); };
 
   useEffect(() => {
     // React has mounted: retire the inline boot screen from index.html.
@@ -180,6 +182,7 @@ export default function App() {
               <button className="sf-btn flex-1 py-0.5 font-orb text-[9px]" onClick={() => setShowSettings(true)}>SETTINGS</button>
               <button className={`sf-btn flex-1 py-0.5 font-orb text-[9px] ${game.firstPerson ? 'on' : ''}`} onClick={() => game.toggleFirstPerson()}>{game.firstPerson ? 'FIRST PERSON' : 'THIRD PERSON'}</button>
               <button className="sf-btn flex-1 py-0.5 font-orb text-[9px]" onClick={() => setHelp(h => !h)}>CONTROLS</button>
+              <button className={`sf-btn flex-1 py-0.5 font-orb text-[9px] ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} aria-label={soundEnabled ? 'Mute weather audio' : 'Enable weather audio'}>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</button>
             </div>
           </div>
           {/* Toasts */}
@@ -204,12 +207,13 @@ export default function App() {
             <h1 className="font-orb text-3xl sm:text-5xl font-bold tracking-[.12em] text-white sf-glow">MAGIC CLOUD</h1>
             <p className="mt-3 text-sm sm:text-base text-cyan-100/65">Choose your power. Take the arena.</p>
             <div className="title-rule my-7" />
-            <button className="play-btn font-orb px-10 py-4 text-sm tracking-[.2em]" onClick={() => { setShowTitle(false); game && (game.paused = false); }}>
+            <button className="play-btn font-orb px-10 py-4 text-sm tracking-[.2em]" onClick={() => { game?.audio.unlock(); setShowTitle(false); game && (game.paused = false); }}>
               <span className="play-icon">▶</span> ENTER ARENA
             </button>
             <div className="mt-4 flex justify-center gap-3">
               <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setShowSettings(true)}>SETTINGS</button>
               <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setHelp(h => !h)}>CONTROLS</button>
+              <button className={`sf-btn px-4 py-2 font-orb text-[10px] ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} disabled={!game}>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</button>
             </div>
             {help && <p className="mt-5 text-[10px] leading-relaxed text-cyan-100/40">WASD MOVE · SHIFT RUN · P FIRST PERSON · SPACE JUMP · LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
             <p className="mt-7 font-orb text-[9px] tracking-[.18em] text-cyan-300/30">WIDE OPEN ARENA · SANDBOX AVAILABLE IN SETTINGS</p>

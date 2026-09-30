@@ -208,3 +208,76 @@ export class DebrisSystem {
     if (dirty) this.mesh.instanceMatrix.needsUpdate = true;
   }
 }
+
+/** PBR ice spheres rendered in one instanced draw, with tumbling and live wind advection. */
+export class HailSystem {
+  readonly cap = 512;
+  mesh: THREE.InstancedMesh;
+  active: number[] = [];
+  activeAt = new Int32Array(this.cap);
+  pos = new Float32Array(this.cap * 3);
+  vel = new Float32Array(this.cap * 3);
+  rot = new Float32Array(this.cap * 3);
+  spin = new Float32Array(this.cap * 3);
+  size = new Float32Array(this.cap);
+  life = new Float32Array(this.cap);
+  windX = new Float32Array(this.cap);
+  windZ = new Float32Array(this.cap);
+  windClock = new Float32Array(this.cap);
+  cursor = 0;
+  private windPos = new THREE.Vector3();
+  private color = new THREE.Color();
+
+  constructor(scene: THREE.Scene, private sampleWind: (pos: THREE.Vector3) => THREE.Vector3) {
+    this.activeAt.fill(-1);
+    const geometry = new THREE.IcosahedronGeometry(0.5, 2);
+    const vertices = geometry.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < vertices.count; i++) {
+      const x=vertices.getX(i),y=vertices.getY(i),z=vertices.getZ(i);
+      const radius=0.9+((Math.sin(x*127.1+y*311.7+z*74.7)*43758.5453)%1+1)%1*0.2;
+      vertices.setXYZ(i,x*radius,y*radius,z*radius);
+    }
+    vertices.needsUpdate = true; geometry.computeVertexNormals();
+    const material = new THREE.MeshPhysicalMaterial({ color:0xeaf6fb, roughness:0.18, metalness:0.02, clearcoat:0.9, clearcoatRoughness:0.12, vertexColors:true });
+    this.mesh = new THREE.InstancedMesh(geometry, material, this.cap);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.mesh.frustumCulled = false; this.mesh.castShadow = true;
+    _m.makeScale(0,0,0);
+    for (let i=0;i<this.cap;i++) { this.mesh.setMatrixAt(i,_m); this.mesh.setColorAt(i,this.color.setHex(0xdceef5)); }
+    this.mesh.instanceMatrix.needsUpdate=true; if(this.mesh.instanceColor)this.mesh.instanceColor.needsUpdate=true;
+    scene.add(this.mesh);
+  }
+
+  spawn(x:number,y:number,z:number,vx:number,vy:number,vz:number,size:number,life:number) {
+    const i=this.cursor; this.cursor=(this.cursor+1)%this.cap; const i3=i*3;
+    this.pos[i3]=x; this.pos[i3+1]=y; this.pos[i3+2]=z;
+    this.vel[i3]=vx; this.vel[i3+1]=vy; this.vel[i3+2]=vz;
+    this.rot[i3]=Math.random()*6.28; this.rot[i3+1]=Math.random()*6.28; this.rot[i3+2]=Math.random()*6.28;
+    this.spin[i3]=(Math.random()-.5)*5; this.spin[i3+1]=(Math.random()-.5)*7; this.spin[i3+2]=(Math.random()-.5)*5;
+    this.size[i]=size; this.life[i]=life; this.windClock[i]=Math.random()*.3;
+    if(this.activeAt[i]<0){this.activeAt[i]=this.active.length;this.active.push(i);}
+    this.color.setRGB(0.82+Math.random()*.16,0.9+Math.random()*.09,0.94+Math.random()*.06);
+    this.mesh.setColorAt(i,this.color); if(this.mesh.instanceColor)this.mesh.instanceColor.needsUpdate=true;
+  }
+
+  update(dt:number) {
+    let dirty=false;
+    for(let n=this.active.length-1;n>=0;n--){
+      const i=this.active[n],i3=i*3; this.life[i]-=dt;
+      if(this.life[i]<=0||this.pos[i3+1]<=0.3){
+        _m.makeScale(0,0,0); this.mesh.setMatrixAt(i,_m);
+        const last=this.active.pop()!; if(n<this.active.length){this.active[n]=last;this.activeAt[last]=n;} this.activeAt[i]=-1; dirty=true; continue;
+      }
+      this.windClock[i]-=dt;
+      if(this.windClock[i]<=0){this.windClock[i]=.3+Math.random()*.2;const w=this.sampleWind(this.windPos.set(this.pos[i3],this.pos[i3+1],this.pos[i3+2]));this.windX[i]=w.x;this.windZ[i]=w.z;}
+      const blend=Math.min(1,1.5*dt); this.vel[i3]+=(this.windX[i]-this.vel[i3])*blend; this.vel[i3+2]+=(this.windZ[i]-this.vel[i3+2])*blend;
+      this.pos[i3]+=this.vel[i3]*dt; this.pos[i3+1]+=this.vel[i3+1]*dt; this.pos[i3+2]+=this.vel[i3+2]*dt;
+      this.rot[i3]+=this.spin[i3]*dt;this.rot[i3+1]+=this.spin[i3+1]*dt;this.rot[i3+2]+=this.spin[i3+2]*dt;
+      const fade=Math.min(1,this.life[i]/.12); _e.set(this.rot[i3],this.rot[i3+1],this.rot[i3+2]); _q.setFromEuler(_e);
+      _s.set(this.size[i]*fade,this.size[i]*fade*(.88+this.size[i]*.06),this.size[i]*fade); _p.set(this.pos[i3],this.pos[i3+1],this.pos[i3+2]);
+      _m.compose(_p,_q,_s);this.mesh.setMatrixAt(i,_m);dirty=true;
+    }
+    if(dirty)this.mesh.instanceMatrix.needsUpdate=true;
+  }
+
+  dispose(){this.mesh.parent?.remove(this.mesh);this.mesh.geometry.dispose();(this.mesh.material as THREE.Material).dispose();}
+}

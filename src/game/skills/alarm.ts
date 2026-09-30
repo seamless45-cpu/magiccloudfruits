@@ -86,7 +86,7 @@ export const ALARM_FRUIT: ItemDef = {
     { name: 'Alarm Buffer', cd: 15, info: '+200% dmg, +200% AoE, -25% CD · 30s', cast: (g) => {
       g.buffs.alarm = g.time + 30; g.toast('ALARM BUFFER ACTIVE', '#ff3344');
       const ring = new THREE.Mesh(GEO.torus, addMat(RED, 0.8)); const ring2 = new THREE.Mesh(GEO.ring, addMat(RED, 0.4)); const grp = new THREE.Group(); grp.add(ring, ring2);
-      g.add(new Timed(g, grp, 30, (k, t) => { grp.position.copy(g.player.pos).setY(0.2); ring.scale.setScalar(2.4 + Math.sin(t * 6) * 0.2); ring.rotation.z = t * 2; ring2.scale.setScalar(2); ring.position.y = 1 + Math.sin(t * 3) * 0.8; if (Math.random() < 0.3) g.fx.spawn(g.player.pos.x + rnd(-1, 1), rnd(0, 2), g.player.pos.z + rnd(-1, 1), 0, 3, 0, RED, 0.3, 0.6, {}); }));
+      g.add(new Timed(g, grp, 30, (_k, t) => { grp.position.copy(g.player.pos).setY(0.2); ring.scale.setScalar(2.4 + Math.sin(t * 6) * 0.2); ring.rotation.z = t * 2; ring2.scale.setScalar(2); ring.position.y = 1 + Math.sin(t * 3) * 0.8; if (Math.random() < 0.3) g.fx.spawn(g.player.pos.x + rnd(-1, 1), rnd(0, 2), g.player.pos.z + rnd(-1, 1), 0, 3, 0, RED, 0.3, 0.6, {}); }));
     } },
     { name: 'Amber Alert', cd: 30, info: '15 giants · 15s · mini hackers', cast: (g) => { g.toast('AMBER ALERT — 15 GIANTS DEPLOYED', '#ffb020'); for (let i = 0; i < 15; i++) { const a = (i / 15) * 6.28; g.after(i * 0.05, () => g.add(new AmberGiant(g, g.player.pos.clone().add(V(Math.cos(a) * 14, 0, Math.sin(a) * 14))))); } } },
   ],
