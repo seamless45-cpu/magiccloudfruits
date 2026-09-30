@@ -71,7 +71,15 @@ export const CLOUD_FRUIT: ItemDef = {
       g.toast(T.name.toUpperCase(), '#ffb347');
     } },
     { name: 'Storm Suppression', cd: 5, info: 'Cells spawn faster & faster (15+) · 30s', cast: (g) => {
-      const N = 18; for (let i = 0; i < N; i++) { const t = 30 * (1 - Math.sqrt(1 - i / N)) * 0.9; g.after(t, () => { const p = around(g.player.pos, 200); g.add(new StormCloud(g, { pos: p, kind: 'cell', size: 100, life: Math.max(4, 30 - t) + 2, grow: 3, rain: 0.9, rainDmg: 150, bolts: 0.8, boltDmg: 8000, superChance: 0.25, superMul: 3, superName: 'SUPERBOLT', hail: 0.6, hailDmg: 12000 })); }); }
+      const N = 18, anchor = g.player.pos.clone();
+      for (let i = 0; i < N; i++) {
+        const t = 30 * (1 - Math.sqrt(1 - i / N)) * 0.9;
+        // Keep delayed cells near the cast point in a compact, evenly spaced cluster.
+        // Sampling the moving player at each timer scattered them along the player's path.
+        const a = i * 2.399963229728653, r = 62 * Math.sqrt((i + 0.5) / N);
+        const p = V(anchor.x + Math.cos(a) * r, 0, anchor.z + Math.sin(a) * r);
+        g.after(t, () => { g.add(new StormCloud(g, { pos: p, kind: 'cell', size: 125, life: Math.max(4, 30 - t) + 2, grow: 3, densityScale: 1.25, rain: 0.9, rainDmg: 150, bolts: 0.8, boltDmg: 8000, superChance: 0.25, superMul: 3, superName: 'SUPERBOLT', hail: 0.6, hailDmg: 12000 })); });
+      }
       g.toast('STORM SUPPRESSION', '#cfd8e6');
     } },
   ],

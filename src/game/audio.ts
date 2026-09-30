@@ -17,6 +17,7 @@ export class GameAudio {
   private lastThunder = -10;
   private applied: WeatherSoundMix = { wind: -1, rain: -1, hail: -1 };
   private noiseBuffer: AudioBuffer | null = null;
+  private masterArmed = false;
 
   setEnabled(enabled: boolean) {
     this.enabled = enabled;
@@ -24,7 +25,7 @@ export class GameAudio {
     const ctx = this.ctx, master = this.master;
     if (ctx && master) {
       master.gain.cancelScheduledValues(ctx.currentTime);
-      master.gain.setTargetAtTime(enabled ? 0.72 : 0.0001, ctx.currentTime, enabled ? 0.5 : 0.12);
+      master.gain.setTargetAtTime(enabled ? 0.72 : 0.0001, ctx.currentTime, enabled ? 0.055 : 0.12);
     }
   }
 
@@ -33,8 +34,16 @@ export class GameAudio {
     if (!this.enabled) return;
     try {
       if (!this.ctx) this.createGraph();
-      if (this.ctx?.state === 'suspended') void this.ctx.resume().catch(() => {});
-      if (this.ctx && this.master) this.master.gain.setTargetAtTime(0.72, this.ctx.currentTime, 0.65);
+      if (this.ctx) {
+        const waking = this.ctx.state !== 'running';
+        if (waking) void this.ctx.resume().catch(() => {});
+        // Arm the master once (or when waking a suspended context), rather than restarting a slow fade on every click.
+        if (this.master && (waking || !this.masterArmed)) {
+          this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+          this.master.gain.setTargetAtTime(0.72, this.ctx.currentTime, 0.035);
+          this.masterArmed = true;
+        }
+      }
     } catch (error) { console.warn('[MagicCloud] Audio unavailable', error); }
   }
 
@@ -103,20 +112,20 @@ export class GameAudio {
     this.unlock();
     const ctx=this.ctx, master=this.master; if(!ctx||!master)return;
     const profile: Record<UiSoundKind,{from:number;to:number;duration:number;volume:number;type:OscillatorType}> = {
-      click:{from:520,to:330,duration:.055,volume:.035,type:'triangle'},
-      open:{from:310,to:690,duration:.16,volume:.04,type:'triangle'},
-      close:{from:540,to:180,duration:.19,volume:.045,type:'triangle'},
-      toggle:{from:620,to:390,duration:.085,volume:.028,type:'square'},
-      transition:{from:145,to:48,duration:.52,volume:.075,type:'sawtooth'},
-      skill:{from:390,to:820,duration:.105,volume:.04,type:'triangle'},
-      equip:{from:260,to:470,duration:.09,volume:.035,type:'square'},
+      click:{from:680,to:390,duration:.075,volume:.12,type:'triangle'},
+      open:{from:300,to:760,duration:.2,volume:.13,type:'triangle'},
+      close:{from:620,to:150,duration:.22,volume:.13,type:'triangle'},
+      toggle:{from:720,to:360,duration:.11,volume:.1,type:'square'},
+      transition:{from:190,to:48,duration:.72,volume:.18,type:'sawtooth'},
+      skill:{from:360,to:920,duration:.14,volume:.12,type:'triangle'},
+      equip:{from:230,to:520,duration:.12,volume:.1,type:'square'},
     };
     const p=profile[kind], now=ctx.currentTime, osc=ctx.createOscillator(), filter=ctx.createBiquadFilter(), gain=ctx.createGain();
     osc.type=p.type; osc.frequency.setValueAtTime(p.from,now); osc.frequency.exponentialRampToValueAtTime(p.to,now+p.duration);
     filter.type='lowpass'; filter.frequency.setValueAtTime(kind==='transition'?900:3200,now); filter.frequency.exponentialRampToValueAtTime(kind==='transition'?180:700,now+p.duration);
     gain.gain.setValueAtTime(.0001,now); gain.gain.linearRampToValueAtTime(p.volume,now+Math.min(.018,p.duration*.2)); gain.gain.exponentialRampToValueAtTime(.0001,now+p.duration);
     osc.connect(filter); filter.connect(gain); gain.connect(master); osc.start(now); osc.stop(now+p.duration+.02);
-    if(kind==='open'||kind==='close'||kind==='transition') this.noiseSweep(kind==='transition'?2200:1500,kind==='transition'?120:420,kind==='transition'?.48:.18,kind==='transition'?.055:.028);
+    if(kind==='open'||kind==='close'||kind==='transition') this.noiseSweep(kind==='transition'?2200:1500,kind==='transition'?120:420,kind==='transition'?.62:.2,kind==='transition'?.14:.085);
   }
 
   gustFront(distance=0,intensity=1) {
