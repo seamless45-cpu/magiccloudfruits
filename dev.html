@@ -7,7 +7,7 @@
     <!-- Inline so the page is never a white screen, even if every external request fails. -->
     <style>
       html, body { margin: 0; height: 100%; background: #202c32; color: #f2ecdd;
-        font-family: 'Inter', 'Aptos', 'Segoe UI Variable', system-ui, sans-serif; }
+        font-family: 'IBM Plex Sans', system-ui, sans-serif; }
       #boot { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; overflow:hidden; background: radial-gradient(ellipse at 50% 42%, #536775 0%, #374650 42%, #202c32 100%); }
       #boot:before,#boot:after { content:''; position:absolute; width:min(70vw,520px); aspect-ratio:1; border:1px solid rgba(242,235,216,.13); transform:rotate(45deg); animation: boot-orbit 22s linear infinite; }
       #boot:after { width:min(84vw,680px); border-color:rgba(242,235,216,.07); animation-duration:34s; animation-direction:reverse; }
@@ -15,7 +15,7 @@
       #boot .box:after { content:''; display:block; width:100px; height:2px; margin:25px auto 0; background:#e5d5af; box-shadow:0 0 15px #dfd0aa; animation: boot-pulse 1.8s ease-in-out infinite; }
       @keyframes boot-orbit { to { transform:rotate(405deg); } } @keyframes boot-enter { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } } @keyframes boot-pulse { 50% { opacity:.3; width:58px; } }
       #boot .box { max-width: 620px; }
-      #boot .title { font-size: 15px; font-weight:700; text-shadow:0 0 18px rgba(236,222,190,.35); letter-spacing: .18em; color: #f4eedf; margin-bottom: 10px; }
+      #boot .title { font-family:'Rajdhani','IBM Plex Sans',sans-serif; font-size: 15px; font-weight:700; text-shadow:0 0 18px rgba(236,222,190,.35); letter-spacing: .18em; color: #f4eedf; margin-bottom: 10px; }
       #boot .msg { font-size: 13px; line-height: 1.6; color: #e3dfd3; }
       #boot .hint { font-size: 12px; line-height: 1.6; color: #b8b2a4; margin-top: 10px; }
       #boot code { color: #ffd479; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; }
