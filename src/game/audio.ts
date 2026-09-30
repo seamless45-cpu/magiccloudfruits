@@ -1,3 +1,5 @@
+export type UiSoundKind = 'click' | 'open' | 'close' | 'toggle' | 'transition' | 'skill' | 'equip';
+
 export interface WeatherSoundMix { wind: number; rain: number; hail: number }
 
 /** Filtered procedural weather ambience and distant thunder; no synthesized arcade bleeps. */
@@ -93,6 +95,46 @@ export class GameAudio {
     if (Math.abs(next.hail - this.applied.hail) > 0.025) {
       this.applied.hail = next.hail; this.hailGain.gain.setTargetAtTime(next.hail * 0.045, t, 0.35);
     }
+  }
+
+  /** Procedural console feedback plus broadband mechanical sweeps; no external audio assets. */
+  uiSound(kind: UiSoundKind = 'click') {
+    if (!this.enabled) return;
+    this.unlock();
+    const ctx=this.ctx, master=this.master; if(!ctx||!master)return;
+    const profile: Record<UiSoundKind,{from:number;to:number;duration:number;volume:number;type:OscillatorType}> = {
+      click:{from:520,to:330,duration:.055,volume:.035,type:'triangle'},
+      open:{from:310,to:690,duration:.16,volume:.04,type:'triangle'},
+      close:{from:540,to:180,duration:.19,volume:.045,type:'triangle'},
+      toggle:{from:620,to:390,duration:.085,volume:.028,type:'square'},
+      transition:{from:145,to:48,duration:.52,volume:.075,type:'sawtooth'},
+      skill:{from:390,to:820,duration:.105,volume:.04,type:'triangle'},
+      equip:{from:260,to:470,duration:.09,volume:.035,type:'square'},
+    };
+    const p=profile[kind], now=ctx.currentTime, osc=ctx.createOscillator(), filter=ctx.createBiquadFilter(), gain=ctx.createGain();
+    osc.type=p.type; osc.frequency.setValueAtTime(p.from,now); osc.frequency.exponentialRampToValueAtTime(p.to,now+p.duration);
+    filter.type='lowpass'; filter.frequency.setValueAtTime(kind==='transition'?900:3200,now); filter.frequency.exponentialRampToValueAtTime(kind==='transition'?180:700,now+p.duration);
+    gain.gain.setValueAtTime(.0001,now); gain.gain.linearRampToValueAtTime(p.volume,now+Math.min(.018,p.duration*.2)); gain.gain.exponentialRampToValueAtTime(.0001,now+p.duration);
+    osc.connect(filter); filter.connect(gain); gain.connect(master); osc.start(now); osc.stop(now+p.duration+.02);
+    if(kind==='open'||kind==='close'||kind==='transition') this.noiseSweep(kind==='transition'?2200:1500,kind==='transition'?120:420,kind==='transition'?.48:.18,kind==='transition'?.055:.028);
+  }
+
+  gustFront(distance=0,intensity=1) {
+    if(!this.enabled)return; this.unlock(); const ctx=this.ctx,master=this.master; if(!ctx||!master)return;
+    const attenuation=Math.max(.12,1/(1+Math.max(0,distance)/1000))*Math.max(.35,Math.min(1.5,intensity));
+    const delay=Math.min(2,Math.max(0,distance)/343); this.noiseSweep(1700,130,1.35,.09*attenuation,delay);
+    const now=ctx.currentTime+delay,osc=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
+    osc.type='sine';osc.frequency.setValueAtTime(74,now);osc.frequency.exponentialRampToValueAtTime(34,now+1.2);filter.type='lowpass';filter.frequency.value=150;
+    gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.07*attenuation,now+.1);gain.gain.exponentialRampToValueAtTime(.0001,now+1.5);
+    osc.connect(filter);filter.connect(gain);gain.connect(master);osc.start(now);osc.stop(now+1.55);
+  }
+
+  private noiseSweep(from:number,to:number,duration:number,volume:number,delay=0) {
+    const ctx=this.ctx,master=this.master,buffer=this.noiseBuffer;if(!ctx||!master||!buffer)return;
+    const now=ctx.currentTime+delay,source=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
+    source.buffer=buffer;filter.type='bandpass';filter.Q.value=.65;filter.frequency.setValueAtTime(from,now);filter.frequency.exponentialRampToValueAtTime(to,now+duration);
+    gain.gain.setValueAtTime(.0001,now);gain.gain.linearRampToValueAtTime(volume,now+.06);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);
+    source.connect(filter);filter.connect(gain);gain.connect(master);source.start(now,0,duration);source.stop(now+duration+.02);
   }
 
   /** Delayed filtered thunder roll, with distance-based propagation and attenuation. */

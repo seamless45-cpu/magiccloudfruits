@@ -9,7 +9,7 @@ export function Inventory({ game, equipped }: { game: Game; equipped: number }) 
     <div data-panel="inventory" className="inventory-dock absolute bottom-2 left-0 right-0 px-2 flex justify-center pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
       <div data-panel="inventory-row" className="inventory-row flex gap-1 items-end justify-center" style={{ maxWidth: 'var(--inv-max)' }}>
         {game.items.map((it, i) => (
-          <button key={it.id} className={`slot ${equipped === i ? 'eq' : ''}`} style={{ animationDelay:`${Math.min(i,8)*28}ms` }} onClick={() => game.toggleEquip(i)} title={`${it.name} (${it.type})`} aria-label={`Equip ${it.name}`} aria-pressed={equipped === i}>
+          <button key={it.id} className={`slot ${equipped === i ? 'eq' : ''}`} style={{ animationDelay:`${Math.min(i,8)*28}ms` }} onClick={() => game.toggleEquip(i)} title={`${it.name} (${it.type})`} aria-label={`Equip ${it.name}`} aria-pressed={equipped === i} data-ui-sound="none">
             <span className="slot-key font-orb">{keyLabel(i)}</span>
             <span className="slot-type font-orb" style={{ color: it.type === 'fruit' ? '#b4d0a4' : '#d7bd86' }}>{it.type === 'fruit' ? 'FRUIT' : 'SWORD'}</span>
             <span className="slot-icon" style={{ color: it.color, textShadow: `0 0 12px ${it.color}` }}>{it.glyph}</span>
@@ -26,18 +26,19 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   return <label className="flex items-center justify-between gap-3 py-1 border-b border-cyan-300/10 text-[12px]"><span className="text-cyan-100/80">{label}</span><span className="flex items-center gap-2">{children}</span></label>;
 }
 
-export function Settings({ settings, onChange, onClose }: { settings: GraphicsSettings; onChange: (s: GraphicsSettings) => void; onClose: () => void }) {
+export function Settings({ settings, closing, onChange, onClose, onExited }: { settings: GraphicsSettings; closing: boolean; onChange: (s: GraphicsSettings) => void; onClose: () => void; onExited: () => void }) {
   const set = <K extends keyof GraphicsSettings>(k: K, v: GraphicsSettings[K]) => onChange({ ...settings, [k]: v });
   const num = (k: keyof GraphicsSettings, min: number, max: number, step: number, fmt = (v: number) => v.toFixed(2)) => (
     <><input type="range" min={min} max={max} step={step} value={settings[k] as number} onChange={e => set(k, +e.target.value as any)} className="w-28" /><span className="w-12 text-right font-orb text-[10px]">{fmt(settings[k] as number)}</span></>
   );
-  const tog = (k: keyof GraphicsSettings) => <button className={`sf-btn px-2 text-[10px] font-orb ${settings[k] ? 'on' : ''}`} onClick={() => set(k, !settings[k] as any)}>{settings[k] ? 'ON' : 'OFF'}</button>;
+  const tog = (k: keyof GraphicsSettings) => <button className={`sf-btn px-2 text-[10px] font-orb ${settings[k] ? 'on' : ''}`} onClick={() => set(k, !settings[k] as any)} data-ui-sound="toggle">{settings[k] ? 'ON' : 'OFF'}</button>;
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/40 pointer-events-auto z-50" onPointerDown={e => e.stopPropagation()}>
-      <div data-panel="settings-dialog" className="sf-panel w-[420px] max-w-[94vw] max-h-[88vh] overflow-y-auto p-4">
-        <div className="flex justify-between items-center mb-2"><h2 className="font-orb text-sm sf-glow text-cyan-200">SETTINGS // ARENA SYSTEMS</h2><button className="sf-btn px-2 text-xs" onClick={onClose}>✕</button></div>
+    <div className={`ui-modal-shell absolute inset-0 grid place-items-center bg-black/70 pointer-events-auto z-50 ${closing ? 'ui-modal-closing' : ''}`} onPointerDown={e => e.stopPropagation()} onAnimationEnd={e => { if (e.target === e.currentTarget && closing) onExited(); }}>
+      <div className="ui-modal-backdrop absolute inset-0" onClick={onClose} />
+      <div data-panel="settings-dialog" className={`sf-panel relative z-[1] w-[420px] max-w-[94vw] max-h-[88vh] overflow-y-auto p-4 ${closing ? 'ui-panel-closing' : ''}`}>
+        <div className="flex justify-between items-center mb-2"><h2 className="font-orb text-sm sf-glow text-cyan-200">SETTINGS // ARENA SYSTEMS</h2><button className="sf-btn px-2 text-xs" onClick={onClose} data-ui-sound="close">✕</button></div>
         <div className="flex gap-1 mb-2">
-          {(['low', 'medium', 'high', 'ultra'] as const).map(p => <button key={p} className={`sf-btn flex-1 py-1 text-[10px] font-orb ${settings.preset === p ? 'on' : ''}`} onClick={() => onChange({ ...settings, ...PRESETS[p], preset: p })}>{p.toUpperCase()}</button>)}
+          {(['low', 'medium', 'high', 'ultra'] as const).map(p => <button key={p} className={`sf-btn flex-1 py-1 text-[10px] font-orb ${settings.preset === p ? 'on' : ''}`} onClick={() => onChange({ ...settings, ...PRESETS[p], preset: p })} data-ui-sound="toggle">{p.toUpperCase()}</button>)}
         </div>
         <div className="settings-section mt-4 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">GAMEPLAY</div>
         <Row label="Sandbox Mode"><button className={`sf-btn px-2 text-[10px] font-orb ${settings.sandbox ? 'on' : ''}`} onClick={() => set('sandbox', !settings.sandbox)}>{settings.sandbox ? 'ON' : 'OFF'}</button></Row>

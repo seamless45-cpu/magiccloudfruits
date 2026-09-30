@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type AnimationEvent } from 'react';
 import { Game, PRESETS, defaultSettings } from './game/Game';
 import type { GraphicsSettings } from './game/types';
+import type { UiSoundKind } from './game/audio';
 import { SkillBar } from './ui/SkillBar';
 import { Inventory, Settings, MobileControls, ZoomControl } from './ui/Panels';
+import { UpdateLog } from './ui/UpdateLog';
 
 type Snap = ReturnType<Game['snapshot']>;
 const fmt = (n: number) => (n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n.toFixed(0));
@@ -73,10 +75,19 @@ export default function App() {
   const [snap, setSnap] = useState<Snap | null>(null);
   const [settings, setSettings] = useState<GraphicsSettings>(initialSettings);
   const [showSettings, setShowSettings] = useState(false);
+  const [closingSettings, setClosingSettings] = useState(false);
+  const [showUpdates, setShowUpdates] = useState(false);
+  const [closingUpdates, setClosingUpdates] = useState(false);
   const [showTitle, setShowTitle] = useState(true);
   const [leavingTitle, setLeavingTitle] = useState(false);
   const [showGui, setShowGui] = useState(true);
+  const [guiClosing, setGuiClosing] = useState(false);
   const [help, setHelp] = useState(true);
+  const [helpClosing, setHelpClosing] = useState(false);
+  const settingsOpenRef = useRef(showSettings); settingsOpenRef.current = showSettings;
+  const settingsClosingRef = useRef(closingSettings); settingsClosingRef.current = closingSettings;
+  const helpOpenRef = useRef(help); helpOpenRef.current = help;
+  const helpClosingRef = useRef(helpClosing); helpClosingRef.current = helpClosing;
   const [showTelemetry, setShowTelemetry] = useState(true);
   const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
@@ -86,6 +97,20 @@ export default function App() {
     if (!game || leavingTitle) return;
     game.audio.unlock(); game.paused = false; setLeavingTitle(true);
   };
+  const onUiClickCapture = (e: MouseEvent<HTMLDivElement>) => {
+    const button = (e.target as HTMLElement).closest('button');
+    if (!button || button.disabled || button.dataset.uiSound === 'none') return;
+    game?.audio.uiSound((button.dataset.uiSound as UiSoundKind | undefined) ?? 'click');
+  };
+  const openSettings = () => { setClosingSettings(false); setShowSettings(true); };
+  const closeSettings = () => { if (showSettings) setClosingSettings(true); };
+  const finishSettingsClose = () => { setShowSettings(false); setClosingSettings(false); };
+  const openUpdates = () => { setClosingUpdates(false); setShowUpdates(true); };
+  const closeUpdates = () => { if (showUpdates) setClosingUpdates(true); };
+  const finishUpdatesClose = () => { setShowUpdates(false); setClosingUpdates(false); };
+  const toggleHelp = () => { if (help && !helpClosing) setHelpClosing(true); else { setHelpClosing(false); setHelp(true); } };
+  const toggleGui = () => { if (showGui) { setGuiClosing(true); if (showSettings) closeSettings(); } else { setShowGui(true); setGuiClosing(false); } };
+  const onGuiCloseAnimationEnd = (e: AnimationEvent<HTMLDivElement>) => { if (e.target === e.currentTarget && guiClosing) { setShowGui(false); setGuiClosing(false); } };
 
   useEffect(() => {
     // Cross-fade the HTML safety loader into React's title card instead of cutting between them.
@@ -123,7 +148,16 @@ export default function App() {
     g.onToast = (m, c) => { const id = ++tid; setToasts(t => [...t.slice(-4), { id, m, c }]); setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2200); };
     const iv = setInterval(() => setSnap(g.snapshot()), 100);
     let raf = 0; const ov = () => { raf = requestAnimationFrame(ov); if (overlay.current) { overlay.current.style.background = g.overlay.color; overlay.current.style.opacity = String(Math.min(0.85, g.overlay.a)); } }; ov();
-    const kd = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === 'o' || e.key === 'O') setShowSettings(s => !s); if (e.key === 'h' || e.key === 'H') setHelp(h => !h); };
+    const kd = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'o' || e.key === 'O') {
+        if (settingsOpenRef.current && !settingsClosingRef.current) { g.audio.uiSound('close'); setClosingSettings(true); }
+        else if (!settingsOpenRef.current) { g.audio.uiSound('open'); setClosingSettings(false); setShowSettings(true); }
+      }
+      if (e.key === 'h' || e.key === 'H') {
+        if (helpOpenRef.current && !helpClosingRef.current) { g.audio.uiSound('close'); setHelpClosing(true); }
+        else { g.audio.uiSound('open'); setHelpClosing(false); setHelp(true); }
+      }
+    };
     window.addEventListener('keydown', kd);
     return () => { clearInterval(iv); cancelAnimationFrame(raf); window.removeEventListener('keydown', kd); window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej); g.dispose(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -133,7 +167,7 @@ export default function App() {
   const item = game && snap && snap.equipped >= 0 ? game.items[snap.equipped] : null;
 
   return (
-    <div className="fixed inset-0 overflow-hidden">
+    <div className="fixed inset-0 overflow-hidden" onClickCapture={onUiClickCapture}>
       <div ref={host} className="absolute inset-0" />
       <div ref={overlay} className="absolute inset-0 pointer-events-none" style={{ opacity: 0, mixBlendMode: 'screen' }} />
       {fatal && (
@@ -151,8 +185,8 @@ export default function App() {
           </div>
         </div>
       )}
-      {game && snap && !showTitle && showGui && (
-        <div className="absolute inset-0 pointer-events-none">
+      {game && snap && !showTitle && (showGui || guiClosing) && (
+        <div className={`absolute inset-0 pointer-events-none ${guiClosing ? 'ui-hud-closing' : ''}`} onAnimationEnd={onGuiCloseAnimationEnd}>
           {/* Left rail: vitals and controls stack in one column, so they cannot overlap */}
           <div className="absolute left-2 top-2 hud-rail-left w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
           <div data-panel="vitals" className="sf-panel p-2.5 w-full shrink-0 pointer-events-auto">
@@ -168,8 +202,8 @@ export default function App() {
             {snap.buffs.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{snap.buffs.map(b => <span key={b.k} className="text-[9px] font-orb px-1.5 py-0.5 border border-rose-300/50 bg-rose-500/15 text-rose-100">{b.k.toUpperCase()} {b.rem.toFixed(1)}s</span>)}</div>}
           </div>
           {help && !touch && (
-            <div data-panel="controls" className="sf-panel p-2.5 w-full text-[10.5px] leading-snug pointer-events-auto overflow-y-auto min-h-0">
-              <div className="flex justify-between font-orb text-[10px] text-cyan-200 mb-1"><span>CONTROLS</span><button className="sf-btn px-1" onClick={() => setHelp(false)}>✕</button></div>
+            <div data-panel="controls" className={`sf-panel p-2.5 w-full text-[10.5px] leading-snug pointer-events-auto overflow-y-auto min-h-0 ${helpClosing ? 'ui-panel-closing' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && helpClosing) { setHelp(false); setHelpClosing(false); } }}>
+              <div className="flex justify-between font-orb text-[10px] text-cyan-200 mb-1"><span>CONTROLS</span><button className="sf-btn px-1" onClick={toggleHelp} data-ui-sound="close">✕</button></div>
               <div><b className="text-cyan-300">WASD</b> move · <b className="text-cyan-300">Shift</b> sprint · <b className="text-cyan-300">Space</b> jump</div>
               <div><b className="text-cyan-300">LMB / E</b> M1 attack / fire (manual)</div>
               <div><b className="text-cyan-300">RMB drag</b> orbit · <b className="text-cyan-300">P</b> view · <b className="text-cyan-300">Wheel / +/- / PgUp/PgDn</b> zoom (≤900m)</div>
@@ -193,9 +227,9 @@ export default function App() {
               <div className="telemetry-cell"><span>HOSTILES</span><b>{snap.alive}</b></div>
             </div>
             <div className="telemetry-actions pointer-events-auto">
-              <button className="sf-btn font-orb" onClick={() => setShowSettings(true)} title="Settings" aria-label="Settings">SET</button>
+              <button className="sf-btn font-orb" onClick={openSettings} data-ui-sound="open" title="Settings" aria-label="Settings">SET</button>
               <button className={`sf-btn font-orb ${game.firstPerson ? 'on' : ''}`} onClick={() => game.toggleFirstPerson()} title="Toggle first/third person" aria-label="Toggle camera">{game.firstPerson?'FP':'TP'}</button>
-              <button className="sf-btn font-orb" onClick={() => setHelp(h => !h)} title="Controls" aria-label="Controls">HELP</button>
+              <button className="sf-btn font-orb" onClick={toggleHelp} data-ui-sound="toggle" title="Controls" aria-label="Controls">HELP</button>
               <button className={`sf-btn font-orb ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} title={soundEnabled?'Mute weather audio':'Enable weather audio'} aria-label={soundEnabled?'Mute weather audio':'Enable weather audio'}>SND</button>
             </div>
           </div>}
@@ -222,22 +256,24 @@ export default function App() {
             <h1 className="font-orb text-3xl sm:text-5xl font-bold tracking-[.12em] text-white sf-glow">MAGIC CLOUD</h1>
             <p className="mt-3 text-sm sm:text-base text-cyan-100/65">Choose your power. Take the arena.</p>
             <div className="title-rule my-7" />
-            <button className="play-btn font-orb px-10 py-4 text-sm tracking-[.2em]" onClick={enterArena} disabled={!game || leavingTitle}>
+            <button className="play-btn font-orb px-10 py-4 text-sm tracking-[.2em]" onClick={enterArena} data-ui-sound="transition" disabled={!game || leavingTitle}>
               <span className="play-icon">▶</span> {leavingTitle ? 'ENTERING ARENA' : 'ENTER ARENA'}
             </button>
-            <div className="mt-4 flex justify-center gap-3">
-              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setShowSettings(true)}>SETTINGS</button>
-              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setHelp(h => !h)}>CONTROLS</button>
+            <div className="title-menu-actions mt-4 grid grid-cols-2 sm:flex sm:justify-center gap-2">
+              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={openSettings} data-ui-sound="open">SETTINGS</button>
+              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={toggleHelp} data-ui-sound="toggle">CONTROLS</button>
+              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={openUpdates} data-ui-sound="open">UPDATE LOG</button>
               <button className={`sf-btn px-4 py-2 font-orb text-[10px] ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} disabled={!game}>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</button>
             </div>
-            {help && <p className="mt-5 text-[10px] leading-relaxed text-cyan-100/40">WASD MOVE · SHIFT RUN · P FIRST PERSON · SPACE JUMP · TAP / LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
+            {help && <p className={`mt-5 text-[10px] leading-relaxed text-cyan-100/40 ${helpClosing ? 'ui-panel-closing' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && helpClosing) { setHelp(false); setHelpClosing(false); } }}>WASD MOVE · SHIFT RUN · P FIRST PERSON · SPACE JUMP · TAP / LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
             <p className="mt-7 font-orb text-[9px] tracking-[.18em] text-cyan-300/30">WIDE OPEN ARENA · SANDBOX AVAILABLE IN SETTINGS</p>
           </div>
         </div>
       )}
-      {showSettings && showGui && <Settings settings={settings} onChange={changeSettings} onClose={() => setShowSettings(false)} />}
+      {showSettings && showGui && <Settings settings={settings} closing={closingSettings} onChange={changeSettings} onClose={closeSettings} onExited={finishSettingsClose} />}
+      {showUpdates && showTitle && <UpdateLog closing={closingUpdates} onClose={closeUpdates} onExited={finishUpdatesClose} />}
       {game && snap && !showTitle && (
-        <button className={`gui-toggle ${showGui ? 'gui-toggle-visible' : 'gui-toggle-hidden'}`} onClick={() => { setShowGui(v => !v); if (!showGui) setShowSettings(false); }} aria-label={showGui ? 'Hide interface' : 'Show interface'} title={showGui ? 'Hide interface' : 'Show interface'}>
+        <button className={`gui-toggle ${showGui ? 'gui-toggle-visible' : 'gui-toggle-hidden'}`} onClick={toggleGui} data-ui-sound={showGui ? "close" : "open"} aria-label={showGui ? 'Hide interface' : 'Show interface'} title={showGui ? 'Hide interface' : 'Show interface'}>
           <span aria-hidden="true">{showGui ? '◉' : '◌'}</span><span>{showGui ? 'HIDE GUI' : 'SHOW GUI'}</span>
         </button>
       )}

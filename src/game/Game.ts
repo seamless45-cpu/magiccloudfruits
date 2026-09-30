@@ -369,7 +369,7 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     if (i < 0 || i >= this.items.length) return;
     for (let s = 0; s < 12; s++) this.releaseSkill(s);
     this.equipped = this.equipped === i ? -1 : i; this.m1.combo = 0;
-    this.setHeld(this.item);
+    this.audio.uiSound('equip'); this.setHeld(this.item);
     if (this.item) this.toast(`EQUIPPED: ${this.item.name.toUpperCase()}`, this.item.color);
   }
   cdMul() { return this.settings.sandbox ? 0 : this.buff('alarm') ? 0.75 : 1; }
@@ -382,13 +382,13 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     if (st.holding) return;
     if (s.charges) {
       if (st.charges < 1 || st.interval > 0 || st.rem > 0) return;
-      st.charges--; st.interval = 0.2; s.cast?.(this);
+      st.charges--; st.interval = 0.2; this.audio.uiSound('skill'); s.cast?.(this);
       if (st.charges <= 0) this.startCd(it, i);
       return;
     }
     if (st.rem > 0) return;
-    if (s.holdStart) { st.holding = true; s.holdStart(this); return; }
-    s.cast?.(this); this.startCd(it, i);
+    if (s.holdStart) { st.holding = true; this.audio.uiSound('skill'); s.holdStart(this); return; }
+    this.audio.uiSound('skill'); s.cast?.(this); this.startCd(it, i);
   }
   releaseSkill(i: number) {
     const it = this.item; if (!it) return; const s = it.skills[i]; if (!s) return; const st = this.cds[it.id][i];

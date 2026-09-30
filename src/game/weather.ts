@@ -5,6 +5,7 @@ import { ParticleSystem } from './particles';
 
 const PUFF_GEO = new THREE.SphereGeometry(1, 12, 8);
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color();
+const GUST_FRONT_SCALE = 3.72;
 
 interface Puff { x: number; y: number; z: number; r: number; fy: number; stage: number; shade: number }
 export type CloudKind = 'cumulus' | 'cell' | 'stratus' | 'nimbo' | 'squall' | 'derecho' | 'supercell' | 'hail';
@@ -21,7 +22,7 @@ export interface CloudOpts {
 export class StormCloud implements Effect {
   t = 0; o: CloudOpts & Required<Pick<CloudOpts, 'vel' | 'grow' | 'rain' | 'rainDmg' | 'hail' | 'bolts'>>;
   puffs: Puff[] = []; mesh: THREE.InstancedMesh; mat: THREE.MeshStandardMaterial; base: number; R: number; growth = 0;
-  rainTick = 0; boltT = 0; hailT = 0; tornT = 0; layoutT = 0; rainSeq = 0; gustSeq = 0; shaftAcc = 0; dropAcc = 0; gustAcc = 0; rainSeed = Math.random(); isSuper = false; evolved = false; dir: THREE.Vector3; side: THREE.Vector3; stageName = '';
+  rainTick = 0; boltT = 0; hailT = 0; tornT = 0; layoutT = 0; rainSeq = 0; gustSeq = 0; shaftAcc = 0; dropAcc = 0; gustAcc = 0; rainSeed = Math.random(); gustSounded = false; isSuper = false; evolved = false; dir: THREE.Vector3; side: THREE.Vector3; stageName = '';
   constructor(public g: any, o: CloudOpts) {
     this.o = { vel: V(), grow: 0.01, rain: 0, rainDmg: 0, hail: 0, bolts: 0, ...o } as any;
     this.R = o.size / 2;
@@ -112,12 +113,14 @@ export class StormCloud implements Effect {
   windAt(pos: THREE.Vector3) {
     const { wind = 0, length = 1, depth = 1, bow = 0 } = this.o;
     if (wind <= 0 || this.t >= this.o.life) return null;
+    const scale = this.o.kind === 'squall' || this.o.kind === 'derecho' ? GUST_FRONT_SCALE : 1;
+    const frontLength = length * scale, frontDepth = depth * scale;
     const rel = V(pos.x - this.mesh.position.x, 0, pos.z - this.mesh.position.z);
-    const cross = rel.dot(this.side) / (length / 2);
-    const along = rel.dot(this.dir) - bow * depth * (1 - cross * cross);
-    if (Math.abs(cross) >= 1 || along > depth * 0.35 || along < -depth * 0.75) return null;
+    const cross = rel.dot(this.side) / (frontLength / 2);
+    const along = rel.dot(this.dir) - bow * frontDepth * (1 - cross * cross);
+    if (Math.abs(cross) >= 1 || along > frontDepth * 0.35 || along < -frontDepth * 0.75) return null;
     const acrossFalloff = 1 - Math.abs(cross) * 0.24;
-    const frontFalloff = Math.max(0, 1 - Math.abs(along) / (depth * 0.85));
+    const frontFalloff = Math.max(0, 1 - Math.abs(along) / (frontDepth * 0.85));
     return this.dir.clone().multiplyScalar(wind * 0.44704 * acrossFalloff * (0.35 + frontFalloff * 0.65));
   }
   /** random rain point in world space under the cloud */
@@ -186,18 +189,20 @@ export class StormCloud implements Effect {
     }
     // wind / gust front
     if (o.wind && fadeK > 0) {
-      const c = this.mesh.position; const push = o.wind * 0.44704; // mph -> m/s (exact international conversion)
+      const c = this.mesh.position, scale = o.kind === 'squall' || o.kind === 'derecho' ? GUST_FRONT_SCALE : 1;
+      const frontLength = o.length! * scale, frontDepth = o.depth! * scale, push = o.wind * 0.44704;
+      if (scale > 1 && !this.gustSounded && this.growth > 0.18) { this.gustSounded = true; g.audio.gustFront(this.mesh.position.distanceTo(g.player.pos), o.wind / 100); }
       for (const e of g.enemies) {
-        if (e.dead) continue; const rel = V(e.pos.x - c.x, 0, e.pos.z - c.z); const u = rel.dot(this.side) / (o.length! / 2);
-        if (Math.abs(u) > 1) continue; const f = rel.dot(this.dir) - (o.bow ?? 0) * o.depth! * (1 - u * u);
-        if (f > -o.depth! * 0.3 && f < o.depth! * 0.25) { e.pos.addScaledVector(this.dir, push * 0.12 * dt); if (Math.random() < dt * 4) g.damage(e, (o.windDmg ?? 0) * (o.dmgMul ?? 1), { noCharge: true, stun: 0.2 }); }
+        if (e.dead) continue; const rel = V(e.pos.x - c.x, 0, e.pos.z - c.z); const u = rel.dot(this.side) / (frontLength / 2);
+        if (Math.abs(u) > 1) continue; const f = rel.dot(this.dir) - (o.bow ?? 0) * frontDepth * (1 - u * u);
+        if (f > -frontDepth * 0.3 && f < frontDepth * 0.25) { e.pos.addScaledVector(this.dir, push * 0.12 * dt); if (Math.random() < dt * 4) g.damage(e, (o.windDmg ?? 0) * (o.dmgMul ?? 1), { noCharge: true, stun: 0.2 }); }
       }
-      const pr = V(g.player.pos.x - c.x, 0, g.player.pos.z - c.z); const pu = pr.dot(this.side) / (o.length! / 2); const pf = pr.dot(this.dir) - (o.bow ?? 0) * o.depth! * (1 - pu * pu);
-      if (Math.abs(pu) < 1 && Math.abs(pf) < o.depth! * 0.35) g.shakeRaw(o.wind / 60 * (1 - Math.abs(pf) / (o.depth! * 0.35)), 0.1);
-      // Evenly seed the moving gust-front curtain so dust doesn't appear in isolated patches.
+      const pr = V(g.player.pos.x - c.x, 0, g.player.pos.z - c.z); const pu = pr.dot(this.side) / (frontLength / 2); const pf = pr.dot(this.dir) - (o.bow ?? 0) * frontDepth * (1 - pu * pu);
+      if (Math.abs(pu) < 1 && Math.abs(pf) < frontDepth * 0.35) g.shakeRaw(o.wind / 60 * (1 - Math.abs(pf) / (frontDepth * 0.35)), 0.1);
+      // Keep the existing capped particle budget; seed it across the enlarged front.
       this.gustAcc+=dt*20*dens*60;const gusts=Math.min(Math.min(60,Math.max(1,Math.ceil(20*dt*60))),Math.floor(this.gustAcc));this.gustAcc-=gusts;if(this.gustAcc>30)this.gustAcc%=1;
       for(let i=0;i<gusts;i++){const seq=++this.gustSeq,u=((seq*.6180339887498949+this.rainSeed*.71)%1)*2-1,v=(seq*.7548776662466927+this.rainSeed*.23)%1;
-        const p=V(c.x,0,c.z).addScaledVector(this.side,u*o.length!/2).addScaledVector(this.dir,(o.bow??0)*o.depth!*(1-u*u)+v*20),w=g.windAt(p);
+        const p=V(c.x,0,c.z).addScaledVector(this.side,u*frontLength/2).addScaledVector(this.dir,(o.bow??0)*frontDepth*(1-u*u)+v*20*scale),w=g.windAt(p);
         g.smoke.spawn(p.x,rnd(1,12),p.z,w.x+rnd(-5,5),rnd(0,3),w.z+rnd(-5,5),0xc8c2b8,rnd(8*1.3,18*1.3),2.2,{alpha:.2,grow:1.5,turb:6,drag:.06,windX:w.x,windZ:w.z,windResponse:1.8,windDynamic:true});}
     }
     // lightning
@@ -411,7 +416,7 @@ export class Flood implements Effect {
 
 /** Microburst: scattered cells form, merge, then a 145 mph downburst gust with an expanding rain wall. */
 export class Microburst implements Effect {
-  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; dmgT = 0; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
+  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; dmgT = 0; gustSounded = false; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {
     const cloudSize = size * 0.7; // keep the source cloud compact; the outflow can travel well beyond its edge.
     for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * cloudSize * 0.78, 0, Math.sin(a) * cloudSize * 0.78); this.offs.push(off);
@@ -439,6 +444,7 @@ export class Microburst implements Effect {
     const merge = mergeRaw * mergeRaw * (3 - 2 * mergeRaw);
     this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge), 0, this.pos.z + this.offs[i].z * (1 - merge)); });
     if (this.t > 5 && this.t < 15) {
+      if (!this.gustSounded) { this.gustSounded = true; g.audio.gustFront(this.pos.distanceTo(g.player.pos), 1.15); }
       const k = Math.min(1, (this.t - 5) / 0.5), source = this.cells[this.cells.length - 1], emitter = source.mesh.position;
       // Seed soft smoke throughout the full cloud-to-ground volume, not from one point that makes a cone.
       const topY = source.base + source.R * 0.5, emissionR = source.R * 1.05;
