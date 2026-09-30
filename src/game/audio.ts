@@ -1,4 +1,4 @@
-export type UiSoundKind = 'click' | 'open' | 'close' | 'toggle' | 'transition' | 'skill' | 'equip';
+export type UiSoundKind = 'click' | 'open' | 'close' | 'toggle' | 'slider' | 'transition' | 'skill' | 'equip';
 
 export interface WeatherSoundMix { wind: number; rain: number; hail: number }
 
@@ -122,17 +122,20 @@ export class GameAudio {
       click:{from:680,to:390,duration:.075,volume:.12,type:'triangle'},
       open:{from:300,to:760,duration:.2,volume:.13,type:'triangle'},
       close:{from:620,to:150,duration:.22,volume:.13,type:'triangle'},
-      toggle:{from:720,to:360,duration:.11,volume:.1,type:'square'},
+      toggle:{from:920,to:520,duration:.085,volume:.085,type:'triangle'},
+      slider:{from:1450,to:920,duration:.045,volume:.045,type:'sine'},
       transition:{from:190,to:48,duration:.72,volume:.18,type:'sawtooth'},
       skill:{from:360,to:920,duration:.14,volume:.12,type:'triangle'},
       equip:{from:230,to:520,duration:.12,volume:.1,type:'square'},
     };
     const p=profile[kind], now=ctx.currentTime, osc=ctx.createOscillator(), filter=ctx.createBiquadFilter(), gain=ctx.createGain();
     osc.type=p.type; osc.frequency.setValueAtTime(p.from,now); osc.frequency.exponentialRampToValueAtTime(p.to,now+p.duration);
-    filter.type='lowpass'; filter.frequency.setValueAtTime(kind==='transition'?900:3200,now); filter.frequency.exponentialRampToValueAtTime(kind==='transition'?180:700,now+p.duration);
+    filter.type='lowpass'; filter.frequency.setValueAtTime(kind==='transition'?900:kind==='slider'?5200:3200,now); filter.frequency.exponentialRampToValueAtTime(kind==='transition'?180:kind==='slider'?2600:700,now+p.duration);
     gain.gain.setValueAtTime(.0001,now); gain.gain.linearRampToValueAtTime(p.volume,now+Math.min(.018,p.duration*.2)); gain.gain.exponentialRampToValueAtTime(.0001,now+p.duration);
     osc.connect(filter); filter.connect(gain); gain.connect(output); osc.start(now); osc.stop(now+p.duration+.02);
     if(kind==='open'||kind==='close'||kind==='transition') this.noiseSweep(kind==='transition'?2200:1500,kind==='transition'?120:420,kind==='transition'?.62:.2,kind==='transition'?.14:.085,0,output);
+    else if(kind==='slider') this.noiseSweep(5200,2600,.045,.012,0,output);
+    else if(kind==='toggle') this.noiseSweep(3600,1800,.065,.02,0,output);
   }
 
   enemyShot(distance=0) {

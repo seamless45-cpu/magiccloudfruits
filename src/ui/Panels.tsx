@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Game } from '../game/Game';
 import { PRESETS, MAX_ZOOM, MIN_ZOOM } from '../game/Game';
 import type { GraphicsSettings } from '../game/types';
@@ -30,10 +30,18 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
   const [interpolationMethodsOpen, setInterpolationMethodsOpen] = useState(false);
   const [lightningSettingsOpen, setLightningSettingsOpen] = useState(false);
   const set = <K extends keyof GraphicsSettings>(k: K, v: GraphicsSettings[K]) => onChange({ ...settings, [k]: v });
-  const num = (k: keyof GraphicsSettings, min: number, max: number, step: number, fmt = (v: number) => v.toFixed(2)) => (
-    <><input type="range" min={min} max={max} step={step} value={settings[k] as number} onChange={e => set(k, +e.target.value as any)} className="w-28" /><span className="w-12 text-right font-orb text-[10px]">{fmt(settings[k] as number)}</span></>
-  );
-  const tog = (k: keyof GraphicsSettings) => <button className={`sf-btn px-2 text-[10px] font-orb ${settings[k] ? 'on' : ''}`} onClick={() => set(k, !settings[k] as any)} data-ui-sound="toggle">{settings[k] ? 'ON' : 'OFF'}</button>;
+  const num = (k: keyof GraphicsSettings, min: number, max: number, step: number, fmt = (v: number) => v.toFixed(2)) => {
+    const value = settings[k] as number;
+    const fill = `${Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))}%`;
+    return <><input type="range" min={min} max={max} step={step} value={value} onChange={e => set(k, +e.target.value as any)} className="sf-range w-28" style={{ '--range-fill': fill } as CSSProperties} /><span className="sf-range-value w-12 text-right font-orb text-[10px]">{fmt(value)}</span></>;
+  };
+  const tog = (k: keyof GraphicsSettings) => {
+    const active = Boolean(settings[k]);
+    return <button type="button" role="switch" aria-checked={active} aria-label={`Toggle ${String(k)}`} className={`sf-switch ${active ? 'is-on' : ''}`} onClick={() => set(k, !settings[k] as any)} data-ui-sound="toggle">
+      <span className="sf-switch-track" aria-hidden="true"><span className="sf-switch-knob" /></span>
+      <span className="sf-switch-state" aria-hidden="true">{active ? 'ON' : 'OFF'}</span>
+    </button>;
+  };
   return (
     <div className={`ui-modal-shell absolute inset-0 grid place-items-center bg-black/70 pointer-events-auto z-50 ${closing ? 'ui-modal-closing' : ''}`} onPointerDown={e => e.stopPropagation()} onAnimationEnd={e => { if (e.target === e.currentTarget && closing) onExited(); }}>
       <div className="ui-modal-backdrop absolute inset-0" onClick={onClose} />
@@ -43,12 +51,12 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
           {(['low', 'medium', 'high', 'ultra'] as const).map(p => <button key={p} className={`sf-btn flex-1 py-1 text-[10px] font-orb ${settings.preset === p ? 'on' : ''}`} onClick={() => onChange({ ...settings, ...PRESETS[p], preset: p })} data-ui-sound="toggle">{p.toUpperCase()}</button>)}
         </div>
         <div className="settings-section mt-4 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">GAMEPLAY</div>
-        <Row label="Sandbox Mode"><button className={`sf-btn px-2 text-[10px] font-orb ${settings.sandbox ? 'on' : ''}`} onClick={() => set('sandbox', !settings.sandbox)}>{settings.sandbox ? 'ON' : 'OFF'}</button></Row>
+        <Row label="Sandbox Mode">{tog('sandbox')}</Row>
         <p className="text-[10px] text-cyan-200/45 py-1">Unlimited health · incoming damage disabled · all skill cooldowns reset to zero.</p>
         <div className="settings-section mt-3 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">GRAPHICS</div>
         <Row label="Render Resolution">{num('resolution', 0.4, 1.5, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
         <Row label="Shadows">{tog('shadows')}</Row>
-        <Row label="Shadow Resolution"><select value={settings.shadowRes} onChange={e => set('shadowRes', +e.target.value)} className="text-[11px] px-1">{[512, 1024, 2048, 4096].map(v => <option key={v} value={v}>{v}</option>)}</select></Row>
+        <Row label="Shadow Resolution"><select value={settings.shadowRes} onChange={e => set('shadowRes', +e.target.value)} className="text-[11px] px-1" data-ui-sound="none">{[512, 1024, 2048, 4096].map(v => <option key={v} value={v}>{v}</option>)}</select></Row>
         <Row label="Bloom / Glow">{tog('bloom')}</Row>
         <Row label="Bloom Strength">{num('bloomStrength', 0, 2.5, 0.05)}</Row>
         <Row label="FXAA Anti-Aliasing">{tog('antialiasFxaa')}</Row>
@@ -116,7 +124,7 @@ export function ZoomControl({ game, zoom }: { game: Game; zoom: number }) {
   return (
     <div data-panel="zoom" className="sf-panel w-full shrink-0 mt-auto p-1.5 flex items-center gap-1 justify-between pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
       <button className="sf-btn w-7 h-7 font-orb text-sm" onClick={() => game.zoomBy(-10)} aria-label="Zoom in">+</button>
-      <input type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={1} value={zoom} onChange={e => game.setZoom(+e.target.value)} className="flex-1 min-w-0" aria-label="Camera distance" />
+      <input type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={1} value={zoom} onChange={e => game.setZoom(+e.target.value)} className="sf-range flex-1 min-w-0" style={{ '--range-fill': `${((zoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM)) * 100}%` } as CSSProperties} aria-label="Camera distance" />
       <button className="sf-btn w-7 h-7 font-orb text-sm" onClick={() => game.zoomBy(10)} aria-label="Zoom out">−</button>
       <span className="font-orb text-[9px] w-11 text-right text-cyan-100 shrink-0">{zoom.toFixed(0)}m</span>
     </div>

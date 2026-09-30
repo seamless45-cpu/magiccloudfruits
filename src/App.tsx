@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent, type AnimationEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type AnimationEvent } from 'react';
 import { Game, PRESETS, defaultSettings } from './game/Game';
 import type { GraphicsSettings } from './game/types';
 import type { UiSoundKind } from './game/audio';
@@ -105,7 +105,8 @@ export default function App() {
   const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const toggleSound = () => { const next=!soundEnabled; game?.audio.setEnabled(next); setSoundEnabled(next); };
+  const lastControlSoundAt = useRef(0);
+  const toggleSound = () => { const next=!soundEnabled; game?.audio.setEnabled(next); setSoundEnabled(next); if (next) game?.audio.uiSound('toggle'); };
   const enterArena = () => {
     if (!game || leavingTitle) return;
     game.audio.unlock(); game.paused = false; setLeavingTitle(true);
@@ -114,6 +115,17 @@ export default function App() {
     const button = (e.target as HTMLElement).closest('button');
     if (!button || button.disabled || button.dataset.uiSound === 'none') return;
     game?.audio.uiSound((button.dataset.uiSound as UiSoundKind | undefined) ?? 'click');
+  };
+  const onUiChangeCapture = (e: ChangeEvent<HTMLDivElement>) => {
+    const control = e.target;
+    if (control instanceof HTMLInputElement && control.type === 'range') {
+      const now = performance.now();
+      if (now - lastControlSoundAt.current < 85) return;
+      lastControlSoundAt.current = now;
+      game?.audio.uiSound('slider');
+    } else if (control instanceof HTMLSelectElement && control.dataset.uiSound !== 'none') {
+      game?.audio.uiSound('toggle');
+    }
   };
   const openSettings = () => { setClosingSettings(false); setShowSettings(true); };
   const closeSettings = () => { if (showSettings) setClosingSettings(true); };
@@ -192,7 +204,7 @@ export default function App() {
   const item = game && snap && snap.equipped >= 0 ? game.items[snap.equipped] : null;
 
   return (
-    <div className="fixed inset-0 overflow-hidden" onClickCapture={onUiClickCapture}>
+    <div className="fixed inset-0 overflow-hidden" onClickCapture={onUiClickCapture} onChangeCapture={onUiChangeCapture}>
       <div ref={host} className="absolute inset-0" />
       <div ref={overlay} className="absolute inset-0 pointer-events-none" style={{ opacity: 0, mixBlendMode: 'screen' }} />
       {fatal && (
