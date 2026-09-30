@@ -135,6 +135,17 @@ export class GameAudio {
     if(kind==='open'||kind==='close'||kind==='transition') this.noiseSweep(kind==='transition'?2200:1500,kind==='transition'?120:420,kind==='transition'?.62:.2,kind==='transition'?.14:.085,0,output);
   }
 
+  enemyShot(distance=0) {
+    if(!this.enabled)return; this.unlock(); const ctx=this.ctx,output=this.uiGain; if(!ctx||!output)return;
+    const attenuation=Math.max(.2,1/(1+Math.max(0,distance)/45)),now=ctx.currentTime;
+    this.noiseSweep(1550,260,.23,.105*attenuation,0,output);
+    const osc=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
+    osc.type='sawtooth';osc.frequency.setValueAtTime(280,now);osc.frequency.exponentialRampToValueAtTime(82,now+.2);
+    filter.type='lowpass';filter.frequency.value=1100;gain.gain.setValueAtTime(.0001,now);
+    gain.gain.exponentialRampToValueAtTime(.12*attenuation,now+.025);gain.gain.exponentialRampToValueAtTime(.0001,now+.24);
+    osc.connect(filter);filter.connect(gain);gain.connect(output);osc.start(now);osc.stop(now+.26);
+  }
+
   gustFront(distance=0,intensity=1) {
     if(!this.enabled)return; this.unlock(); const ctx=this.ctx,master=this.master; if(!ctx||!master)return;
     const attenuation=Math.max(.12,1/(1+Math.max(0,distance)/1000))*Math.max(.35,Math.min(1.5,intensity));

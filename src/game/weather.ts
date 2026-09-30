@@ -15,7 +15,7 @@ export interface CloudOpts {
   rain?: number; rainDmg?: number; hail?: number; hailDmg?: number; hailShatter?: number; hailShatterDmg?: number;
   bolts?: number; boltDmg?: number; superChance?: number; superMul?: number; superName?: string;
   tornado?: boolean; tornadoRate?: number; wind?: number; windDmg?: number; supercellChance?: number;
-  length?: number; depth?: number; bow?: number; shade?: number; rainColor?: number; dmgMul?: number; spin?: number;
+  length?: number; depth?: number; bow?: number; shade?: number; rainColor?: number; dmgMul?: number; spin?: number; coreFill?: number;
 }
 
 /** Dynamic-growing volumetric-ish cloud built from instanced puffs, with rainshafts, hail, lightning, tornadoes. */
@@ -60,12 +60,16 @@ export class StormCloud implements Effect {
       // Storm Suppression's rapid small cells used to expose holes between the sparse cloud layers.
       // Interleave an early-forming, stratified core layer so each cell reads as one connected cloud.
       if (k === 'cell') {
-        const fillN = Math.max(40, Math.min(76, Math.round(66 * dens * (this.o.densityScale ?? 1))));
+        // Core-fill cells on a stratified 3D lattice, not a single disk. This keeps a large
+        // suppression parent cloud visually continuous from base through crown at every angle.
+        const fillN = this.o.coreFill ?? Math.max(40, Math.min(76, Math.round(66 * dens * (this.o.densityScale ?? 1))));
+        const layers = this.o.coreFill ? 8 : 4, perLayer = Math.ceil(fillN / layers);
         for (let i = 0; i < fillN; i++) {
-          const [x,z] = disk(i, fillN, R * 0.72, 0.91);
-          const layer = i % 4;
-          this.addPuff(x, b + R * (0.16 + layer * 0.27 + rnd(-0.08, 0.08)), z,
-            R * rnd(0.23, 0.34), rnd(0.035, 0.22), rnd(0.63, 0.86), rnd(0.78, 1.08));
+          const layer = i % layers, point = Math.floor(i / layers);
+          const [x,z] = disk(point, perLayer, R * (this.o.coreFill ? 0.84 : 0.72), 0.91 + layer * 0.41);
+          const layerStep = this.o.coreFill ? 0.145 : 0.27;
+          this.addPuff(x, b + R * (0.14 + layer * layerStep + rnd(-0.035, 0.035)), z,
+            R * (this.o.coreFill ? rnd(0.31, 0.42) : rnd(0.23, 0.34)), rnd(0.025, 0.18), rnd(0.68, 0.9), rnd(0.9, 1.1));
         }
       }
       if(k==='supercell'||k==='cumulus'){

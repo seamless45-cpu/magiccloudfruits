@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GEO, rnd, V } from './effects';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-export type EnemyKind = 'normal' | 'elite' | 'boss';
+export type EnemyKind = 'normal' | 'elite' | 'boss' | 'runner' | 'ranged' | 'brute';
 
 type ShapePart = { geometry: THREE.BufferGeometry; position?: [number, number, number]; scale?: [number, number, number]; rotation?: [number, number, number] };
 const assemble = (parts: ShapePart[]) => {
@@ -69,8 +69,13 @@ const M = {
   star: new THREE.MeshBasicMaterial({ color: 0xffee55 }),
   horn: new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.3 }),
   crown: new THREE.MeshStandardMaterial({ color: 0xffc830, metalness: 1, roughness: 0.25, emissive: 0x442200 }),
+  special: {
+    runner: new THREE.MeshStandardMaterial({ color: 0xff704a, roughness: 0.38, metalness: 0.35, emissive: 0x65140c, emissiveIntensity: 0.8 }),
+    ranged: new THREE.MeshStandardMaterial({ color: 0x7de6f2, roughness: 0.24, metalness: 0.62, emissive: 0x0b637d, emissiveIntensity: 1.1 }),
+    brute: new THREE.MeshStandardMaterial({ color: 0xa28a61, roughness: 0.72, metalness: 0.48, emissive: 0x33230c, emissiveIntensity: 0.35 }),
+  },
 };
-const kindIndex = (kind: EnemyKind) => kind === 'boss' ? 2 : kind === 'elite' ? 1 : 0;
+const kindIndex = (kind: EnemyKind) => kind === 'boss' || kind === 'brute' ? 2 : kind === 'elite' || kind === 'ranged' ? 1 : 0;
 
 export class Enemy {
   kind: EnemyKind; maxHp: number; hp: number; pos = V(); vel = V(); radius: number; height: number; speed: number; scale: number;
@@ -82,17 +87,17 @@ export class Enemy {
   constructor(public g: any, kind: EnemyKind) {
     this.id = Enemy.nextId++;
     this.kind = kind;
-    this.scale = kind === 'boss' ? 3.2 : kind === 'elite' ? 1.6 : 1;
-    this.maxHp = kind === 'boss' ? 2.5e6 : kind === 'elite' ? 1.5e5 : 12000;
-    this.hp = this.maxHp; this.radius = 0.7 * this.scale; this.height = 2.2 * this.scale;
-    this.speed = kind === 'boss' ? 5 : kind === 'elite' ? 6.5 : 7.5;
-    const col = kind === 'boss' ? 0x6f5a55 : kind === 'elite' ? 0x62576b : 0x59636a;
+    this.scale = kind === 'boss' ? 3.2 : kind === 'brute' ? 2.25 : kind === 'elite' ? 1.6 : kind === 'ranged' ? 1.15 : kind === 'runner' ? 0.82 : 1;
+    this.maxHp = kind === 'boss' ? 2.5e6 : kind === 'brute' ? 780000 : kind === 'elite' ? 1.5e5 : kind === 'ranged' ? 24000 : kind === 'runner' ? 8500 : 12000;
+    this.hp = this.maxHp; this.radius = (kind === 'brute' ? 0.9 : kind === 'runner' ? 0.62 : 0.7) * this.scale; this.height = (kind === 'brute' ? 2.45 : 2.2) * this.scale;
+    this.speed = kind === 'boss' ? 5 : kind === 'brute' ? 3.6 : kind === 'elite' ? 6.5 : kind === 'ranged' ? 4.6 : kind === 'runner' ? 12.5 : 7.5;
+    const col = kind === 'boss' ? 0x6f5a55 : kind === 'brute' ? 0x55483b : kind === 'ranged' ? 0x315b68 : kind === 'runner' ? 0x6f3940 : kind === 'elite' ? 0x62576b : 0x59636a;
     this.bodyMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.35, emissive: 0x000000 });
     const inner = new THREE.Group();
     const body = new THREE.Mesh(G.body, this.bodyMat); body.castShadow = true;
     const eyes = new THREE.Mesh(G.eyes, M.eye);
     const armor = new THREE.Mesh(G.armor, M.armor[kindIndex(kind)]); armor.castShadow = true;
-    const core = new THREE.Mesh(G.core, M.cores[kindIndex(kind)]);
+    const core = new THREE.Mesh(G.core, kind === 'runner' || kind === 'ranged' || kind === 'brute' ? M.special[kind] : M.cores[kindIndex(kind)]);
     core.position.set(0, 1.24, 0.42); core.scale.setScalar(kind === 'boss' ? 0.23 : 0.14);
     inner.add(body, eyes, armor, core);
     for (const side of [-1, 1]) {
@@ -101,12 +106,15 @@ export class Enemy {
       const leg = new THREE.Group(); leg.position.set(side * 0.25, 0.55, 0);
       const legMesh = new THREE.Mesh(G.leg, M.limbs[kindIndex(kind)]); legMesh.castShadow = true; leg.add(legMesh); inner.add(leg); this.limbs.push(leg);
     }
-    const crest = new THREE.Mesh(kind === 'normal' ? G.crest : G.horns, M.horn); inner.add(crest);
+    const crest = new THREE.Mesh(kind === 'normal' || kind === 'runner' ? G.crest : G.horns, kind === 'runner' || kind === 'ranged' || kind === 'brute' ? M.special[kind] : M.horn); inner.add(crest);
     if (kind === 'boss') inner.add(new THREE.Mesh(G.crown, M.crown));
+    if (kind === 'runner') { const fins = new THREE.Mesh(G.horns, M.special.runner); fins.position.set(0, 1.4, -0.26); fins.rotation.x = -0.45; fins.scale.setScalar(0.72); inner.add(fins); }
+    if (kind === 'ranged') { const emitter = new THREE.Mesh(G.core, M.special.ranged); emitter.position.set(0, 1.55, -0.48); emitter.scale.setScalar(0.34); inner.add(emitter); const ring = new THREE.Mesh(G.star, M.special.ranged); ring.position.set(0, 1.35, -0.48); ring.rotation.x = Math.PI / 2; ring.scale.setScalar(0.72); inner.add(ring); }
+    if (kind === 'brute') { const plates = new THREE.Mesh(G.armor, M.special.brute); plates.position.y = 0.12; plates.scale.set(1.35, 1.28, 1.28); inner.add(plates); inner.add(new THREE.Mesh(G.crown, M.crown)); }
     inner.scale.setScalar(this.scale); this.mesh.add(inner);
     const bg = new THREE.Mesh(G.bar, M.barBg);
     this.bar = new THREE.Mesh(G.bar, M.bars[kindIndex(kind)]);
-    this.bar.position.z = 0.01; this.barGrp.add(bg, this.bar); this.barGrp.position.y = this.height + 0.6; this.barGrp.scale.setScalar(kind === 'boss' ? 2.5 : kind === 'elite' ? 1.5 : 1);
+    this.bar.position.z = 0.01; this.barGrp.add(bg, this.bar); this.barGrp.position.y = this.height + 0.6; this.barGrp.scale.setScalar(kind === 'boss' ? 2.5 : kind === 'brute' ? 1.9 : kind === 'elite' ? 1.5 : kind === 'ranged' ? 1.2 : 1);
     this.mesh.add(this.barGrp);
     this.cage = new THREE.LineSegments(G.cage, M.cage); this.cage.scale.set(this.radius * 1.8, this.height * 1.1, this.radius * 1.8); this.cage.position.y = this.height * 0.55; this.cage.visible = false;
     this.ice = new THREE.Mesh(G.ice, M.ice); this.ice.scale.set(this.radius * 1.9, this.height * 0.7, this.radius * 1.9); this.ice.position.y = this.height * 0.5; this.ice.visible = false;
@@ -147,10 +155,17 @@ export class Enemy {
     if (!this.immobile) {
       if (this.blind > 0) { this.wanderT -= dt; if (this.wanderT <= 0) { this.wanderT = rnd(0.4, 1.2); const a = Math.random() * 6.28; this.wander.set(Math.cos(a), 0, Math.sin(a)); } mv.copy(this.wander); }
       else if (this.flee > 0) mv.copy(to).multiplyScalar(-1.4);
+      else if (this.kind === 'ranged') {
+        if (dist > 46) mv.copy(to);
+        else if (dist < 25) mv.copy(to).multiplyScalar(-0.9);
+        this.attackCd -= dt;
+        if (dist < 78 && this.attackCd <= 0) { this.attackCd = 2.6; g.enemyAttack(this); }
+        this.mesh.rotation.y = Math.atan2(to.x, to.z);
+      }
       else if (dist > 2.2 + this.radius) mv.copy(to);
       else {
         this.attackCd -= dt;
-        if (this.attackCd <= 0) { this.attackCd = this.kind === 'boss' ? 2 : 1.4; g.enemyAttack(this); }
+        if (this.attackCd <= 0) { this.attackCd = this.kind === 'boss' ? 2 : this.kind === 'brute' ? 2.15 : this.kind === 'runner' ? 1.05 : 1.4; g.enemyAttack(this); }
       }
     }
     if (this.airborne || this.vel.lengthSq() > 0.01) {
@@ -161,7 +176,7 @@ export class Enemy {
     if (this.lift > 0) { this.pos.y += (4 - this.pos.y) * Math.min(1, dt * 4); this.airborne = true; }
     this.pos.addScaledVector(mv, this.speed * dt);
     const arenaRadius = Math.hypot(this.pos.x, this.pos.z); if (arenaRadius > 1330) { this.pos.x *= 1330 / arenaRadius; this.pos.z *= 1330 / arenaRadius; }
-    if (mv.lengthSq() > 0) { this.mesh.rotation.y = Math.atan2(mv.x, mv.z); this.walkT += dt * (this.kind === 'boss' ? 5 : 8); }
+    if (mv.lengthSq() > 0) { this.mesh.rotation.y = Math.atan2(mv.x, mv.z); this.walkT += dt * (this.kind === 'boss' || this.kind === 'brute' ? 5 : this.kind === 'runner' ? 12 : 8); }
     const stride = mv.lengthSq() > 0 ? Math.sin(this.walkT) * 0.38 : 0;
     this.limbs.forEach((limb, i) => { limb.rotation.x = stride * (i % 2 === 0 ? 1 : -1); });
     this.syncVisual(dt);

@@ -250,23 +250,37 @@ export default function App() {
       )}
       {showTitle && !fatal && (
         <div className={`title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto ${leavingTitle ? 'title-screen-exit' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && leavingTitle) setShowTitle(false); }}>
-          <div className="title-card sf-panel w-full max-w-[560px] p-7 sm:p-10 text-center">
-            <div className="title-mark mx-auto mb-6"><span>MC</span><i /></div>
-            <p className="font-orb text-[10px] tracking-[.34em] text-cyan-200/60 mb-3">OPEN FIELD // COMBAT SIMULATION</p>
-            <h1 className="font-orb text-3xl sm:text-5xl font-bold tracking-[.12em] text-white sf-glow">MAGIC CLOUD</h1>
-            <p className="mt-3 text-sm sm:text-base text-cyan-100/65">Choose your power. Take the arena.</p>
-            <div className="title-rule my-7" />
-            <button className="play-btn font-orb px-10 py-4 text-sm tracking-[.2em]" onClick={enterArena} data-ui-sound="transition" disabled={!game || leavingTitle}>
-              <span className="play-icon">▶</span> {leavingTitle ? 'ENTERING ARENA' : 'ENTER ARENA'}
-            </button>
-            <div className="title-menu-actions mt-4 grid grid-cols-2 sm:flex sm:justify-center gap-2">
-              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={openSettings} data-ui-sound="open">SETTINGS</button>
-              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={toggleHelp} data-ui-sound="toggle">CONTROLS</button>
-              <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={openUpdates} data-ui-sound="open">UPDATE LOG</button>
-              <button className={`sf-btn px-4 py-2 font-orb text-[10px] ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} disabled={!game}>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</button>
+          <div className="title-card main-menu-card sf-panel w-full max-w-[780px] p-5 sm:p-8">
+            <header className="menu-header flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3"><div className="title-mark"><span>MC</span><i /></div><div><p className="font-orb text-[9px] tracking-[.3em] text-cyan-100/60">OPEN FIELD // OPERATIONS</p><p className="mt-1 text-[10px] text-cyan-100/40">COMBAT SIMULATION · EST. 2026</p></div></div>
+              <div className="menu-release font-orb text-[9px]">BUILD 1.5.0 <span>●</span></div>
+            </header>
+            <div className="title-rule my-5" />
+            <div className="menu-columns grid grid-cols-1 md:grid-cols-[1.1fr_.9fr] gap-6 md:gap-8">
+              <section className="menu-brief min-w-0">
+                <p className="menu-kicker font-orb text-[9px] tracking-[.28em] text-amber-200/80">FIELD COMMAND // READY</p>
+                <h1 className="mt-3 font-orb text-4xl sm:text-6xl font-bold leading-none tracking-[.08em] text-white sf-glow">MAGIC<br/><span className="menu-title-second">CLOUD</span></h1>
+                <p className="mt-4 max-w-sm text-sm leading-relaxed text-cyan-50/65">Choose your power. Read the weather. Take the arena.</p>
+                <div className="menu-readouts mt-6 grid grid-cols-3 gap-2">
+                  <div><b>FIELD</b><span>OPEN</span></div><div><b>WEATHER</b><span>LIVE</span></div><div><b>HOSTILES</b><span>ACTIVE</span></div>
+                </div>
+                <div className="menu-threat-strip mt-3 flex items-center gap-2"><span className="menu-threat-lamp"/><span>NEW THREATS IDENTIFIED</span><b>STALKER · CASTER · BRUTE</b></div>
+                {help && <p className={`menu-control-note mt-5 text-[9px] leading-relaxed text-cyan-100/45 ${helpClosing ? 'ui-panel-closing' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && helpClosing) { setHelp(false); setHelpClosing(false); } }}>WASD MOVE · SHIFT RUN · SPACE JUMP · RMB ORBIT · LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
+              </section>
+              <nav className="menu-actions flex flex-col gap-2" aria-label="Main menu">
+                <p className="font-orb mb-1 text-[9px] tracking-[.2em] text-cyan-100/45">SELECT OPERATION</p>
+                <button className="play-btn menu-enter w-full px-4 py-4 text-left" onClick={enterArena} data-ui-sound="transition" disabled={!game || leavingTitle}>
+                  <span className="menu-action-index">01 / DEPLOY</span><strong className="block mt-1 font-orb text-base tracking-[.16em]">{leavingTitle ? 'ENTERING ARENA' : 'ENTER ARENA'} <span className="float-right">↗</span></strong><small className="mt-1 block text-[9px] tracking-[.08em]">DROP INTO THE OPEN FIELD</small>
+                </button>
+                <div className="menu-utility-grid grid grid-cols-2 gap-2">
+                  <button className="menu-utility sf-btn" onClick={openSettings} data-ui-sound="open"><b>02</b><span>SETTINGS</span><i>↗</i></button>
+                  <button className="menu-utility sf-btn" onClick={toggleHelp} data-ui-sound="toggle"><b>03</b><span>CONTROLS</span><i>↗</i></button>
+                  <button className="menu-utility sf-btn" onClick={openUpdates} data-ui-sound="open"><b>04</b><span>UPDATE LOG</span><i>↗</i></button>
+                  <button className={`menu-utility sf-btn ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} disabled={!game} data-ui-sound="toggle"><b>05</b><span>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</span><i>{soundEnabled ? '♫' : '×'}</i></button>
+                </div>
+              </nav>
             </div>
-            {help && <p className={`mt-5 text-[10px] leading-relaxed text-cyan-100/40 ${helpClosing ? 'ui-panel-closing' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && helpClosing) { setHelp(false); setHelpClosing(false); } }}>WASD MOVE · SHIFT RUN · P FIRST PERSON · SPACE JUMP · TAP / LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
-            <p className="mt-7 font-orb text-[9px] tracking-[.18em] text-cyan-300/30">WIDE OPEN ARENA · SANDBOX AVAILABLE IN SETTINGS</p>
+            <footer className="menu-footer mt-5 flex items-center justify-between gap-3"><span>ARENA SYSTEMS · SANDBOX AVAILABLE IN SETTINGS</span><span>ALL SYSTEMS {game ? 'ONLINE' : 'BOOTING'}</span></footer>
           </div>
         </div>
       )}

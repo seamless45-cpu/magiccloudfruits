@@ -1,13 +1,15 @@
 import type { AnimationEvent, CSSProperties } from 'react';
 
 const PATCHES = [
-  { tag: 'STORM SUPPRESSION', title: 'Continuous cloud formation', detail: 'Delayed storm cells now stay anchored to the cast point and form around a broad parent cloud to close gaps across the formation.' },
-  { tag: 'UI AUDIO', title: 'Clicks and transitions are audible', detail: 'UI cues now use a dedicated sound bus so short clicks and the arena-entry transition are not buried by the weather ambience fade.' },
+  { tag: 'ENEMIES', title: 'Three new arena archetypes', detail: 'Gale Stalkers rush in, Storm Casters fire aimed energy shots, and armored Cloudbreakers resist knockback.' },
+  { tag: 'STORM SUPPRESSION', title: 'Stratified cloud core', detail: 'A dense three-dimensional parent cloud bridges the delayed cells into one continuous bank anchored to the cast point.' },
+  { tag: 'MAIN MENU', title: 'Operations console redesign', detail: 'A split field briefing and operation selector adds live status readouts, threat intelligence, and clearer navigation.' },
+  { tag: 'AUDIO + TRANSITIONS', title: 'Dedicated feedback bus', detail: 'UI clicks and arena transitions bypass ambience fades; added a distinct Storm Caster shot cue and sharper menu transitions.' },
   { tag: 'PERFORMANCE', title: 'Lighter interface motion', detail: 'Removed painted masks, filters and continuous skill-row shimmer while keeping the larger panel and HUD transitions.' },
-  { tag: 'WEATHER SYSTEMS', title: 'Outflow and gust-front overhaul', detail: 'Microburst outflow reaches eight times its former range. Derecho and squall-line gust fronts have a 3.72× wider footprint, with dust spread across the enlarged front.' },
+  { tag: 'WEATHER SYSTEMS', title: 'Outflow and gust-front overhaul', detail: 'Microburst outflow reaches eight times its former range. Derecho and squall-line gust fronts have a 3.72× wider footprint.' },
   { tag: 'COMBAT', title: 'Storm force affects the arena', detail: 'Downburst winds push enemies outward instead of only damaging them. Microburst source clouds are 30% more compact.' },
   { tag: 'MOBILE CONTROLS', title: 'Independent joystick and camera', detail: 'Dragging the movement stick while orbiting the camera no longer triggers pinch zoom.' },
-  { tag: 'INTERFACE + AUDIO', title: 'Combat-console presentation', detail: 'HUD panels deploy and retract with mechanical shutters. Added menu, button, skill, equipment, storm-gust and arena-transition sound cues.' },
+  { tag: 'INTERFACE + AUDIO', title: 'Combat-console presentation', detail: 'HUD panels deploy and retract with mechanical shutters. Added menu, button, skill, equipment, storm-gust and arena-transition cues.' },
 ];
 
 export function UpdateLog({ closing, onClose, onExited }: { closing: boolean; onClose: () => void; onExited: () => void }) {
@@ -20,7 +22,7 @@ export function UpdateLog({ closing, onClose, onExited }: { closing: boolean; on
           <div>
             <div className="font-orb text-[9px] tracking-[.28em] text-emerald-200/75">FIELD BULLETIN // 30 SEP 2026</div>
             <h2 id="update-log-title" className="mt-1 font-orb text-xl sm:text-2xl tracking-[.12em] text-white">UPDATE LOG</h2>
-            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.4.1</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
+            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.0</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
           </div>
           <button className="sf-btn px-3 py-2 font-orb text-xs" onClick={onClose} data-ui-sound="close" aria-label="Close update log">CLOSE ×</button>
         </header>

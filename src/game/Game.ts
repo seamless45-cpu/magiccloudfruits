@@ -11,7 +11,7 @@ import { Bolt, boltStats, type BoltOpts } from './lightning';
 import { Enemy } from './enemies';
 import type { Effect, HitOpts, GraphicsSettings, ItemDef } from './types';
 import { ITEMS } from './items';
-import { V, rnd, slashMesh, Timed } from './effects';
+import { V, rnd, slashMesh, Timed, Projectile, GEO } from './effects';
 
 export const SKILL_KEYS = ['z', 'x', 'c', 'v', 'b', 'f', 'g', 'n', 'm', 'l', 'k', 'j'];
 export const MAX_ZOOM = 900, MIN_ZOOM = 4;
@@ -82,6 +82,9 @@ export class Game {
     for (let i = 0; i < 48; i++) this.enemies.push(new Enemy(this, 'normal'));
     for (let i = 0; i < 7; i++) this.enemies.push(new Enemy(this, 'elite'));
     for (let i = 0; i < 2; i++) this.enemies.push(new Enemy(this, 'boss'));
+    for (let i = 0; i < 6; i++) this.enemies.push(new Enemy(this, 'runner'));
+    for (let i = 0; i < 4; i++) this.enemies.push(new Enemy(this, 'ranged'));
+    for (let i = 0; i < 2; i++) this.enemies.push(new Enemy(this, 'brute'));
     this.applySettings(settings);
     this.bindInput();
     window.addEventListener('resize', this.resize); this.resize();
@@ -490,7 +493,7 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     }
     if (o.knock && o.from) {
       const dir = V(e.pos.x - o.from.x, 0, e.pos.z - o.from.z); if (dir.lengthSq() < 1e-4) dir.set(rnd(-1, 1), 0, rnd(-1, 1)); dir.normalize();
-      const kb = e.kind === 'boss' ? 0.35 : e.kind === 'elite' ? 0.7 : 1;
+      const kb = e.kind === 'boss' ? 0.35 : e.kind === 'brute' ? 0.22 : e.kind === 'elite' ? 0.7 : 1;
       e.vel.x = dir.x * o.knock * 2.2 * kb; e.vel.z = dir.z * o.knock * 2.2 * kb; e.vel.y = (o.knockUp ?? o.knock * 0.9) * kb; e.airborne = true;
     }
     if (o.pull) { const dir = o.pull.clone().sub(e.pos).setY(0); const l = dir.length(); if (l > 0.5) e.pos.addScaledVector(dir.normalize(), Math.min(l, 6)); }
@@ -510,10 +513,34 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     const P = this.player;
     if (e.hacked > 0) { P.hp = Math.min(P.maxHp, P.hp + (e.kind === 'boss' ? 1500 : 400)); this.fx.spawn(P.pos.x, 1.5, P.pos.z, 0, 3, 0, 0x33ff88, 1.2, 0.6, {}); return; }
     if (this.settings.sandbox || P.invincible > 0) { if (this.settings.sandbox) P.hp = P.maxHp; return; }
-    P.hp -= e.kind === 'boss' ? 1500 : e.kind === 'elite' ? 600 : 180;
-    this.screen('#ff2030', 0.18, 3);
-    if (this.buff('alarm')) { this.strike(e.pos.x, e.pos.z, { color: 0xff2a2a, core: 0xffd0d0, width: 0.7, n: 2, h: 40 }); this.damage(e, 0, { percentMax: 0.2, noCharge: true }); }
-    if (P.hp <= 0) { P.hp = P.maxHp; P.pos.set(0, 0, 0); this.toast('YOU WERE DEFEATED — RESPAWNED', '#ff5566'); }
+    const applyHit = (amount: number) => {
+      if (this.settings.sandbox || P.invincible > 0) return;
+      P.hp -= amount; this.screen('#ff2030', 0.18, 3);
+      if (this.buff('alarm')) { this.strike(e.pos.x, e.pos.z, { color: 0xff2a2a, core: 0xffd0d0, width: 0.7, n: 2, h: 40 }); this.damage(e, 0, { percentMax: 0.2, noCharge: true }); }
+      if (P.hp <= 0) { P.hp = P.maxHp; P.pos.set(0, 0, 0); this.toast('YOU WERE DEFEATED — RESPAWNED', '#ff5566'); }
+    };
+    if (e.kind === 'ranged') {
+      const start = e.pos.clone().add(V(0, e.height * 0.68, 0));
+      const target = P.pos.clone().add(V(0, 1.15, 0));
+      const velocity = target.sub(start).normalize().multiplyScalar(34);
+      const orb = new THREE.Mesh(GEO.sphereLo, new THREE.MeshBasicMaterial({ color: 0x79eaff, toneMapped: false }));
+      orb.scale.setScalar(0.62); this.audio.enemyShot(e.pos.distanceTo(P.pos));
+      let resolved = false;
+      const impact = (at: THREE.Vector3) => {
+        if (resolved) return; resolved = true;
+        this.fx.spawn(at.x, at.y, at.z, rnd(-1, 1), rnd(-1, 2), rnd(-1, 1), 0x8df3ff, 1.15, 0.22, {});
+        if (Math.hypot(at.x - P.pos.x, at.z - P.pos.z) < 4.2 && at.y < 6) applyHit(340);
+      };
+      this.add(new Projectile(this, { pos: start, vel: velocity, mesh: orb, life: 2.8, hitR: 1.05, hitEnemies: false, hitGround: false,
+        onHit: impact,
+        trail: (at, _dt, self) => {
+          if (Math.hypot(at.x - P.pos.x, at.z - P.pos.z) < 2.4 && at.y < 6) { impact(at); self.dead = true; }
+          if (Math.random() < 0.38) this.fx.spawn(at.x, at.y, at.z, 0, 0, 0, 0x54dfff, 0.42, 0.12, {});
+        },
+      }));
+      return;
+    }
+    applyHit(e.kind === 'boss' ? 1500 : e.kind === 'brute' ? 950 : e.kind === 'elite' ? 600 : e.kind === 'runner' ? 240 : 180);
   }
   jump() { if (this.player.grounded) { this.player.vel.y = 13; this.player.grounded = false; } }
   slashFx(color: number, size: number, dist = 1.6, tilt = 0) {
