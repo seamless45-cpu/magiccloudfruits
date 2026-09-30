@@ -20,7 +20,7 @@ export const LIGHTNING_FRUIT: ItemDef = {
       const dir = (tg ? tg.pos.clone().setY(1.5) : g.aim.clone().setY(1.5)).sub(P).normalize();
       g.add(new Projectile(g, { pos: P.clone(), vel: dir.multiplyScalar(30), mesh: grp, homing: () => (tg && !tg.dead ? tg.pos.clone().setY(1.5) : null), turn: 4, hitR: 2.5, life: 10,
         onHit: (hp) => { const R = g.aoe(30); explosion(g, hp.setY(0), R, { core: 0xfffbe0, mid: Y, ring: CY, smoke: 0x2a2a30, debris: 0x55504a, spikes: 12, shake: 22 }); for (let i = 0; i < 8; i++) { const p = around(hp, R * 0.7); g.strike(p.x, p.z, { color: Y, core: 0xffffff, width: 0.8, h: 60 }); } g.damageRadius(hp, R, 30000, { stun: 1 }); },
-        trail: (p, dt, self) => { grp.lookAt(p.clone().add(self.o.vel)); aura.scale.set(2.6 + Math.random() * 0.5, 2.2 + Math.random() * 0.5, 3.6); g.fx.spawn(p.x + rnd(-1, 1), p.y + rnd(-1, 1), p.z + rnd(-1, 1), 0, 0, 0, Y, 1.2, 0.3, {});
+        trail: (p, _dt, self) => { grp.lookAt(p.clone().add(self.o.vel)); aura.scale.set(2.6 + Math.random() * 0.5, 2.2 + Math.random() * 0.5, 3.6); g.fx.spawn(p.x + rnd(-1, 1), p.y + rnd(-1, 1), p.z + rnd(-1, 1), 0, 0, 0, Y, 1.2, 0.3, {});
           if (Math.random() < 0.5) g.bolt(p.clone(), p.clone().add(V(rnd(-4, 4), rnd(-3, 3), rnd(-4, 4))), { color: Y, width: 0.2, life: 0.12, segs: 8, branches: 1 }); } }));
     } },
     { name: 'Tormenta', cd: 8, info: '17 bolts / 0.22s · 4.5m', cast: (g) => { g.anim('raise', 0.5); const c = g.aim.clone(); g.every(0.22, 17, () => { const p = around(c, 30); const R = g.aoe(4.5); g.strike(p.x, p.z, { color: CY, core: 0xffffff, width: 0.9, n: 3, h: 95 }); explosion(g, p, R, { core: 0xffffff, mid: CY, ring: Y, smoke: 0x2a2f38, debris: 0x4a4a50, debrisCount: 4, smokeCount: 4, shake: 4 }); g.damageRadius(p, R, 11000, { stun: 0.3 }); }); } },
@@ -79,13 +79,13 @@ export const LIGHTNING_FRUIT: ItemDef = {
       for (let i = 0; i < N; i++) { const p = around(C, 190); p.y = rnd(70, 95); cps.push(p); }
       const grp = new THREE.Group(); grp.add(im); im.frustumCulled = false;
       const offs = Array.from({ length: N * PUFF }, () => V(rnd(-9, 9), rnd(-2, 3), rnd(-9, 9)));
-      g.add(new Timed(g, grp, 0.1 * N + 3, (k, t) => {
+      g.add(new Timed(g, grp, 0.1 * N + 3, (_k, t) => {
         const f = Math.min(1, t / 1.2) * Math.min(1, (0.1 * N + 3 - t) / 1.5);
         for (let i = 0; i < N * PUFF; i++) { const c = cps[Math.floor(i / PUFF)]; sc.setScalar(rnd(5.8, 6.2) * f + 0.001); m.compose(c.clone().add(offs[i]), q, sc); im.setMatrixAt(i, m); }
         im.instanceMatrix.needsUpdate = true;
       }));
       g.after(1, () => g.every(0.1, N, (i: number) => { const c = cps[i]; const p = V(c.x + rnd(-5, 5), 0, c.z + rnd(-5, 5)); const R = g.aoe(16);
-        for (let n = 0; n < 3; n++) g.bolt(V(c.x + rnd(-4, 4), c.y - 3, c.z + rnd(-4, 4)), V(p.x + rnd(-0.6, 0.6), 0.1, p.z + rnd(-0.6, 0.6)), { color: Y, core: 0xffffff, width: 1, life: 0.35, segs: 30, jag: 0.06, branches: 4 });
+        for (let n = 0; n < 3; n++) g.bolt(V(c.x + rnd(-4, 4), c.y - 3, c.z + rnd(-4, 4)), V(p.x + rnd(-0.6, 0.6), 0.1, p.z + rnd(-0.6, 0.6)), { color: Y, core: 0xffffff, width: 1, life: 0.35, segs: 18, jag: 0.04, branches: 2 });
         explosion(g, p, R, { core: 0xfffbe0, mid: 0xffc020, ring: Y, smoke: 0x2a2a30, debris: 0x4a4a45, debrisCount: 6, smokeCount: 5, shake: 6 }); g.damageRadius(p, R, 12000, { stun: 3 }); }));
     } },
   ],
@@ -121,5 +121,52 @@ export const POLE: ItemDef = {
       for (const e of g.enemies) { if (e.dead) continue; const d = e.pos.distanceTo(c); if (d < suck + R && d > 0.5) e.pos.lerp(V(c.x, e.pos.y, c.z), Math.min(1, dt * 3)); }
       while (cont.acc >= 0.1) { cont.acc -= 0.1; P.hp -= P.maxHp * 0.01; const p = around(c, R * 0.6); g.strike(p.x, p.z, { color: Y, core: 0xffffff, width: 1.2 + buff * 2, n: 2, h: 120, life: 0.25 }); g.damageRadius(c, R, 8000, { stun: 0.3, noCharge: true }); g.shake(c, 5, 0.1); }
     }, holdEnd: (g) => { if (cont) { g.scene.remove(cont.ring); (cont.ring.material as any).dispose(); cont = null; } } },
+    { name: 'Thunder Lance', cd: 6, info: 'Fast lightning spear · impact burst · chains to 3 enemies', cast: (g) => {
+      faceAim(g); g.anim('punch', 0.25);
+      const start = g.handPos(), dir = g.player.facing.clone().normalize();
+      const grp = new THREE.Group();
+      const shaft = new THREE.Mesh(GEO.sphere, addMat(Y, 0.95)); shaft.scale.set(0.34, 0.34, 3.1);
+      const tip = new THREE.Mesh(GEO.sphere, addMat(0xffffff, 0.95)); tip.position.z = 2.8; tip.scale.setScalar(0.58);
+      grp.add(shaft, tip); grp.quaternion.setFromUnitVectors(V(0, 0, 1), dir);
+      g.add(new Projectile(g, { pos: start.clone(), vel: dir.clone().multiplyScalar(86), mesh: grp, hitR: 1.8, life: 1.25, hitGround: false,
+        onHit: (p, target) => {
+          const impact = p.clone().setY(0), radius = g.aoe(6);
+          explosion(g, impact, radius, { core: 0xffffff, mid: Y, ring: 0xfff4a6, smoke: 0x332e20, debrisCount: 3, smokeCount: 4, shake: 5 });
+          g.damageRadius(impact, radius, 7600, { stun: 0.5, knock: 5 });
+          const origin = target && !target.dead ? target.pos.clone().setY(1.5) : impact.clone().setY(1.5);
+          const chained = g.enemies.filter((e: any) => !e.dead && e !== target && e.pos.distanceToSquared(impact) < 28 * 28)
+            .sort((a: any, b: any) => a.pos.distanceToSquared(impact) - b.pos.distanceToSquared(impact)).slice(0, 3);
+          let previous = origin;
+          for (const enemy of chained) {
+            const next = enemy.pos.clone().setY(1.5);
+            g.bolt(previous, next, { color: Y, core: 0xffffff, width: 0.55, life: 0.28, segs: 12, jag: 0.05, branches: 1 });
+            g.damage(enemy, 4200, { stun: 0.4, from: previous.clone() }); previous = next;
+          }
+        },
+        trail: (p) => g.fx.spawn(p.x, p.y, p.z, -dir.x * 3, 1, -dir.z * 3, 0xfff2a0, 0.7, 0.2, {})
+      }));
+    } },
+    { name: 'Storm Vault', cd: 9, info: 'Aim-directed 32m lightning dash · thunderclap landing burst', cast: (g) => {
+      faceAim(g); const P = g.player, start = P.pos.clone(), dir = P.facing.clone().normalize(), end = start.clone().addScaledVector(dir, 32);
+      P.invincible = Math.max(P.invincible, 0.48); P.lockMove = 0.36; g.anim('slash', 0.36);
+      let landed = false;
+      g.add(new Timed(g, new THREE.Group(), 0.52, (_k, t) => {
+        if (t < 0.32) {
+          const k = t / 0.32, eased = 1 - (1 - k) * (1 - k);
+          P.pos.lerpVectors(start, end, eased); P.mesh.position.copy(P.pos);
+          if (Math.random() < 0.8) g.fx.spawn(P.pos.x, 1.2, P.pos.z, rnd(-3, 3), rnd(1, 5), rnd(-3, 3), 0xffe14a, 0.8, 0.22, {});
+        } else if (!landed) {
+          landed = true; const at = end.clone().setY(0), radius = g.aoe(11);
+          explosion(g, at, radius, { core: 0xffffff, mid: Y, ring: 0xfff3a1, smoke: 0x36312a, debrisCount: 6, smokeCount: 8, shake: 11 });
+          g.damageRadius(at, radius, 12500, { knock: 10, stun: 0.8 });
+          for (let i = 0; i < 6; i++) {
+            const p = around(at, radius * 0.75);
+            g.strike(p.x, p.z, { color: Y, core: 0xffffff, width: 0.65, h: 34, life: 0.24, segs: 12 });
+            g.damageRadius(V(p.x, 0, p.z), 3, 2200, { stun: 0.25, noCharge: true });
+          }
+          g.shake(at, 12, 0.45);
+        }
+      }));
+    } },
   ],
 };

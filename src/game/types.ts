@@ -35,7 +35,11 @@ export interface ItemDef {
 
 export interface GraphicsSettings {
   preset: 'low' | 'medium' | 'high' | 'ultra';
+  sandbox: boolean;
   resolution: number; shadows: boolean; shadowRes: number; bloom: boolean; bloomStrength: number;
   particles: number; debris: number; maxBolts: number; fog: boolean; exposure: number;
-  shake: number; showFps: boolean; antialiasFxaa: boolean; drawDistance: number; clouds: number;
+  shake: number; positionShake: boolean; rotationShake: boolean; showFps: boolean; antialiasFxaa: boolean;
+  frameInterpolation: boolean; frameInterpolationMethod: 'linear' | 'frameHold'; motionBlur: boolean; motionBlurStrength: number;
+  lightningSegments: number; lightningJitter: number; lightningBranches: number; lightningJaggedness: number; lightningWidth: number; lightningHeight: number;
+  drawDistance: number; clouds: number;
 }

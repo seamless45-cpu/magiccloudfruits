@@ -65,8 +65,8 @@ export const QUAKE_FRUIT: ItemDef = {
       g.after(0.5, () => {
         dirs.forEach((d, si) => {
           const side = V(-d.z, 0, d.x);
-          for (let i = 0; i < 3; i++) { const from = c.clone().addScaledVector(d, 110).addScaledVector(side, (i - 1) * 32); g.add(new Tsunami(g, from, from.clone().addScaledVector(d, -110), 30, 8, 45, 7000)); }
-          g.after(0.6, () => { const from = c.clone().addScaledVector(d, 160); g.add(new Tsunami(g, from, c.clone(), 120, 30, 50, 21000, 0x1558b0)); });
+          for (let i = 0; i < 3; i++) { const from = c.clone().addScaledVector(d, 110).addScaledVector(side, (i - 1) * 32); g.add(new Tsunami(g, from, from.clone().addScaledVector(d, -110), 150, 40, 45, 7000)); }
+          g.after(0.6, () => { const from = c.clone().addScaledVector(d, 160); g.add(new Tsunami(g, from, c.clone(), 600, 150, 50, 21000, 0x1558b0)); });
           if (si === 0) g.toast('SEAQUAKE — TSUNAMIS INBOUND', '#5fd7ff');
         });
       });

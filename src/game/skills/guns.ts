@@ -14,14 +14,14 @@ function fragments(g: any, c: THREE.Vector3, n: number, speed: number, dmg: numb
     const m = new THREE.Mesh(shardGeo, fire ? shardMatFire : shardMatIce); m.userData.shared = true;
     const col = fire ? FIRE : ICE;
     g.add(new Projectile(g, { pos: c.clone().setY(1.5), vel: d.multiplyScalar(speed), mesh: m, hitR: 1.2, life: 0.6, gravity: 20, pierce: true,
-      onHit: (p, e) => { if (e) { g.damage(e, dmg, { noCharge: true, skillHit: true }); onEnemy?.(e); } },
-      trail: (p, dt, self) => { m.lookAt(p.clone().add(self.o.vel)); if (Math.random() < 0.4) g.fx.spawn(p.x, p.y, p.z, 0, 0, 0, col, 0.5, 0.15, {}); } }));
+      onHit: (_p, e) => { if (e) { g.damage(e, dmg, { noCharge: true, skillHit: true }); onEnemy?.(e); } },
+      trail: (p, _dt, self) => { m.lookAt(p.clone().add(self.o.vel)); if (Math.random() < 0.4) g.fx.spawn(p.x, p.y, p.z, 0, 0, 0, col, 0.5, 0.15, {}); } }));
   }
 }
 const iceMul = (g: any) => (g.buff('iceBombard') ? 78001 : 1);
 const fireMul = (g: any) => (g.buff('hellFury') ? 12501 : 1);
 
-function shoot(g: any, color: number) {
+function shoot(g: any) {
   faceAim(g); const muzzle = g.handPos().addScaledVector(g.player.facing, 0.6); const tg = g.autoAim(220);
   const to = tg ? tg.pos.clone().setY(tg.height * 0.55) : g.aim.clone().setY(1);
   if (tg) { const d = to.clone().sub(muzzle).setY(0).normalize(); g.player.facing.copy(d); }
@@ -32,11 +32,11 @@ export const RIME_FRUIT: ItemDef = {
   id: 'rime', name: 'Rimefracture Fruit', type: 'fruit', color: '#9fe8ff', glyph: '❄',
   passive: 'Gun (manual, auto-aim, 0.05s): 45% icicle ×76 dmg + 40m ice-ball burst',
   m1: { gun: true, interval: 0.05, onHit: (g) => {
-    const { muzzle, tg, to } = shoot(g, ICE); const mul = iceMul(g);
+    const { muzzle, tg, to } = shoot(g); const mul = iceMul(g);
     if (Math.random() < 0.45) {
       const m = new THREE.Mesh(new THREE.ConeGeometry(0.35, 2.2, 6).rotateX(Math.PI / 2), addMat(0xe0faff, 1)); m.userData.ownGeo = true;
       g.add(new Projectile(g, { pos: muzzle.clone(), vel: to.clone().sub(muzzle).normalize().multiplyScalar(260), mesh: m, homing: () => (tg && !tg.dead ? tg.pos.clone().setY(tg.height * 0.55) : null), turn: 30, hitR: 1, life: 2,
-        trail: (p, dt, self) => { m.lookAt(p.clone().add(self.o.vel)); g.fx.spawn(p.x, p.y, p.z, 0, 0, 0, ICE, 0.7, 0.2, {}); },
+        trail: (p, _dt, self) => { m.lookAt(p.clone().add(self.o.vel)); g.fx.spawn(p.x, p.y, p.z, 0, 0, 0, ICE, 0.7, 0.2, {}); },
         onHit: (p, e) => { if (e) g.damage(e, 2000 * 76 * mul, {}); const tp = (e ?? { pos: p }).pos.clone().setY(0);
           fallingRock(g, tp, 4, 120, 0xcfeeff, 0x7fd8ff, (ip) => { const R = g.aoe(40); explosion(g, ip, R, { core: 0xffffff, mid: 0x7fd8ff, ring: 0xc8f4ff, smoke: 0xcfe6f0, debris: 0xbfeeff, shake: 10, debrisCount: 20 }); g.damageRadius(ip, R, 30000 * mul, {}); fragments(g, ip, 16, 120, 6000 * mul, false); }, 90, 0.2); } }));
     } else {
@@ -55,7 +55,7 @@ export const RIME_FRUIT: ItemDef = {
     { name: 'Ice Bombard', cd: 30, info: 'Gun ×78,001 dmg · -77% fire CD · freeze 3s · 15s', cast: (g) => {
       g.buffs.iceBombard = g.time + 15; g.toast('ICE BOMBARD — SUPERPOWER STATE', '#9fe8ff'); shockwave(g, g.player.pos, 20, 0.6, ICE, 0.4);
       const grp = new THREE.Group(); const aura = new THREE.Mesh(GEO.sphere, addMat(ICE, 0.18)); grp.add(aura);
-      g.add(new Timed(g, grp, 15, (k, t) => { grp.position.copy(g.player.pos).setY(1); aura.scale.setScalar(1.8 + Math.sin(t * 8) * 0.15); if (Math.random() < 0.6) g.fx.spawn(g.player.pos.x + rnd(-1.5, 1.5), rnd(0, 2.5), g.player.pos.z + rnd(-1.5, 1.5), 0, 2, 0, 0xdff8ff, 0.3, 0.8, {}); }));
+      g.add(new Timed(g, grp, 15, (_k, t) => { grp.position.copy(g.player.pos).setY(1); aura.scale.setScalar(1.8 + Math.sin(t * 8) * 0.15); if (Math.random() < 0.6) g.fx.spawn(g.player.pos.x + rnd(-1.5, 1.5), rnd(0, 2.5), g.player.pos.z + rnd(-1.5, 1.5), 0, 2, 0, 0xdff8ff, 0.3, 0.8, {}); }));
     } },
     { name: 'Snowy Destruction', cd: 8, info: 'Warm-up 0.5s (invincible) · 5000m blast · freeze 10s', cast: (g) => {
       const P = g.player; P.invincible = Math.max(P.invincible, 0.7); P.lockMove = 0.6; g.anim('charge', 0.5);
@@ -83,7 +83,7 @@ export const WILDFIRE_FRUIT: ItemDef = {
   id: 'wildfire', name: 'Wildfire Fruit', type: 'fruit', color: '#ff6a1a', glyph: '🜂',
   passive: 'Gun (manual, auto-aim, 0.1s): 35% fireball ×151 + 45m burst · <50% HP ×11 & AoE +300%',
   m1: { gun: true, interval: 0.1, onHit: (g) => {
-    const { muzzle, tg, to } = shoot(g, FIRE); const mul = fireMul(g);
+    const { muzzle, tg, to } = shoot(g); const mul = fireMul(g);
     if (Math.random() < 0.35) {
       const grp = new THREE.Group(); const b = new THREE.Mesh(GEO.sphere, addMat(0xffc060, 1)); b.scale.setScalar(0.7); const a = new THREE.Mesh(GEO.sphere, addMat(FIRE, 0.5)); a.scale.setScalar(1.2); grp.add(b, a);
       g.add(new Projectile(g, { pos: muzzle.clone(), vel: to.clone().sub(muzzle).normalize().multiplyScalar(200), mesh: grp, homing: () => (tg && !tg.dead ? tg.pos.clone().setY(tg.height * 0.55) : null), turn: 30, hitR: 1.2, life: 2,
