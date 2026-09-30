@@ -57,6 +57,17 @@ export class StormCloud implements Effect {
       } else {
         const nc=N(26);for(let i=0;i<nc;i++){const [x,z]=disk(i,nc,R*.52,.37);this.addPuff(x,b+R*rnd(.18,1.15),z,R*rnd(.17,.25),rnd(.08,.68),rnd(.62,.84),rnd(.72,1.05));}
       }
+      // Storm Suppression's rapid small cells used to expose holes between the sparse cloud layers.
+      // Interleave an early-forming, stratified core layer so each cell reads as one connected cloud.
+      if (k === 'cell') {
+        const fillN = Math.max(40, Math.min(76, Math.round(66 * dens * (this.o.densityScale ?? 1))));
+        for (let i = 0; i < fillN; i++) {
+          const [x,z] = disk(i, fillN, R * 0.72, 0.91);
+          const layer = i % 4;
+          this.addPuff(x, b + R * (0.16 + layer * 0.27 + rnd(-0.08, 0.08)), z,
+            R * rnd(0.23, 0.34), rnd(0.035, 0.22), rnd(0.63, 0.86), rnd(0.78, 1.08));
+        }
+      }
       if(k==='supercell'||k==='cumulus'){
         // Broad, flattened anvil canopy: it develops late on Cumulonimbus and fills the supercell crown.
         const na=N(k==='supercell'?42:30);for(let i=0;i<na;i++){const [x,z]=disk(i,na,R*(k==='supercell'?1.55:1.42),2.8);
@@ -264,7 +275,7 @@ export class StormCloud implements Effect {
 
 /** Tornado: dense helical condensation funnel, turbulent dust, and realistic suction. */
 export class Tornado implements Effect {
-  t = 0; ps: ParticleSystem; cone: THREE.Mesh; cloudPuffs: THREE.InstancedMesh; pos = V(); wander = V(); ang: Float32Array; hgt: Float32Array; spd: Float32Array; N: number; puffN: number; puffH: Float32Array; puffPhase: Float32Array; puffSize: Float32Array; dmgT = 0;
+  t = 0; ps: ParticleSystem; cone: THREE.Mesh; cloudPuffs: THREE.InstancedMesh; pos = V(); wander = V(); ang: Float32Array; hgt: Float32Array; spd: Float32Array; N: number; puffN: number; puffH: Float32Array; puffPhase: Float32Array; puffSize: Float32Array; dmgT = 0; dustAcc = 0; dustSeq = 0;
   constructor(public g: any, public cloud: StormCloud | null, public baseR: number, public mph: number, public life: number, fixed?: THREE.Vector3, public dmg = 2500) {
     this.N = Math.round(540 * g.settings.particles) + 100;
     this.ps = new ParticleSystem(this.N, false); g.scene.add(this.ps.points);
@@ -307,6 +318,21 @@ export class Tornado implements Effect {
     }
     ['position', 'aColor', 'aSize', 'aAlpha'].forEach(n => (this.ps.geo.attributes[n] as THREE.BufferAttribute).needsUpdate = true);
     this.cone.position.copy(this.pos); this.cone.scale.set(topR * 0.72 * k, H, topR * 0.72 * k); this.cone.rotation.y += dt * 2.4;
+    // A bounded, wind-advected dust skirt makes the ground contact read as a real debris cloud.
+    this.dustAcc += dt * 42 * Math.max(0.25, g.settings.particles);
+    const dustCount = Math.min(3, Math.floor(this.dustAcc)); this.dustAcc -= dustCount;
+    for (let i = 0; i < dustCount; i++) {
+      const seq = ++this.dustSeq, a = (seq * 2.399963229728653) % 6.28318530718;
+      const radius = this.baseR * (1.15 + ((seq * 0.61803398875) % 1) * 2.5);
+      const x = this.pos.x + Math.cos(a) * radius, z = this.pos.z + Math.sin(a) * radius;
+      const wind = g.windAt(V(x, 1, z));
+      const swirl = this.mph * 0.44704 * 0.16;
+      g.smoke.spawn(x, rnd(0.6, 3.5), z,
+        wind.x - Math.sin(a) * swirl + rnd(-3, 3), rnd(2, 8),
+        wind.z + Math.cos(a) * swirl + rnd(-3, 3), 0x786a55, rnd(5, 11), rnd(2.2, 4),
+        { alpha: 0.3 * k, spread: 1.45, grow: 1.35, drag: 0.12, groundDrag: 0.55, turb: 5,
+          ox: this.pos.x, oz: this.pos.z, windX: wind.x, windZ: wind.z, windResponse: 1.45, windDynamic: true, densityManaged: true });
+    }
     // A broader, wind-driven debris ring anchors the funnel to the ground.
     if (Math.random() < 0.8) { const a = Math.random() * 6.28, wv=g.windAt(this.pos);
       g.debris.spawn(this.pos.x + Math.cos(a) * this.baseR * rnd(1.4,2.4), 1, this.pos.z + Math.sin(a) * this.baseR * rnd(1.4,2.4), wv.x+rnd(-4,4), rnd(8,24), wv.z+rnd(-4,4), rnd(0.2,0.65), 0x655a4c, 2.8); }
