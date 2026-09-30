@@ -21,7 +21,7 @@ export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSetting
   high: { resolution: 1, shadows: true, shadowRes: 2048, bloom: true, particles: 0.85, debris: 0.85, maxBolts: 200, clouds: 1, antialiasFxaa: true, drawDistance: 40000 },
   ultra: { resolution: 1.25, shadows: true, shadowRes: 4096, bloom: true, particles: 1, debris: 1, maxBolts: 320, clouds: 1.2, antialiasFxaa: true, drawDistance: 60000 },
 };
-export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, showFps: true, antialiasFxaa: true, drawDistance: 40000, clouds: 1 });
+export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, drawDistance: 40000, clouds: 1 });
 
 interface CdState { rem: number; total: number; charges: number; interval: number; regenT: number; holding: boolean }
 
@@ -33,7 +33,7 @@ export class Game {
   enemies: Enemy[] = []; time = 0; pauseEnemies = 0;
   settings: GraphicsSettings;
   player = { pos: V(0, 0, 0), vel: V(), facing: V(0, 0, 1), hp: 50000, maxHp: 50000, invincible: 0, mesh: new THREE.Group(), rArm: new THREE.Group(), lArm: new THREE.Group(), sword: new THREE.Group(), gun: new THREE.Group(), legs: [] as THREE.Group[], anim: { type: '', t: 0, d: 0 }, grounded: true, lockMove: 0 };
-  cam = { yaw: Math.PI, pitch: 0.42, dist: 22, targetDist: 22 };
+  cam = { yaw: Math.PI, pitch: 0.42, dist: 22, targetDist: 22 }; firstPerson = false;
   shakes: { pos: THREE.Vector3 | null; i: number; d: number; t: number }[] = [];
   aim = V(0, 0, 30); mouse = new THREE.Vector2(); ray = new THREE.Raycaster(); aimRing!: THREE.Mesh; aimLine!: THREE.Line;
   keys = new Set<string>(); joy = { x: 0, y: 0 }; isTouch = false; touchAim = false; touchSprint = false;
@@ -48,7 +48,7 @@ export class Game {
   onFatal: (m: string) => void = () => {};
   sel: Record<string, any> = { supercell: 1 };
   gamepadIdx: number | null = null; prevPadButtons: boolean[] = [];
-  raf = 0; last = performance.now(); container: HTMLElement; disposed = false; paused = true; cloudGroups: THREE.Group[] = [];
+  raf = 0; last = performance.now(); container: HTMLElement; disposed = false; paused = true; cloudGroups: THREE.Object3D[] = [];
   halfFloat = true;
   pinch = { d: 0 }; drag = { active: false, x: 0, y: 0, id: -1, moved: 0 };
 
@@ -65,8 +65,8 @@ export class Game {
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.style.touchAction = 'none';
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.5, settings.drawDistance);
-    this.scene.background = new THREE.Color(0x0b1020);
-    this.scene.fog = new THREE.FogExp2(0x0e1628, 0.0009);
+    this.scene.background = new THREE.Color(0xb9c9cf);
+    this.scene.fog = new THREE.FogExp2(0xb7b09a, 0.00055);
     this.buildWorld();
     this.fx = new ParticleSystem(30000, true); this.smoke = new ParticleSystem(26000, false); this.debris = new DebrisSystem(2500);
     this.scene.add(this.fx.points, this.smoke.points, this.debris.mesh);
@@ -87,71 +87,119 @@ export class Game {
 
   // ---------------------------------------------------------------- world
   buildWorld() {
-    const hemi = new THREE.HemisphereLight(0x9ab8ff, 0x1a1420, 0.9); this.scene.add(hemi);
-    this.sun = new THREE.DirectionalLight(0xfff1dd, 2.2); this.sun.position.set(80, 140, 60); this.sun.castShadow = true;
+    const hemi = new THREE.HemisphereLight(0xd7e9fa, 0x8b7751, 1.15); this.scene.add(hemi);
+    this.sun = new THREE.DirectionalLight(0xfff3d8, 2.45); this.sun.position.set(80, 140, 60); this.sun.castShadow = true;
     const sc = this.sun.shadow.camera as THREE.OrthographicCamera; sc.left = -120; sc.right = 120; sc.top = 120; sc.bottom = -120; sc.far = 600; this.sun.shadow.bias = -0.0004;
     this.scene.add(this.sun, this.sun.target);
     this.flashLight = new THREE.PointLight(0xffffff, 0, 400, 1.2); this.scene.add(this.flashLight);
     // sky dome
     const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
       vertexShader: 'varying vec3 vp; void main(){ vp=position; vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.); gl_Position=p.xyww; }',
-      fragmentShader: 'varying vec3 vp; void main(){ float h=normalize(vp).y; vec3 a=vec3(0.02,0.03,0.08), b=vec3(0.10,0.16,0.32), c=vec3(0.30,0.22,0.42); vec3 col = h>0.? mix(c*0.8,mix(b,a,smoothstep(0.,0.6,h)),smoothstep(0.,0.18,h)) : c*0.4; gl_FragColor=vec4(col,1.); }' }));
+      fragmentShader: 'varying vec3 vp; void main(){ float h=normalize(vp).y; vec3 top=vec3(0.42,0.58,0.68), horizon=vec3(0.88,0.82,0.69), glow=vec3(0.98,0.9,0.77); vec3 col = h>0.? mix(glow,mix(horizon,top,smoothstep(0.02,0.72,h)),smoothstep(0.,0.2,h)) : horizon*0.82; gl_FragColor=vec4(col,1.); }' }));
     sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = -10; sky.onBeforeRender = () => sky.position.copy(this.camera.position); this.scene.add(sky);
-    // ground with neon meter grid (1 unit = 1 m)
-    const gmat = new THREE.MeshStandardMaterial({ color: 0x151a24, roughness: 0.9, metalness: 0.1 });
+    // Sun-baked grassland floor with broad irregular sand regions and fine dry-earth grain.
+    const gmat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
     gmat.onBeforeCompile = (sh) => {
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vW;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvW=(modelMatrix*vec4(transformed,1.)).xyz;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vW;\nfloat gl(vec2 p,float s,float w){vec2 g=abs(fract(p/s-0.5)-0.5)*s/fwidth(p);return 1.-min(min(g.x,g.y)/w,1.);}')
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat r=length(vW.xz); float g10=gl(vW.xz,10.,1.)*0.35; float g100=gl(vW.xz,100.,1.5); float ring=0.; for(int i=1;i<=6;i++){ float R=float(i)*50.; ring+= (1.-smoothstep(0.,0.6,abs(r-R)))*0.8;} float fade=exp(-r*0.0006);\ntotalEmissiveRadiance += vec3(0.05,0.55,0.9)*(g10+g100*0.7)*fade + vec3(0.9,0.3,1.)*ring*fade*0.5;');
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vTerrain;')
+        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTerrain=(modelMatrix*vec4(transformed,1.)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vTerrain;
+float terrainHash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+float terrainNoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(terrainHash(i),terrainHash(i+vec2(1.,0.)),f.x),mix(terrainHash(i+vec2(0.,1.)),terrainHash(i+vec2(1.,1.)),f.x),f.y); }`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+vec2 p=vTerrain.xz;
+float broad=terrainNoise(p*0.006);
+float grain=terrainNoise(p*0.095);
+float patchA=length((p-vec2(420.,-240.))/vec2(560.,390.));
+float patchB=length((p-vec2(-500.,390.))/vec2(500.,360.));
+float patchC=length((p-vec2(90.,730.))/vec2(420.,310.));
+float desert=max(max(1.-smoothstep(.82,1.16,patchA+(broad-.5)*.22),1.-smoothstep(.8,1.15,patchB+(broad-.5)*.2)),1.-smoothstep(.78,1.12,patchC+(broad-.5)*.18));
+float dryVariation=0.82+0.34*broad+0.13*grain;
+vec3 grass=vec3(.18,.18,.085)*dryVariation;
+vec3 sand=vec3(.39,.30,.18)*(0.88+0.25*grain);
+diffuseColor.rgb*=mix(grass,sand,desert);`);
     };
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), gmat); ground.receiveShadow = true; this.scene.add(ground);
+    // Sparse dry-grass tufts are instanced into one draw call; rocky clusters mark the sandy regions.
+    const tuftPositions: number[] = [];
+    for (let blade = 0; blade < 3; blade++) {
+      const a = blade * Math.PI / 3, tx = Math.cos(a), tz = Math.sin(a), dx = -tz, dz = tx;
+      const h = 0.55 + (blade % 2) * 0.12, w = 0.055;
+      const lx = -dx * w, lz = -dz * w, rx = dx * w, rz = dz * w;
+      tuftPositions.push(lx,0,lz, rx,0,rz, tx*0.13,h,tz*0.13, rx,0,rz, tx*0.13,h,tz*0.13, -dx*w*0.3,0,-dz*w*0.3);
+    }
+    const tuftGeo = new THREE.BufferGeometry(); tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute(tuftPositions, 3)); tuftGeo.computeVertexNormals();
+    const tuftMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, vertexColors: false });
+    const tuftMesh = new THREE.InstancedMesh(tuftGeo, tuftMat, 2400); tuftMesh.frustumCulled = false; tuftMesh.castShadow = false;
+    const deserts: [number, number, number, number][] = [[420,-240,560,390],[-500,390,500,360],[90,730,420,310]];
+    const inDesert = (x: number, z: number) => deserts.some(([cx,cz,rx,rz]) => ((x-cx)/rx)**2 + ((z-cz)/rz)**2 < 0.92);
+    const grassM = new THREE.Matrix4(), grassQ = new THREE.Quaternion(), grassS = new THREE.Vector3(), grassP = new THREE.Vector3();
+    const grassColor = new THREE.Color(); let grassCount = 0, attempts = 0;
+    while (grassCount < 2400 && attempts++ < 12000) {
+      const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*1290, x=Math.cos(a)*r, z=Math.sin(a)*r;
+      if (inDesert(x,z)) continue;
+      grassP.set(x,0,z); grassQ.setFromAxisAngle(V(0,1,0),Math.random()*Math.PI*2);
+      grassS.setScalar(0.7+Math.random()*0.9); grassS.y=0.7+Math.random()*0.8;
+      grassM.compose(grassP,grassQ,grassS); tuftMesh.setMatrixAt(grassCount,grassM);
+      grassColor.setHSL(0.13+Math.random()*0.055,0.25+Math.random()*0.18,0.27+Math.random()*0.13); tuftMesh.setColorAt(grassCount,grassColor); grassCount++;
+    }
+    tuftMesh.count=grassCount; tuftMesh.instanceMatrix.needsUpdate=true; if(tuftMesh.instanceColor)tuftMesh.instanceColor.needsUpdate=true; this.scene.add(tuftMesh);
+    const rockGeo = new THREE.DodecahedronGeometry(1,0), rockMat = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:1, flatShading:true });
+    const rocks = new THREE.InstancedMesh(rockGeo,rockMat,42); rocks.frustumCulled=false;
+    for(let i=0;i<42;i++){ const zone=deserts[i%deserts.length], a=Math.random()*Math.PI*2, r=Math.sqrt(Math.random())*.8;
+      const x=zone[0]+Math.cos(a)*zone[2]*r,z=zone[1]+Math.sin(a)*zone[3]*r, h=1.2+Math.random()*4.5;
+      grassP.set(x,h*.38,z); grassQ.setFromEuler(new THREE.Euler(Math.random()*.5,Math.random()*6.28,Math.random()*.35)); grassS.set(2+Math.random()*5,h,2+Math.random()*4);
+      grassM.compose(grassP,grassQ,grassS); rocks.setMatrixAt(i,grassM); grassColor.setHSL(.09+Math.random()*.035,.2+Math.random()*.12,.35+Math.random()*.16); rocks.setColorAt(i,grassColor);
+    }
+    rocks.instanceMatrix.needsUpdate=true; if(rocks.instanceColor)rocks.instanceColor.needsUpdate=true; this.scene.add(rocks);
     // Vast perimeter and elevated, soft-edged cloud banks give the arena a true open-sky scale.
     const cloudPalette = [0xf1f5ff, 0xdce6f4, 0xc7d4e8, 0xffffff];
+    const cloudPuffGeo = new THREE.SphereGeometry(1, 16, 12);
+    const cloudPuffMat = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:1, metalness:0, transparent:true, opacity:0.66, depthWrite:false });
+    const cloudM = new THREE.Matrix4(), cloudP = new THREE.Vector3(), cloudS = new THREE.Vector3(), cloudQ = new THREE.Quaternion(), cloudColor = new THREE.Color();
     for (let i = 0; i < 13; i++) {
-      const cloud = new THREE.Group();
-      const a = i * Math.PI * 2 / 13 + rnd(-0.2, 0.2), radius = rnd(700, 1550);
-      cloud.position.set(Math.cos(a) * radius, rnd(190, 330), Math.sin(a) * radius);
-      cloud.rotation.y = rnd(0, Math.PI * 2);
-      const count = 9 + Math.floor(Math.random() * 7);
+      const a = i * Math.PI * 2 / 13 + rnd(-0.2, 0.2), radius = rnd(700, 1550), count = 9 + Math.floor(Math.random() * 7);
+      const cloud = new THREE.InstancedMesh(cloudPuffGeo,cloudPuffMat,count); cloud.frustumCulled=false;
+      cloud.position.set(Math.cos(a) * radius, rnd(190, 330), Math.sin(a) * radius); cloud.rotation.y = rnd(0, Math.PI * 2);
       for (let j = 0; j < count; j++) {
-        const size = rnd(40, 105);
-        const puff = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({
-          color: cloudPalette[Math.floor(Math.random() * cloudPalette.length)], roughness: 1,
-          metalness: 0, transparent: true, opacity: rnd(0.54, 0.78), depthWrite: false,
-        }));
-        puff.scale.set(size * rnd(1.05, 1.7), size * rnd(0.25, 0.52), size * rnd(0.8, 1.4));
-        puff.position.set(rnd(-150, 150), rnd(-18, 24), rnd(-120, 120));
-        cloud.add(puff);
+        const size = rnd(40, 105); cloudP.set(rnd(-150,150),rnd(-18,24),rnd(-120,120));
+        cloudS.set(size*rnd(1.05,1.7),size*rnd(.25,.52),size*rnd(.8,1.4)); cloudM.compose(cloudP,cloudQ,cloudS); cloud.setMatrixAt(j,cloudM);
+        cloudColor.setHex(cloudPalette[Math.floor(Math.random()*cloudPalette.length)]); cloud.setColorAt(j,cloudColor);
       }
+      cloud.instanceMatrix.needsUpdate=true; if(cloud.instanceColor)cloud.instanceColor.needsUpdate=true;
       cloud.userData.drift = rnd(0.35, 1.1); cloud.userData.phase = rnd(0, Math.PI * 2);
       this.cloudGroups.push(cloud); this.scene.add(cloud);
     }
-    // A broad, circular combat basin, with distant monoliths and luminous perimeter markers.
-    const arenaRing = new THREE.Mesh(new THREE.TorusGeometry(1380, 3.5, 8, 192), new THREE.MeshBasicMaterial({ color: 0x42cfff, transparent: true, opacity: 0.32 }));
-    arenaRing.rotation.x = Math.PI / 2; arenaRing.position.y = 0.15; this.scene.add(arenaRing);
-    const markerMat = new THREE.MeshStandardMaterial({ color: 0x293b52, emissive: 0x1b8fc4, emissiveIntensity: 0.75, metalness: 0.72, roughness: 0.3 });
-    for (let i = 0; i < 64; i++) {
-      const a = i * Math.PI * 2 / 64, r = 1370, h = i % 4 === 0 ? rnd(38, 76) : rnd(12, 28);
-      const marker = new THREE.Mesh(new THREE.CylinderGeometry(i % 4 === 0 ? 5 : 2.2, i % 4 === 0 ? 8 : 3.4, h, 6), markerMat);
-      marker.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r); marker.castShadow = true; this.scene.add(marker);
+    // A few pale field markers sit at the far edge; the fighting ground itself stays open.
+    const markerGeo = new THREE.CylinderGeometry(1.8, 2.8, 12, 5);
+    const markerMat = new THREE.MeshStandardMaterial({ color: 0xf0ede3, metalness: 0.38, roughness: 0.42, emissive: 0x252116, emissiveIntensity: 0.08 });
+    const markers = new THREE.InstancedMesh(markerGeo, markerMat, 20); markers.frustumCulled = false;
+    const markerM = new THREE.Matrix4(), markerS = new THREE.Vector3(), markerP = new THREE.Vector3();
+    for (let i=0;i<20;i++){ const a=i*Math.PI*2/20, r=1350, h=8+(i%4)*2.5;
+      markerP.set(Math.cos(a)*r,h/2,Math.sin(a)*r); markerS.set(1,h/12,1); markerM.compose(markerP,new THREE.Quaternion().setFromAxisAngle(V(0,1,0),a),markerS); markers.setMatrixAt(i,markerM);
     }
-    // center pylon (middle of arena)
-    const pyl = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2, 14, 6), new THREE.MeshStandardMaterial({ color: 0x223044, metalness: 0.8, roughness: 0.3, emissive: 0x1166aa, emissiveIntensity: 0.5 })); pyl.position.y = 7; pyl.castShadow = true; this.scene.add(pyl);
-    // some sci-fi pillars for scale
-    const pm = new THREE.MeshStandardMaterial({ color: 0x1d2433, metalness: 0.7, roughness: 0.35, emissive: 0x0a1a2a });
-    for (let i = 0; i < 56; i++) { const a = (i / 56) * Math.PI * 2; const r = 520 + (i % 4) * 70; const h = rnd(28, 110); const m = new THREE.Mesh(new THREE.BoxGeometry(rnd(9, 18), h, rnd(9, 18)), pm); m.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r); m.castShadow = true; m.receiveShadow = true; this.scene.add(m); }
+    markers.instanceMatrix.needsUpdate=true; this.scene.add(markers);
+    // Low, distant ochre mesas frame the field without cluttering the playable grassland.
+    const mesaGeo = new THREE.DodecahedronGeometry(1,1), mesaMat = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:1, flatShading:true });
+    const mesas = new THREE.InstancedMesh(mesaGeo,mesaMat,34); mesas.frustumCulled=false;
+    for(let i=0;i<34;i++){ const a=i*Math.PI*2/34+rnd(-.08,.08), r=rnd(1850,3150), h=rnd(70,220);
+      markerP.set(Math.cos(a)*r,h*.72,Math.sin(a)*r); markerS.set(rnd(150,430),h,rnd(170,460));
+      markerM.compose(markerP,new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(-.08,.08),a,rnd(-.06,.06))),markerS); mesas.setMatrixAt(i,markerM);
+      grassColor.setHSL(.085+Math.random()*.025,.16+Math.random()*.1,.34+Math.random()*.12); mesas.setColorAt(i,grassColor);
+    }
+    mesas.instanceMatrix.needsUpdate=true; if(mesas.instanceColor)mesas.instanceColor.needsUpdate=true; this.scene.add(mesas);
     // player
-    const P = this.player; const bm = new THREE.MeshStandardMaterial({ color: 0xdfe6f0, metalness: 0.4, roughness: 0.35 }); const am = new THREE.MeshStandardMaterial({ color: 0x1a2030, metalness: 0.8, roughness: 0.3, emissive: 0x00aaff, emissiveIntensity: 0.4 });
+    const P = this.player; const bm = new THREE.MeshStandardMaterial({ color: 0xdfe6f0, metalness: 0.4, roughness: 0.35 }); const am = new THREE.MeshStandardMaterial({ color: 0xe5e2d8, metalness: 0.68, roughness: 0.34, emissive: 0x9a8a62, emissiveIntensity: 0.12 });
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.38, 0.78, 5, 12), am); body.position.y = 1.0; body.castShadow = true;
-    const chestMat = new THREE.MeshStandardMaterial({ color: 0x43536b, metalness: 0.82, roughness: 0.28, emissive: 0x062d45, emissiveIntensity: 0.5 });
+    const chestMat = new THREE.MeshStandardMaterial({ color: 0xf4f0e4, metalness: 0.62, roughness: 0.32, emissive: 0x6d603e, emissiveIntensity: 0.14 });
     const chest = new THREE.Mesh(new THREE.DodecahedronGeometry(0.52, 0), chestMat); chest.scale.set(0.82, 0.58, 0.52); chest.position.set(0, 1.18, 0.18); chest.castShadow = true;
     const shoulders = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.24, 0), chestMat, 2); const shoulderM = new THREE.Matrix4(), shoulderQ = new THREE.Quaternion(), shoulderS = new THREE.Vector3(1.35, 0.9, 1.05);
     for (let i = 0; i < 2; i++) { shoulderM.compose(V(i === 0 ? -0.5 : 0.5, 1.48, 0), shoulderQ, shoulderS); shoulders.setMatrixAt(i, shoulderM); } shoulders.instanceMatrix.needsUpdate = true; shoulders.castShadow = true;
-    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 1), new THREE.MeshBasicMaterial({ color: 0x49eaff })); core.position.set(0, 1.2, 0.3);
+    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 1), new THREE.MeshBasicMaterial({ color: 0xffd16f })); core.position.set(0, 1.2, 0.3);
     const pack = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.68, 0.24), am); pack.position.set(0, 1.05, -0.27); P.mesh.add(pack);
     const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.32, 1), bm); head.position.y = 1.72; head.scale.set(0.9, 1, 0.86); head.castShadow = true;
     const crest = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.34, 5), am); crest.position.set(0, 2.01, -0.03); crest.rotation.x = -0.25;
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.1, 0.13), new THREE.MeshBasicMaterial({ color: 0x35eaff })); visor.position.set(0, 1.74, 0.24);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.1, 0.13), new THREE.MeshBasicMaterial({ color: 0xe3c47e })); visor.position.set(0, 1.74, 0.24);
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.16, 10), am); neck.position.y = 1.46;
     const armG = new THREE.CapsuleGeometry(0.1, 0.55, 3, 8);
     const ra = new THREE.Mesh(armG, bm); ra.position.y = -0.35; P.rArm.add(ra); P.rArm.position.set(-0.47, 1.42, 0);
@@ -162,9 +210,9 @@ export class Game {
     P.gun.position.set(0, -0.7, 0.18); P.rArm.add(P.gun);
     P.mesh.add(body, chest, core, neck, head, crest, shoulders, visor, P.rArm, P.lArm, l1, l2); P.legs = [l1, l2]; this.scene.add(P.mesh);
     // aim reticle
-    this.aimRing = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.9, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x33e0ff, transparent: true, opacity: 0.9, depthWrite: false })); this.scene.add(this.aimRing);
+    this.aimRing = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.9, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xe4d7b6, transparent: true, opacity: 0.75, depthWrite: false })); this.scene.add(this.aimRing);
     const lg = new THREE.BufferGeometry().setFromPoints([V(), V()]);
-    this.aimLine = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0x33e0ff, dashSize: 1, gapSize: 1, transparent: true, opacity: 0.5 })); this.aimLine.frustumCulled = false; this.scene.add(this.aimLine);
+    this.aimLine = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0xe0d6bd, dashSize: 1, gapSize: 1, transparent: true, opacity: 0.36 })); this.aimLine.frustumCulled = false; this.scene.add(this.aimLine);
   }
   setHeld(item: ItemDef | null) {
     const P = this.player; P.sword.clear(); P.gun.clear();
@@ -231,6 +279,7 @@ export class Game {
     if (k === '=' || k === '+' || k === 'pageup') this.zoomBy(-8); if (k === 'pagedown') this.zoomBy(8);
     if (k === ' ') { this.jump(); e.preventDefault(); }
     if (k === 'e') this.doM1();
+    if (k === 'p') this.toggleFirstPerson();
   };
   onKeyUp = (e: KeyboardEvent) => { const k = e.key.toLowerCase(); this.keys.delete(k); const si = SKILL_KEYS.indexOf(k); if (si >= 0) this.releaseSkill(si); };
   updateMouse(x: number, y: number) { const r = this.renderer.domElement.getBoundingClientRect(); this.mouse.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1); }
@@ -342,10 +391,24 @@ export class Game {
   screen(color: string, a: number, fade: number) { this.overlay = { color, a, fade }; }
   shake(pos: THREE.Vector3, intensity: number, dur: number) { this.shakes.push({ pos: pos.clone(), i: intensity, d: dur, t: 0 }); }
   shakeRaw(intensity: number, dur: number) { this.shakes.push({ pos: null, i: intensity, d: dur, t: 0 }); }
-  bolt(a: THREE.Vector3, b: THREE.Vector3, o: BoltOpts = {}) { if (boltStats.active >= this.settings.maxBolts) return null; return this.add(new Bolt(this.scene, a, b, o)) as Bolt; }
+  toggleFirstPerson() {
+    this.firstPerson = !this.firstPerson;
+    this.cam.pitch = this.firstPerson ? 0.06 : 0.42;
+    this.player.mesh.visible = !this.firstPerson;
+    this.toast(this.firstPerson ? 'FIRST-PERSON VIEW' : 'THIRD-PERSON VIEW', '#f4e8c9');
+  }
+  windAt(pos: THREE.Vector3) {
+    const wind = V(1.3 + Math.sin(this.time * 0.08) * 0.7, 0, 0.7 + Math.cos(this.time * 0.065) * 0.8);
+    for (const effect of this.effects) {
+      const sample = (effect as Effect & { windAt?: (at: THREE.Vector3) => THREE.Vector3 | null }).windAt;
+      if (sample) { const local = sample.call(effect, pos); if (local) wind.add(local); }
+    }
+    return wind.clampLength(0, 78);
+  }
+  bolt(a: THREE.Vector3, b: THREE.Vector3, o: BoltOpts = {}) { if (boltStats.active >= this.settings.maxBolts) return null; return this.add(new Bolt(this.scene, a, b, { ...o, width: (o.width ?? 0.6) * 1.2 })) as Bolt; }
   /** tall vertical jagged bolt from sky to ground point; `n` overlapped bolts */
   strike(x: number, z: number, o: BoltOpts & { h?: number; n?: number; spread?: number } = {}) {
-    const h = o.h ?? rnd(175, 245); const n = o.n ?? 1;
+    const h = (o.h ?? rnd(175, 245)) * 3; const n = o.n ?? 1;
     for (let i = 0; i < n; i++) { const s = o.spread ?? 0.6; this.bolt(V(x + rnd(-8, 8), h, z + rnd(-8, 8)), V(x + rnd(-s, s), 0.1, z + rnd(-s, s)), { segs: 18, jag: 0.035, branches: 2, width: 0.38, life: 0.32, ...o }); }
     const c = new THREE.Color(o.color ?? 0x88aaff);
     for (let i = 0; i < 14; i++) this.fx.spawn(x, 0.4, z, rnd(-12, 12), rnd(4, 16), rnd(-12, 12), c, 0.5, rnd(0.2, 0.5), { grav: 20 });
@@ -437,14 +500,17 @@ export class Game {
     } catch (e) {
       // A failure in the render loop would otherwise leave a silently frozen/black scene.
       this.disposed = true; cancelAnimationFrame(this.raf);
-      console.error('[1090 Fruits] render loop stopped', e);
+      console.error('[MagicCloud] render loop stopped', e);
       this.onFatal(e instanceof Error ? `${e.name}: ${e.message}` : String(e));
     }
   };
   update(dt: number) {
     this.time += dt;
     for (const cloud of this.cloudGroups) { cloud.position.x += dt * cloud.userData.drift; cloud.position.z += Math.sin(this.time * 0.08 + cloud.userData.phase) * dt * 0.7; cloud.rotation.y += dt * 0.002; }
-    if (this.paused) { const P = this.player, tgt = V(P.pos.x, P.pos.y + 1.6, P.pos.z), cp = Math.cos(this.cam.pitch), sp = Math.sin(this.cam.pitch); this.camera.position.set(tgt.x + Math.sin(this.cam.yaw) * cp * this.cam.dist, tgt.y + sp * this.cam.dist, tgt.z + Math.cos(this.cam.yaw) * cp * this.cam.dist); this.camera.lookAt(tgt); this.sun.position.set(P.pos.x + 80, 140, P.pos.z + 60); this.sun.target.position.copy(P.pos); return; }
+    if (this.paused) { const P = this.player, tgt = V(P.pos.x, P.pos.y + 1.6, P.pos.z), cp = Math.cos(this.cam.pitch), sp = Math.sin(this.cam.pitch);
+      if (this.firstPerson) { this.camera.position.set(P.pos.x, P.pos.y + 1.62, P.pos.z); this.camera.lookAt(this.camera.position.clone().add(V(-Math.sin(this.cam.yaw) * cp, -sp, -Math.cos(this.cam.yaw) * cp))); }
+      else { this.camera.position.set(tgt.x + Math.sin(this.cam.yaw) * cp * this.cam.dist, tgt.y + sp * this.cam.dist, tgt.z + Math.cos(this.cam.yaw) * cp * this.cam.dist); this.camera.lookAt(tgt); }
+      this.sun.position.set(P.pos.x + 80, 140, P.pos.z + 60); this.sun.target.position.copy(P.pos); return; }
     if (this.pauseEnemies > 0) this.pauseEnemies -= dt;
     this.pollGamepad(dt);
     const P = this.player;
@@ -499,17 +565,24 @@ export class Game {
     this.cam.dist += (this.cam.targetDist - this.cam.dist) * Math.min(1, dt * 10);
     const tgt = V(P.pos.x, P.pos.y + 1.6, P.pos.z);
     const cp = Math.cos(this.cam.pitch), spp = Math.sin(this.cam.pitch);
-    this.camera.position.set(tgt.x + Math.sin(this.cam.yaw) * cp * this.cam.dist, tgt.y + spp * this.cam.dist, tgt.z + Math.cos(this.cam.yaw) * cp * this.cam.dist);
-    if (this.camera.position.y < 0.5) this.camera.position.y = 0.5;
-    this.camera.lookAt(tgt);
+    if (this.firstPerson) {
+      this.camera.position.set(P.pos.x, P.pos.y + 1.62, P.pos.z);
+      const look = V(-Math.sin(this.cam.yaw) * cp, -spp, -Math.cos(this.cam.yaw) * cp);
+      this.camera.lookAt(this.camera.position.clone().add(look));
+    } else {
+      this.camera.position.set(tgt.x + Math.sin(this.cam.yaw) * cp * this.cam.dist, tgt.y + spp * this.cam.dist, tgt.z + Math.cos(this.cam.yaw) * cp * this.cam.dist);
+      if (this.camera.position.y < 0.5) this.camera.position.y = 0.5;
+      this.camera.lookAt(tgt);
+    }
     let amp = 0;
     for (let i = this.shakes.length - 1; i >= 0; i--) {
       const s = this.shakes[i]; s.t += dt; if (s.t >= s.d) { this.shakes.splice(i, 1); continue; }
       const fall = s.pos ? 1 / (1 + Math.pow(s.pos.distanceTo(P.pos) / 30, 1.6)) : 1; // closer = stronger
       amp += s.i * fall * (1 - s.t / s.d);
     }
-    amp = Math.min(amp, 70) * this.settings.shake * 0.06;
-    if (amp > 0.001) this.camera.position.add(V((Math.random() * 2 - 1) * amp, (Math.random() * 2 - 1) * amp, (Math.random() * 2 - 1) * amp));
+    amp = Math.min(amp, 70) * this.settings.shake;
+    if (this.settings.positionShake && amp > 0.001) this.camera.position.add(V((Math.random() * 2 - 1) * amp * 0.06, (Math.random() * 2 - 1) * amp * 0.06, (Math.random() * 2 - 1) * amp * 0.06));
+    if (this.settings.rotationShake && amp > 0.001) { const r = Math.min(0.09, amp * 0.0013); this.camera.rotation.x += (Math.random() * 2 - 1) * r; this.camera.rotation.y += (Math.random() * 2 - 1) * r; this.camera.rotation.z += (Math.random() * 2 - 1) * r * 0.65; }
     this.sun.position.set(P.pos.x + 80, 140, P.pos.z + 60); this.sun.target.position.copy(P.pos);
   }
   snapshot() {

@@ -61,9 +61,9 @@ const M = {
   eye: new THREE.MeshBasicMaterial({ color: 0xff3344 }),
   barBg: new THREE.MeshBasicMaterial({ color: 0x100a14, transparent: true, opacity: 0.8, depthWrite: false }),
   bars: [0x30ffb0, 0xc070ff, 0xff3040].map(color => new THREE.MeshBasicMaterial({ color, depthWrite: false })),
-  armor: [0x34485a, 0x412b70, 0x551522].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.82, roughness: 0.28, emissive: color, emissiveIntensity: 0.22 })),
-  limbs: [0x263743, 0x302150, 0x36111c].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.65, roughness: 0.38 })),
-  cores: [0xff5264, 0xcf83ff, 0xff6470].map(color => new THREE.MeshBasicMaterial({ color })),
+  armor: [0xf0eee6, 0xe4e1d8, 0xd7d4cc].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.82, roughness: 0.28, emissive: color, emissiveIntensity: 0.22 })),
+  limbs: [0xc9cac5, 0xb5b6b2, 0xa7a69f].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.65, roughness: 0.38 })),
+  cores: [0xd8bb78, 0xb7a7cb, 0xb77d73].map(color => new THREE.MeshBasicMaterial({ color })),
   cage: new THREE.LineBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0.95 }),
   ice: new THREE.MeshStandardMaterial({ color: 0x9fe6ff, transparent: true, opacity: 0.55, roughness: 0.05, metalness: 0.2, emissive: 0x114466 }),
   star: new THREE.MeshBasicMaterial({ color: 0xffee55 }),
@@ -86,7 +86,7 @@ export class Enemy {
     this.maxHp = kind === 'boss' ? 2.5e6 : kind === 'elite' ? 1.5e5 : 12000;
     this.hp = this.maxHp; this.radius = 0.7 * this.scale; this.height = 2.2 * this.scale;
     this.speed = kind === 'boss' ? 5 : kind === 'elite' ? 6.5 : 7.5;
-    const col = kind === 'boss' ? 0x7a1020 : kind === 'elite' ? 0x5a2a9a : 0x2f4f5f;
+    const col = kind === 'boss' ? 0x6f5a55 : kind === 'elite' ? 0x62576b : 0x59636a;
     this.bodyMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.35, emissive: 0x000000 });
     const inner = new THREE.Group();
     const body = new THREE.Mesh(G.body, this.bodyMat); body.castShadow = true;

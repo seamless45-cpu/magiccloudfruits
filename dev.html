@@ -3,39 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>1090 Fruits 3D — Sci-Fi Combat Arena</title>
+    <title>MagicCloud — Open Field Combat Arena</title>
     <!-- Inline so the page is never a white screen, even if every external request fails. -->
     <style>
-      html, body { margin: 0; height: 100%; background: #05070d; color: #dff6ff;
-        font-family: 'Rajdhani', system-ui, -apple-system, 'Segoe UI', sans-serif; }
-      #boot { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; overflow:hidden; background: radial-gradient(ellipse at 50% 42%, #102c49 0%, #091322 36%, #04070e 78%); }
-      #boot:before,#boot:after { content:''; position:absolute; width:min(70vw,520px); aspect-ratio:1; border:1px solid rgba(76,211,255,.13); transform:rotate(45deg); animation: boot-orbit 22s linear infinite; }
-      #boot:after { width:min(84vw,680px); border-color:rgba(76,211,255,.07); animation-duration:34s; animation-direction:reverse; }
-      #boot .box { position:relative; z-index:1; padding:36px 42px; border:1px solid rgba(80,220,255,.24); background:rgba(5,14,27,.72); box-shadow:0 20px 80px #0009,inset 0 0 26px #33e0ff0c; clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px); animation: boot-enter .8s ease both; }
-      #boot .box:after { content:''; display:block; width:100px; height:2px; margin:25px auto 0; background:#47dfff; box-shadow:0 0 15px #33e0ff; animation: boot-pulse 1.8s ease-in-out infinite; }
+      html, body { margin: 0; height: 100%; background: #202c32; color: #f2ecdd;
+        font-family: 'Inter', 'Aptos', 'Segoe UI Variable', system-ui, sans-serif; }
+      #boot { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; overflow:hidden; background: radial-gradient(ellipse at 50% 42%, #536775 0%, #374650 42%, #202c32 100%); }
+      #boot:before,#boot:after { content:''; position:absolute; width:min(70vw,520px); aspect-ratio:1; border:1px solid rgba(242,235,216,.13); transform:rotate(45deg); animation: boot-orbit 22s linear infinite; }
+      #boot:after { width:min(84vw,680px); border-color:rgba(242,235,216,.07); animation-duration:34s; animation-direction:reverse; }
+      #boot .box { position:relative; z-index:1; padding:36px 42px; border:1px solid rgba(243,235,216,.3); background:rgba(30,39,40,.78); box-shadow:0 20px 80px #0009,inset 0 0 26px #33e0ff0c; clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px); animation: boot-enter .8s ease both; }
+      #boot .box:after { content:''; display:block; width:100px; height:2px; margin:25px auto 0; background:#e5d5af; box-shadow:0 0 15px #dfd0aa; animation: boot-pulse 1.8s ease-in-out infinite; }
       @keyframes boot-orbit { to { transform:rotate(405deg); } } @keyframes boot-enter { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } } @keyframes boot-pulse { 50% { opacity:.3; width:58px; } }
       #boot .box { max-width: 620px; }
-      #boot .title { font-size: 15px; font-weight:700; text-shadow:0 0 18px rgba(51,224,255,.45); letter-spacing: .18em; color: #7fe6ff; margin-bottom: 10px; }
-      #boot .msg { font-size: 13px; line-height: 1.6; color: #9fdcf5; }
-      #boot .hint { font-size: 12px; line-height: 1.6; color: #6f9ab0; margin-top: 10px; }
+      #boot .title { font-size: 15px; font-weight:700; text-shadow:0 0 18px rgba(236,222,190,.35); letter-spacing: .18em; color: #f4eedf; margin-bottom: 10px; }
+      #boot .msg { font-size: 13px; line-height: 1.6; color: #e3dfd3; }
+      #boot .hint { font-size: 12px; line-height: 1.6; color: #b8b2a4; margin-top: 10px; }
       #boot code { color: #ffd479; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; }
       .dots::after { content: ''; animation: d 1.2s steps(4, end) infinite; }
       #boot .actions { display: none; justify-content: center; gap: 10px; margin-top: 16px; }
-      #boot .btn { font: inherit; font-size: 12px; letter-spacing: .12em; color: #bff3ff; cursor: pointer;
-        background: linear-gradient(180deg, rgba(40,200,255,.18), rgba(40,200,255,.05));
-        border: 1px solid rgba(80,220,255,.45); border-radius: 3px; padding: 7px 18px; }
-      #boot .btn:hover { background: rgba(51,224,255,.3); }
+      #boot .btn { font: inherit; font-size: 12px; letter-spacing: .12em; color: #f1ebdd; cursor: pointer;
+        background: linear-gradient(180deg, rgba(228,218,194,.18), rgba(228,218,194,.05));
+        border: 1px solid rgba(240,230,210,.4); border-radius: 3px; padding: 7px 18px; }
+      #boot .btn:hover { background: rgba(228,218,194,.26); }
       @keyframes d { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
     </style>
     <!-- No external requests at all: the page loads nothing but the document itself, so a
          blocked or 404-ing CDN can never show up as a console error or delay first paint. -->
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%2333e0ff'/%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23eee9dd'/%3E%3C/svg%3E" />
   </head>
   <body>
     <div id="root"></div>
     <div id="boot">
       <div class="box">
-        <div class="title">1090 FRUITS // OPERATOR</div>
+        <div class="title">MAGIC CLOUD // OPEN FIELD</div>
         <div class="msg" id="boot-msg">Booting arena<span class="dots"></span></div>
         <div class="hint" id="boot-hint"></div>
         <div class="actions" id="boot-actions">

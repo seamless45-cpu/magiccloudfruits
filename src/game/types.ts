@@ -38,5 +38,5 @@ export interface GraphicsSettings {
   sandbox: boolean;
   resolution: number; shadows: boolean; shadowRes: number; bloom: boolean; bloomStrength: number;
   particles: number; debris: number; maxBolts: number; fog: boolean; exposure: number;
-  shake: number; showFps: boolean; antialiasFxaa: boolean; drawDistance: number; clouds: number;
+  shake: number; positionShake: boolean; rotationShake: boolean; showFps: boolean; antialiasFxaa: boolean; drawDistance: number; clouds: number;
 }

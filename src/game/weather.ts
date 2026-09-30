@@ -82,6 +82,17 @@ export class StormCloud implements Effect {
     });
     this.mesh.instanceMatrix.needsUpdate = true;
   }
+  windAt(pos: THREE.Vector3) {
+    const { wind = 0, length = 1, depth = 1, bow = 0 } = this.o;
+    if (wind <= 0 || this.t >= this.o.life) return null;
+    const rel = V(pos.x - this.mesh.position.x, 0, pos.z - this.mesh.position.z);
+    const cross = rel.dot(this.side) / (length / 2);
+    const along = rel.dot(this.dir) - bow * depth * (1 - cross * cross);
+    if (Math.abs(cross) >= 1 || along > depth * 0.35 || along < -depth * 0.75) return null;
+    const acrossFalloff = 1 - Math.abs(cross) * 0.24;
+    const frontFalloff = Math.max(0, 1 - Math.abs(along) / (depth * 0.85));
+    return this.dir.clone().multiplyScalar(wind * 0.44704 * acrossFalloff * (0.35 + frontFalloff * 0.65));
+  }
   /** random rain point in world space under the cloud */
   rainPoint(out: THREE.Vector3) {
     const c = this.mesh.position;
@@ -159,7 +170,7 @@ export class StormCloud implements Effect {
         this.boltT = rnd(0.2, 2) / o.bolts;
         const isSuper = Math.random() < (o.superChance ?? 0); const mul = isSuper ? (o.superMul ?? 3) : 1;
         const rp = this.rainPoint(V()); rp.x += rnd(-10, 10);
-        const top = V(rp.x + rnd(-20, 20), this.base * 0.9, rp.z + rnd(-20, 20));
+        const top = V(rp.x + rnd(-20, 20), this.base * 2.7, rp.z + rnd(-20, 20));
         const col = isSuper ? (mul >= 12 ? 0xff66ff : 0xaaddff) : 0xcfe0ff;
         for (let k = 0; k < (isSuper ? 3 : 1); k++) g.bolt(top, rp, { color: col, width: isSuper ? (mul >= 12 ? 3.2 : 1.8) : 0.8, life: isSuper ? 0.6 : 0.3, segs: 18, jag: 0.045, branches: isSuper ? 3 : 2 });
         const r = isSuper ? (mul >= 12 ? 22 : 12) : 6;
@@ -285,6 +296,14 @@ export class Hurricane implements Effect {
     this.wall.frustumCulled = false;
     this.grp.add(this.disk, this.disk2, this.wall); this.grp.position.copy(this.pos); g.scene.add(this.grp);
   }
+  windAt(at: THREE.Vector3) {
+    const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz);
+    if (dist < this.eye * 0.6 || dist > this.R) return null;
+    const strength = dist <= this.wallR ? 1 : Math.max(0, 1 - (dist - this.wallR) / (this.R - this.wallR));
+    const speed = 165 * 0.44704 * strength;
+    return V(-dz / Math.max(1, dist) * speed + dx / Math.max(1, dist) * speed * 0.14, 0,
+      dx / Math.max(1, dist) * speed + dz / Math.max(1, dist) * speed * 0.14);
+  }
   update(dt: number) {
     const g = this.g; this.t += dt; const k = Math.min(1, this.t / 4) * Math.min(1, (this.life - this.t) / 5);
     this.pos.addScaledVector(this.dir, 15 * dt); this.grp.position.copy(this.pos);
@@ -337,6 +356,13 @@ export class Microburst implements Effect {
     for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * size * 0.9, 0, Math.sin(a) * size * 0.9); this.offs.push(off);
       const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 0.55, life: 16, grow: 2.2, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
     this.ringMesh = new THREE.Mesh(GEO.torus, new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0, depthWrite: false })); this.ringMesh.position.set(pos.x, 3, pos.z); g.scene.add(this.ringMesh);
+  }
+  windAt(at: THREE.Vector3) {
+    if (this.t < 5 || this.t > 15) return null;
+    const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz);
+    if (dist >= this.size || dist < 1) return null;
+    const speed = 58 * (1 - dist / this.size);
+    return V(dx / dist * speed, 0, dz / dist * speed);
   }
   update(dt: number) {
     const g = this.g; this.t += dt;

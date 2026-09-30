@@ -56,7 +56,9 @@ export function Settings({ settings, onChange, onClose }: { settings: GraphicsSe
         <Row label="Draw Distance">{num('drawDistance', 5000, 60000, 1000, v => `${(v / 1000).toFixed(0)} km`)}</Row>
         <Row label="Atmospheric Fog">{tog('fog')}</Row>
         <Row label="Exposure">{num('exposure', 0.5, 2, 0.05)}</Row>
-        <Row label="Camera Shake (position only)">{num('shake', 0, 2, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
+        <Row label="Camera Shake Strength">{num('shake', 0, 2, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
+        <Row label="Positional Shake">{tog('positionShake')}</Row>
+        <Row label="Rotational Shake">{tog('rotationShake')}</Row>
         <Row label="Show FPS">{tog('showFps')}</Row>
         <p className="text-[10px] text-cyan-200/50 mt-2">Settings apply instantly. Lightning segments re-rotate every 0.01s via GPU-expanded ribbons (no geometry rebuilds).</p>
       </div>
@@ -70,13 +72,13 @@ export function MobileControls({ game }: { game: Game }) {
   const end = () => { id.current = null; game.touchSprint = false; game.joy.x = 0; game.joy.y = 0; setKnob({ x: 0, y: 0 }); };
   return (
     <>
-      <div ref={base} className="absolute left-5 bottom-24 w-32 h-32 rounded-full border border-cyan-300/40 bg-cyan-400/5 pointer-events-auto touch-none"
+      <div ref={base} className="mobile-joystick absolute left-5 bottom-24 w-32 h-32 rounded-full border border-cyan-300/40 bg-cyan-400/5 pointer-events-auto touch-none"
         onPointerDown={e => { e.stopPropagation(); id.current = e.pointerId; (e.target as HTMLElement).setPointerCapture(e.pointerId); move(e.clientX, e.clientY); }}
         onPointerMove={e => { if (id.current === e.pointerId) move(e.clientX, e.clientY); }} onPointerUp={end} onPointerCancel={end}>
         <div className="absolute -bottom-5 left-0 right-0 text-center font-orb text-[8px] text-cyan-100/55 pointer-events-none">PUSH PAST RIM TO RUN</div>
         <div className="absolute w-12 h-12 rounded-full bg-cyan-300/30 border border-cyan-200/70 shadow-[0_0_16px_rgba(51,224,255,.5)]" style={{ left: `calc(50% - 24px + ${knob.x * 40}px)`, top: `calc(50% - 24px + ${knob.y * 40}px)` }} />
       </div>
-      <div className="absolute left-40 bottom-24 flex flex-col gap-2 pointer-events-auto">
+      <div className="mobile-actions absolute left-40 bottom-24 flex flex-col gap-2 pointer-events-auto">
         <button className="sf-btn w-16 h-16 font-orb text-[11px]" onPointerDown={e => { e.stopPropagation(); game.doM1(); }}>ATK</button>
         <button className="sf-btn w-16 h-10 font-orb text-[10px]" onPointerDown={e => { e.stopPropagation(); game.jump(); }}>JUMP</button>
       </div>

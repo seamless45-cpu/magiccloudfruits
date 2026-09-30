@@ -34,6 +34,8 @@ const clampSettings = (raw: unknown): GraphicsSettings => {
     fog: bool(s.fog, d.fog),
     exposure: num(s.exposure, 0.5, 2, d.exposure),
     shake: num(s.shake, 0, 2, d.shake),
+    positionShake: bool(s.positionShake, d.positionShake),
+    rotationShake: bool(s.rotationShake, d.rotationShake),
     showFps: bool(s.showFps, d.showFps),
     antialiasFxaa: bool(s.antialiasFxaa, d.antialiasFxaa),
     drawDistance: num(s.drawDistance, 1000, 60000, d.drawDistance),
@@ -98,7 +100,7 @@ export default function App() {
     window.addEventListener('error', onErr); window.addEventListener('unhandledrejection', onRej);
     let g: Game;
     try { g = new Game(host.current!, settings); } catch (e) {
-      console.error('[1090 Fruits] failed to start', e);
+      console.error('[MagicCloud] failed to start', e);
       setFatal((e instanceof Error ? `${e.name}: ${e.message}` : String(e)) + ' · ' + navigator.userAgent);
       return;
     }
@@ -139,9 +141,9 @@ export default function App() {
       {game && snap && !showTitle && showGui && (
         <div className="absolute inset-0 pointer-events-none">
           {/* Left rail: vitals and controls stack in one column, so they cannot overlap */}
-          <div className="absolute left-2 top-2 w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
+          <div className="absolute left-2 top-2 hud-rail-left w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
           <div data-panel="vitals" className="sf-panel p-2.5 w-full shrink-0 pointer-events-auto">
-            <div className="flex justify-between items-baseline"><span className="font-orb text-[11px] sf-glow text-cyan-200">1090 FRUITS // OPERATOR</span>{settings.sandbox && <span className="text-[9px] font-orb text-emerald-200 sandbox-tag">SANDBOX</span>}{snap.invincible && <span className="text-[9px] font-orb text-yellow-200">INVULN</span>}</div>
+            <div className="flex justify-between items-baseline"><span className="font-orb text-[11px] sf-glow text-cyan-200">MAGIC CLOUD // OPERATOR</span>{settings.sandbox && <span className="text-[9px] font-orb text-emerald-200 sandbox-tag">SANDBOX</span>}{snap.invincible && <span className="text-[9px] font-orb text-yellow-200">INVULN</span>}</div>
             <div className="hex-bar mt-1.5"><div className="h-full" style={{ width: `${(snap.hp / snap.maxHp) * 100}%`, background: 'linear-gradient(90deg,#16ffb0,#33e0ff)', boxShadow: '0 0 10px #33e0ff' }} /></div>
             <div className="flex justify-between text-[10px] mt-0.5 font-orb text-cyan-100/80"><span>HP {fmt(snap.hp)} / {fmt(snap.maxHp)}</span><span>{((snap.hp / snap.maxHp) * 100).toFixed(0)}%</span></div>
             <div className="grid grid-cols-3 gap-1 mt-1.5 text-[10px]">
@@ -157,7 +159,7 @@ export default function App() {
               <div className="flex justify-between font-orb text-[10px] text-cyan-200 mb-1"><span>CONTROLS</span><button className="sf-btn px-1" onClick={() => setHelp(false)}>✕</button></div>
               <div><b className="text-cyan-300">WASD</b> move · <b className="text-cyan-300">Shift</b> sprint · <b className="text-cyan-300">Space</b> jump</div>
               <div><b className="text-cyan-300">LMB / E</b> M1 attack / fire (manual)</div>
-              <div><b className="text-cyan-300">RMB drag</b> orbit · <b className="text-cyan-300">Wheel / +/- / PgUp/PgDn</b> zoom (≤300m)</div>
+              <div><b className="text-cyan-300">RMB drag</b> orbit · <b className="text-cyan-300">P</b> view · <b className="text-cyan-300">Wheel / +/- / PgUp/PgDn</b> zoom (≤300m)</div>
               <div><b className="text-cyan-300">Z X C V B F G N M L K J</b> skills (hold for charge skills)</div>
               <div><b className="text-cyan-300">1-9, 0, -</b> equip / unequip · <b className="text-cyan-300">O/Esc</b> graphics · <b className="text-cyan-300">H</b> help</div>
               <div className="text-cyan-200/60 mt-1">Controller: LS move · RS orbit · LT zoom in · Select zoom out · RT fire · A jump · X/Y/B/LB/RB/D-pad skills · Start cycle item</div>
@@ -165,17 +167,18 @@ export default function App() {
           )}
           </div>
           {/* Right rail: telemetry, skills and zoom stack in one column, so they cannot overlap */}
-          <div className="absolute right-2 top-2 w-[236px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
+          <div className="absolute right-2 top-2 hud-rail-right w-[236px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
           <div data-panel="telemetry" className="sf-panel p-2.5 w-full text-[10px] shrink-0 pointer-events-auto">
             <div className="font-orb text-[10px] sf-glow text-cyan-200 mb-1">RANGE TELEMETRY</div>
             <div className="flex justify-between"><span className="text-cyan-300/70">AIM (ground)</span><span className="font-orb tabular-nums">{snap.aimDist.toFixed(2)} m</span></div>
             <div className="flex justify-between"><span className="text-cyan-300/70">AIM (3D)</span><span className="font-orb tabular-nums">{snap.aim3D.toFixed(2)} m</span></div>
-            <div className="flex justify-between"><span className="text-cyan-300/70">CAMERA</span><span className="font-orb tabular-nums">{snap.camDist.toFixed(1)} / 300 m</span></div>
+            <div className="flex justify-between"><span className="text-cyan-300/70">VIEW · CAMERA</span><span className="font-orb tabular-nums">{game.firstPerson ? 'FIRST PERSON' : `THIRD · ${snap.camDist.toFixed(1)}m`}</span></div>
             <div className="flex justify-between"><span className="text-cyan-300/70">NEAREST HOSTILE</span><span className="font-orb tabular-nums">{snap.nearest.toFixed(2)} m</span></div>
             <div className="flex justify-between"><span className="text-cyan-300/70">POS</span><span className="font-orb tabular-nums">{snap.pos[0].toFixed(0)}, {snap.pos[1].toFixed(0)}</span></div>
             {settings.showFps && <div className="flex justify-between mt-1 pt-1 border-t border-cyan-300/15"><span className="text-cyan-300/70">FPS · BOLTS · FX</span><span className="font-orb tabular-nums" style={{ color: snap.fps > 45 ? '#7fffc0' : snap.fps > 25 ? '#ffe070' : '#ff7080' }}>{snap.fps} · {snap.bolts} · {snap.effects}</span></div>}
             <div className="flex gap-1 mt-1.5 pointer-events-auto">
-              <button className="sf-btn flex-1 py-0.5 font-orb text-[9px]" onClick={() => setShowSettings(true)}>GRAPHICS</button>
+              <button className="sf-btn flex-1 py-0.5 font-orb text-[9px]" onClick={() => setShowSettings(true)}>SETTINGS</button>
+              <button className={`sf-btn flex-1 py-0.5 font-orb text-[9px] ${game.firstPerson ? 'on' : ''}`} onClick={() => game.toggleFirstPerson()}>{game.firstPerson ? 'FIRST PERSON' : 'THIRD PERSON'}</button>
               <button className="sf-btn flex-1 py-0.5 font-orb text-[9px]" onClick={() => setHelp(h => !h)}>CONTROLS</button>
             </div>
           </div>
@@ -196,9 +199,9 @@ export default function App() {
       {showTitle && !fatal && (
         <div className="title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto">
           <div className="title-card sf-panel w-full max-w-[560px] p-7 sm:p-10 text-center">
-            <div className="title-mark mx-auto mb-6"><span>1090</span><i /></div>
-            <p className="font-orb text-[10px] tracking-[.34em] text-cyan-200/60 mb-3">STORMFRONT // COMBAT SIMULATION</p>
-            <h1 className="font-orb text-3xl sm:text-5xl font-bold tracking-[.12em] text-white sf-glow">FRUITS</h1>
+            <div className="title-mark mx-auto mb-6"><span>MC</span><i /></div>
+            <p className="font-orb text-[10px] tracking-[.34em] text-cyan-200/60 mb-3">OPEN FIELD // COMBAT SIMULATION</p>
+            <h1 className="font-orb text-3xl sm:text-5xl font-bold tracking-[.12em] text-white sf-glow">MAGIC CLOUD</h1>
             <p className="mt-3 text-sm sm:text-base text-cyan-100/65">Choose your power. Take the arena.</p>
             <div className="title-rule my-7" />
             <button className="play-btn font-orb px-10 py-4 text-sm tracking-[.2em]" onClick={() => { setShowTitle(false); game && (game.paused = false); }}>
@@ -208,7 +211,7 @@ export default function App() {
               <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setShowSettings(true)}>SETTINGS</button>
               <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setHelp(h => !h)}>CONTROLS</button>
             </div>
-            {help && <p className="mt-5 text-[10px] leading-relaxed text-cyan-100/40">WASD MOVE · SHIFT SPRINT · SPACE JUMP · LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
+            {help && <p className="mt-5 text-[10px] leading-relaxed text-cyan-100/40">WASD MOVE · SHIFT RUN · P FIRST PERSON · SPACE JUMP · LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
             <p className="mt-7 font-orb text-[9px] tracking-[.18em] text-cyan-300/30">WIDE OPEN ARENA · SANDBOX AVAILABLE IN SETTINGS</p>
           </div>
         </div>

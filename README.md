@@ -1,4 +1,4 @@
-# 1090 Fruits 3D — Sci-Fi Combat Arena
+# MagicCloud — Open Field Combat Arena
 
 A Three.js + React arena brawler: 11 equipable fruits/swords, procedural terrain,
 weather supercells, and a GPU-driven lightning system. Everything is generated in
