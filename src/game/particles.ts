@@ -39,7 +39,7 @@ void main(){
 
 export interface SpawnOpts {
   grav?: number; drag?: number; grow?: number; alpha?: number; turb?: number;
-  ox?: number; oz?: number; spread?: number; fade?: number; groundDrag?: number; windX?: number; windZ?: number; windResponse?: number; windDynamic?: boolean;
+  ox?: number; oz?: number; spread?: number; fade?: number; groundDrag?: number; windX?: number; windZ?: number; windResponse?: number; windDynamic?: boolean; densityManaged?: boolean;
 }
 
 /** Ring-buffer GPU point particle system with fluid-ish turbulence & ground outflow. */
@@ -75,7 +75,7 @@ export class ParticleSystem {
     this.points.renderOrder = additive ? 5 : 4;
   }
   spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, color: THREE.Color | number, size: number, life: number, o: SpawnOpts = {}) {
-    if (this.density < 1 && Math.random() > this.density) return;
+    if (!o.densityManaged && this.density < 1 && Math.random() > this.density) return;
     const i = this.cursor; this.cursor = (this.cursor + 1) % this.cap;
     const i3 = i * 3;
     this.pos[i3] = x; this.pos[i3 + 1] = y; this.pos[i3 + 2] = z;

@@ -417,7 +417,7 @@ export class Microburst implements Effect {
       const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 0.82, life: 16, grow: 2.2, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
     // A slow-growing central tower fills the join as the six cells merge, so the burst
     // never leaves a hollow center for its falling mist to appear detached from.
-    const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: size * 1.3, life: 16, grow: 5, rain: 0, shade: 0.9 });
+    const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: size * 1.6, life: 16, grow: 3.5, rain: 0, shade: 0.9 });
     this.cells.push(core); this.offs.push(V()); g.add(core);
     this.ringMesh = new THREE.Mesh(GEO.torus, new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0, depthWrite: false })); this.ringMesh.position.set(pos.x, 1.2, pos.z); g.scene.add(this.ringMesh);
   }
@@ -438,14 +438,14 @@ export class Microburst implements Effect {
       const k = Math.min(1, (this.t - 5) / 0.5), source = this.cells[this.cells.length - 1], emitter = source.mesh.position;
       // Tie the falling curtain to the merged tower's actual lower edge and footprint.
       const base = Math.max(4, source.base - source.R * 0.23), emissionR = source.R * 1.05;
-      // Count at a fixed base rate, then let ParticleSystem apply the graphics density once.
-      // The frame-aware cap preserves that rate on slow mobile refresh without huge bursts.
-      this.particleAcc += dt * 3000;
-      const cap = Math.min(360, Math.max(120, Math.ceil(dt * 3000)));
-      const count = Math.min(cap, Math.floor(this.particleAcc)); this.particleAcc -= count;
+      // Use a stratified, deterministic spray: scale the rate once for graphics density,
+      // then bypass per-particle random thinning so the curtain doesn't develop holes.
+      const density = Math.max(0, Math.min(1, g.settings.particles));
+      this.particleAcc += dt * 4500 * density;
+      const count = Math.floor(this.particleAcc); this.particleAcc -= count;
       for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1;
         const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,x=emitter.x+Math.cos(a)*r,z=emitter.z+Math.sin(a)*r,localWind=g.windAt(V(x,base,z));
-        g.smoke.spawn(x,base,z,localWind.x+rnd(-8,8),-86,localWind.z+rnd(-8,8),0xc4ced7,rnd(14,30),2,{alpha:0.4*k,spread:0.82,drag:0.04,groundDrag:0.55,grow:1.6,turb:6,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true}); }
+        g.smoke.spawn(x,base,z,localWind.x+rnd(-8,8),-86,localWind.z+rnd(-8,8),0xc4ced7,rnd(18,34),2,{alpha:0.48*k,spread:0.82,drag:0.04,groundDrag:0.55,grow:1.6,turb:6,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true,densityManaged:true}); }
       const wallR = Math.min(this.size, (this.t - 5) * 60);
       // GEO.torus is already horizontal; scale its ground-plane axes into a broad oval.
       this.ringMesh.scale.set(wallR*1.42, 1, wallR*.78); (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0.25;
