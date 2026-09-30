@@ -19,14 +19,14 @@ export const CLOUD_FRUIT: ItemDef = {
     for (let i = 0; i < 4; i++) g.smoke.spawn(h.x, h.y, h.z,
       P.facing.x * forwardSpeed + wind.x * 0.7 + rnd(-0.8, 0.8), rnd(-1, 2),
       P.facing.z * forwardSpeed + wind.z * 0.7 + rnd(-0.8, 0.8), 0xf4f6fa, rnd(0.8, 1.6), 0.8,
-      { alpha: 0.7, grow: 1.5, drag: 0.3, windX: wind.x, windZ: wind.z, windResponse: 2.2 });
+      { alpha: 0.7, grow: 1.5, drag: 0.3, windX: wind.x, windZ: wind.z, windResponse: 2.2, windDynamic: true });
     cone(g, 6, 1500);
     if (combo === 4) {
       const tg = g.autoAim(150); const grp = new THREE.Group(); const mat = puffMat();
       for (let i = 0; i < 5; i++) { const c = new THREE.Mesh(GEO.sphereLo, mat); c.position.set(rnd(-0.8, 0.8), rnd(-0.3, 0.4), rnd(-0.8, 0.8)); c.scale.setScalar(rnd(0.6, 1)); grp.add(c); }
       const to = tg ? tg.pos.clone().setY(1.5) : g.aim.clone().setY(1.5);
       g.add(new Projectile(g, { pos: h.clone(), vel: to.clone().sub(h).normalize().multiplyScalar(45), mesh: grp, homing: () => (tg && !tg.dead ? tg.pos.clone().setY(1.5) : null), turn: 8, hitR: 1.6, life: 4,
-        trail: (p) => { const w = g.windAt(p); g.smoke.spawn(p.x, p.y, p.z, w.x * 0.35, 0, w.z * 0.35, 0xeef2f8, 1.2, 0.5, { alpha: 0.5, grow: 1, windX: w.x, windZ: w.z, windResponse: 1.6 }); },
+        trail: (p) => { const w = g.windAt(p); g.smoke.spawn(p.x, p.y, p.z, w.x * 0.35, 0, w.z * 0.35, 0xeef2f8, 1.2, 0.5, { alpha: 0.5, grow: 1, windX: w.x, windZ: w.z, windResponse: 1.6, windDynamic: true }); },
         onHit: (p) => { const R = g.aoe(6); explosion(g, p.setY(0), R, { core: 0xffffff, mid: 0xcfe0ff, ring: 0xffffff, smoke: 0xe8ecf2, debrisCount: 2, shake: 2 }); g.damageRadius(p, R, 6000, {});
           if (Math.random() < 0.1) { g.add(new StormCloud(g, { pos: p.clone(), kind: 'stratus', size: 34, life: 3.5, grow: 0.3, rain: 0.45, rainDmg: 60, rainColor: 0xe8ecf2 })); g.toast('STRATUS DRIZZLE', '#dfe8f5'); } } }));
     }

@@ -68,7 +68,7 @@ export class Game {
     this.scene.background = new THREE.Color(0xb9c9cf);
     this.scene.fog = new THREE.FogExp2(0xb7b09a, 0.00055);
     this.buildWorld();
-    this.fx = new ParticleSystem(30000, true); this.smoke = new ParticleSystem(26000, false); this.debris = new DebrisSystem(2500);
+    this.fx = new ParticleSystem(30000, true); this.smoke = new ParticleSystem(26000, false); this.smoke.windSampler = (x, y, z) => this.windAt(V(x, y, z)); this.debris = new DebrisSystem(2500);
     this.scene.add(this.fx.points, this.smoke.points, this.debris.mesh);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
