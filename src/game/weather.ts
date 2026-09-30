@@ -391,18 +391,18 @@ export class Flood implements Effect {
 
 /** Microburst: scattered cells form, merge, then a 145 mph downburst gust with an expanding rain wall. */
 export class Microburst implements Effect {
-  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; dmgT = 0; dustSeq=0; dustSeed=Math.random();
+  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; dmgT = 0; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {
-    for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * size * 0.9, 0, Math.sin(a) * size * 0.9); this.offs.push(off);
-      const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 0.55, life: 16, grow: 2.2, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
-    this.ringMesh = new THREE.Mesh(GEO.torus, new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0, depthWrite: false })); this.ringMesh.position.set(pos.x, 3, pos.z); g.scene.add(this.ringMesh);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * size * 0.78, 0, Math.sin(a) * size * 0.78); this.offs.push(off);
+      const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 0.82, life: 16, grow: 2.2, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
+    this.ringMesh = new THREE.Mesh(GEO.torus, new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0, depthWrite: false })); this.ringMesh.position.set(pos.x, 1.2, pos.z); g.scene.add(this.ringMesh);
   }
   audioMix() { const k=this.t>5&&this.t<15?Math.min(1,(this.t-5)/.5)*Math.min(1,(15-this.t)/1):0; return {wind:.8*k,rain:.22*k,hail:0}; }
   windAt(at: THREE.Vector3) {
     if (this.t < 5 || this.t > 15) return null;
     const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz);
-    if (dist >= this.size || dist < 1) return null;
-    const speed = 58 * (1 - dist / this.size);
+    if (dist >= this.size * 1.8 || dist < 1) return null;
+    const speed = 76 * (1 - dist / (this.size * 1.8));
     return V(dx / dist * speed, 0, dz / dist * speed);
   }
   update(dt: number) {
@@ -411,11 +411,16 @@ export class Microburst implements Effect {
     this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge * 0.85), 0, this.pos.z + this.offs[i].z * (1 - merge * 0.85)); });
     if (this.t > 5 && this.t < 15) {
       const k = Math.min(1, (this.t - 5) / 0.5); const base = this.cells[0].base * 0.7; const dens = g.settings.particles;
-      for (let i = 0; i < 40 * dens; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1;
-        const a=u*6.28318530718,r=Math.sqrt(v)*this.size*.35,x=this.pos.x+Math.cos(a)*r,z=this.pos.z+Math.sin(a)*r,localWind=g.windAt(V(x,base,z));
-        g.smoke.spawn(x,base,z,localWind.x+rnd(-5,5),-70,localWind.z+rnd(-5,5),0xf0f3f8,rnd(12,26),base/70+rnd(1.2,2.2),{alpha:0.22*k,spread:0.45,drag:0.35,grow:1.6,turb:6,ox:this.pos.x,oz:this.pos.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true}); }
+      // Fixed-rate, low-discrepancy sampling keeps the descending cloud curtain continuous
+      // across frame rates without making particle density depend on refresh rate.
+      this.particleAcc += dt * 3000 * dens;
+      const count = Math.min(120, Math.floor(this.particleAcc)); this.particleAcc -= count;
+      for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1;
+        const a=u*6.28318530718,r=Math.sqrt(v)*this.size*.48,x=this.pos.x+Math.cos(a)*r,z=this.pos.z+Math.sin(a)*r,localWind=g.windAt(V(x,base,z));
+        g.smoke.spawn(x,base,z,localWind.x+rnd(-8,8),-86,localWind.z+rnd(-8,8),0xf0f3f8,rnd(14,30),base/70*1.65+rnd(1.8,3),{alpha:0.25*k,spread:0.82,drag:0.1,grow:1.6,turb:6,ox:this.pos.x,oz:this.pos.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true}); }
       const wallR = Math.min(this.size, (this.t - 5) * 60);
-      this.ringMesh.scale.set(wallR, wallR, wallR * 8); (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0.25;
+      // GEO.torus is already horizontal; scale its ground-plane axes into a broad oval.
+      this.ringMesh.scale.set(wallR*1.42, 1, wallR*.78); (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0.25;
       const dp = Math.hypot(g.player.pos.x - this.pos.x, g.player.pos.z - this.pos.z); if (dp < this.size * 1.5) g.shakeRaw(4 * (1 - dp / (this.size * 1.5)) + 0.5, 0.1);
       this.dmgT += dt; const tick = this.dmgT > 0.2; if (tick) this.dmgT = 0;
       for (const e of g.enemies) { if (e.dead) continue; const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z; const d = Math.hypot(dx, dz) || 1;

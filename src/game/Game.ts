@@ -311,7 +311,7 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     else if (this.drag.active) { const dx = t.clientX - this.drag.x, dy = t.clientY - this.drag.y; this.drag.moved += Math.abs(dx) + Math.abs(dy); this.drag.x = t.clientX; this.drag.y = t.clientY; this.rotateCam(dx, dy); }
   };
   onTouchEnd = (e: TouchEvent) => {
-    if (e.touches.length === 0) { if (this.drag.active && this.drag.moved < 8) { this.updateMouse(this.drag.x, this.drag.y); this.touchAim = true; } this.drag.active = false; this.pinch.d = 0; }
+    if (e.touches.length === 0) { if (this.drag.active && this.drag.moved < 8) { this.updateMouse(this.drag.x, this.drag.y); this.touchAim = true; this.doM1(); } this.drag.active = false; this.pinch.d = 0; }
   };
   pollGamepad(dt: number) {
     const pads = navigator.getGamepads?.(); if (!pads) return; const gp = this.gamepadIdx !== null ? pads[this.gamepadIdx] : Array.from(pads).find(p => p);

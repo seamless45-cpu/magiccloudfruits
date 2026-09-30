@@ -76,6 +76,7 @@ export default function App() {
   const [showTitle, setShowTitle] = useState(true);
   const [showGui, setShowGui] = useState(true);
   const [help, setHelp] = useState(true);
+  const [showTelemetry, setShowTelemetry] = useState(true);
   const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -170,7 +171,8 @@ export default function App() {
           </div>
           {/* Right rail: telemetry, skills and zoom stack in one column, so they cannot overlap */}
           <div className="absolute right-2 top-2 hud-rail-right w-[236px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
-          <div data-panel="telemetry" className="sf-panel telemetry-panel p-2 w-full text-[9px] shrink-0 pointer-events-auto">
+          <button className="telemetry-toggle sf-btn self-end pointer-events-auto font-orb" onClick={() => setShowTelemetry(v => !v)} aria-expanded={showTelemetry} aria-label={showTelemetry ? 'Hide range telemetry' : 'Show range telemetry'}>{showTelemetry ? 'RANGE ▾' : 'RANGE ▸'}</button>
+          {showTelemetry && <div data-panel="telemetry" className="sf-panel telemetry-panel p-2 w-full text-[9px] shrink-0 pointer-events-auto">
             <div className="telemetry-head"><span className="font-orb text-[10px] sf-glow text-cyan-200">FIELD TELEMETRY</span>{settings.showFps && <span className="font-orb telemetry-fps" style={{ color:snap.fps>45?'#a8d8a4':snap.fps>25?'#e5d49f':'#d99183' }}>{snap.fps} FPS · {snap.bolts}B · {snap.effects}FX</span>}</div>
             <div className="telemetry-grid">
               <div className="telemetry-cell"><span>AIM GND</span><b>{snap.aimDist.toFixed(1)}m</b></div>
@@ -186,7 +188,7 @@ export default function App() {
               <button className="sf-btn font-orb" onClick={() => setHelp(h => !h)} title="Controls" aria-label="Controls">HELP</button>
               <button className={`sf-btn font-orb ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} title={soundEnabled?'Mute weather audio':'Enable weather audio'} aria-label={soundEnabled?'Mute weather audio':'Enable weather audio'}>SND</button>
             </div>
-          </div>
+          </div>}
           {/* Toasts */}
           <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1">
             {toasts.map(t => <div key={t.id} className="toast-in sf-panel px-4 py-1 font-orb text-[11px] tracking-widest" style={{ color: t.c, textShadow: `0 0 10px ${t.c}` }}>{t.m}</div>)}
@@ -196,6 +198,7 @@ export default function App() {
           </div>
           <Inventory game={game} equipped={snap.equipped} />
           {!item && <div className="absolute left-1/2 -translate-x-1/2 font-orb text-[10px] text-cyan-200/70 sf-glow" style={{ bottom: 'calc(var(--hud-bottom) + 4px)' }}>SELECT A FRUIT OR SWORD FROM INVENTORY {touch ? '' : '(1-9, 0, -)'}</div>}
+          {touch && item && <div className="mobile-tap-hint absolute left-1/2 -translate-x-1/2 font-orb text-[9px] text-cyan-100/75" style={{ bottom: 'calc(var(--hud-bottom) + 4px)' }}>TAP SCREEN TO ATTACK</div>}
           {touch && <MobileControls game={game} />}
           {/* crosshair */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 opacity-60"><div className="absolute left-1/2 top-0 bottom-0 w-px bg-cyan-300" /><div className="absolute top-1/2 left-0 right-0 h-px bg-cyan-300" /></div>
@@ -217,7 +220,7 @@ export default function App() {
               <button className="sf-btn px-4 py-2 font-orb text-[10px]" onClick={() => setHelp(h => !h)}>CONTROLS</button>
               <button className={`sf-btn px-4 py-2 font-orb text-[10px] ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} disabled={!game}>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</button>
             </div>
-            {help && <p className="mt-5 text-[10px] leading-relaxed text-cyan-100/40">WASD MOVE · SHIFT RUN · P FIRST PERSON · SPACE JUMP · LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
+            {help && <p className="mt-5 text-[10px] leading-relaxed text-cyan-100/40">WASD MOVE · SHIFT RUN · P FIRST PERSON · SPACE JUMP · TAP / LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
             <p className="mt-7 font-orb text-[9px] tracking-[.18em] text-cyan-300/30">WIDE OPEN ARENA · SANDBOX AVAILABLE IN SETTINGS</p>
           </div>
         </div>

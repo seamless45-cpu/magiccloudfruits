@@ -6,15 +6,15 @@ import type { GraphicsSettings } from '../game/types';
 export function Inventory({ game, equipped }: { game: Game; equipped: number }) {
   const keyLabel = (i: number) => (i < 9 ? String(i + 1) : i === 9 ? '0' : '-');
   return (
-    <div data-panel="inventory" className="absolute bottom-2 left-0 right-0 px-2 flex justify-center pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
-      <div data-panel="inventory-row" className="flex gap-1 items-end justify-center flex-wrap" style={{ maxWidth: 'var(--inv-max)' }}>
+    <div data-panel="inventory" className="inventory-dock absolute bottom-2 left-0 right-0 px-2 flex justify-center pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
+      <div data-panel="inventory-row" className="inventory-row flex gap-1 items-end justify-center" style={{ maxWidth: 'var(--inv-max)' }}>
         {game.items.map((it, i) => (
-          <button key={it.id} className={`slot ${equipped === i ? 'eq' : ''}`} onClick={() => game.toggleEquip(i)} title={`${it.name} (${it.type})`}>
-            <span className="absolute top-0.5 left-1 text-[9px] font-orb text-cyan-200/70">{keyLabel(i)}</span>
-            <span className="absolute top-0.5 right-1 text-[7px] font-orb" style={{ color: it.type === 'fruit' ? '#9dffb0' : '#ffcf7a' }}>{it.type === 'fruit' ? 'FRT' : 'SWD'}</span>
-            <span className="block text-[22px] max-sm:text-[16px] leading-none mt-1" style={{ color: it.color, textShadow: `0 0 10px ${it.color}` }}>{it.glyph}</span>
-            <span className="absolute bottom-0.5 left-0 right-0 text-[8px] max-sm:text-[6px] font-semibold truncate px-0.5 text-cyan-50/90">{it.name.replace(' Fruit', '').replace(' (Thunder)', '').replace(' (Quake)', '')}</span>
-            {equipped === i && <span className="absolute -top-px left-2 right-2 h-[2px]" style={{ background: it.color, boxShadow: `0 0 8px ${it.color}` }} />}
+          <button key={it.id} className={`slot ${equipped === i ? 'eq' : ''}`} onClick={() => game.toggleEquip(i)} title={`${it.name} (${it.type})`} aria-label={`Equip ${it.name}`} aria-pressed={equipped === i}>
+            <span className="slot-key font-orb">{keyLabel(i)}</span>
+            <span className="slot-type font-orb" style={{ color: it.type === 'fruit' ? '#b4d0a4' : '#d7bd86' }}>{it.type === 'fruit' ? 'FRUIT' : 'SWORD'}</span>
+            <span className="slot-icon" style={{ color: it.color, textShadow: `0 0 12px ${it.color}` }}>{it.glyph}</span>
+            <span className="slot-name">{it.name.replace(' Fruit', '').replace(' (Thunder)', '').replace(' (Quake)', '')}</span>
+            {equipped === i && <span className="slot-active" style={{ background: it.color, boxShadow: `0 0 10px ${it.color}` }} />}
           </button>
         ))}
       </div>
@@ -78,10 +78,9 @@ export function MobileControls({ game }: { game: Game }) {
         <div className="absolute -bottom-5 left-0 right-0 text-center font-orb text-[8px] text-cyan-100/55 pointer-events-none">PUSH PAST RIM TO RUN</div>
         <div className="absolute w-12 h-12 rounded-full bg-cyan-300/30 border border-cyan-200/70 shadow-[0_0_16px_rgba(51,224,255,.5)]" style={{ left: `calc(50% - 24px + ${knob.x * 40}px)`, top: `calc(50% - 24px + ${knob.y * 40}px)` }} />
       </div>
-      <div className="mobile-actions absolute left-40 bottom-24 flex flex-col gap-2 pointer-events-auto">
-        <button className="sf-btn w-16 h-16 font-orb text-[11px]" onPointerDown={e => { e.stopPropagation(); game.doM1(); }}>ATK</button>
-        <button className="sf-btn w-16 h-10 font-orb text-[10px]" onPointerDown={e => { e.stopPropagation(); game.jump(); }}>JUMP</button>
-      </div>
+      <button className="mobile-jump absolute right-5 bottom-20 pointer-events-auto font-orb" onPointerDown={e => { e.stopPropagation(); e.preventDefault(); game.jump(); }} aria-label="Jump">
+        <span className="mobile-jump-icon" aria-hidden="true">↑</span><span>JUMP</span>
+      </button>
     </>
   );
 }
