@@ -50,6 +50,8 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
         <Row label="Bloom / Glow">{tog('bloom')}</Row>
         <Row label="Bloom Strength">{num('bloomStrength', 0, 2.5, 0.05)}</Row>
         <Row label="FXAA Anti-Aliasing">{tog('antialiasFxaa')}</Row>
+        <Row label="Motion Interpolation (60 Hz)">{tog('frameInterpolation')}</Row>
+        <p className="text-[10px] text-cyan-200/45 py-1">Linear motion-vector pose blending for the player, enemies, and camera. Uses a fixed 60 Hz simulation and a one-tick presentation delay; not AI or optical-flow frame generation.</p>
         <Row label="Particle Density">{num('particles', 0.1, 1, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
         <Row label="Debris Density">{num('debris', 0.1, 1, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
         <Row label="Cloud Detail">{num('clouds', 0.3, 1.5, 0.05, v => `${Math.round(v * 100)}%`)}</Row>

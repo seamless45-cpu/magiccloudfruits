@@ -22,9 +22,11 @@ export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSetting
   high: { resolution: 1, shadows: true, shadowRes: 2048, bloom: true, particles: 0.85, debris: 0.85, maxBolts: 200, clouds: 1, antialiasFxaa: true, drawDistance: 40000 },
   ultra: { resolution: 1.25, shadows: true, shadowRes: 4096, bloom: true, particles: 1, debris: 1, maxBolts: 320, clouds: 1.2, antialiasFxaa: true, drawDistance: 60000 },
 };
-export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, drawDistance: 40000, clouds: 1 });
+export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, drawDistance: 40000, clouds: 1 });
 
 interface CdState { rem: number; total: number; charges: number; interval: number; regenT: number; holding: boolean }
+type Pose = { position: THREE.Vector3; rotation: THREE.Quaternion };
+type RenderPose = { player: Pose; enemies: Pose[]; camera: Pose };
 
 export class Game {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera; composer: EffectComposer; bloom: UnrealBloomPass; fxaa: ShaderPass;
@@ -45,6 +47,8 @@ export class Game {
   lightningCharge = 50; chargeT = 0;
   stats = { kills: 0, dmg: 0, dmgWin: [] as { t: number; d: number }[] };
   fps = 60; fpsAcc = 0; fpsN = 0;
+  private readonly interpolationStep = 1 / 60; private interpolationAccumulator = 0;
+  private interpolationPrevious: RenderPose | null = null; private interpolationCurrent: RenderPose | null = null;
   overlay = { color: '#000', a: 0, fade: 0 };
   onToast: (m: string, c: string) => void = () => {};
   onFatal: (m: string) => void = () => {};
@@ -85,6 +89,8 @@ export class Game {
     for (let i = 0; i < 6; i++) this.enemies.push(new Enemy(this, 'runner'));
     for (let i = 0; i < 4; i++) this.enemies.push(new Enemy(this, 'ranged'));
     for (let i = 0; i < 2; i++) this.enemies.push(new Enemy(this, 'brute'));
+    this.interpolationPrevious = this.createRenderPose(); this.interpolationCurrent = this.createRenderPose();
+    this.captureRenderPose(this.interpolationPrevious); this.copyRenderPose(this.interpolationPrevious, this.interpolationCurrent);
     this.applySettings(settings);
     this.bindInput();
     window.addEventListener('resize', this.resize); this.resize();
@@ -551,20 +557,81 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     this.add(new Timed(this, grp, 0.22, (k) => { m.scale.setScalar(size * (0.7 + k * 0.5)); (m.material as any).opacity = 0.95 * (1 - k); m.rotateZ(0.12); }));
   }
 
+  private createRenderPose(): RenderPose {
+    const pose = (): Pose => ({ position: new THREE.Vector3(), rotation: new THREE.Quaternion() });
+    return { player: pose(), enemies: this.enemies.map(() => pose()), camera: pose() };
+  }
+  private captureRenderPose(target: RenderPose) {
+    target.player.position.copy(this.player.mesh.position); target.player.rotation.copy(this.player.mesh.quaternion);
+    target.camera.position.copy(this.camera.position); target.camera.rotation.copy(this.camera.quaternion);
+    while (target.enemies.length < this.enemies.length) target.enemies.push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion() });
+    for (let i = 0; i < this.enemies.length; i++) {
+      target.enemies[i].position.copy(this.enemies[i].mesh.position);
+      target.enemies[i].rotation.copy(this.enemies[i].mesh.quaternion);
+    }
+  }
+  private copyRenderPose(from: RenderPose, to: RenderPose) {
+    to.player.position.copy(from.player.position); to.player.rotation.copy(from.player.rotation);
+    to.camera.position.copy(from.camera.position); to.camera.rotation.copy(from.camera.rotation);
+    while (to.enemies.length < from.enemies.length) to.enemies.push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion() });
+    for (let i = 0; i < from.enemies.length; i++) {
+      to.enemies[i].position.copy(from.enemies[i].position); to.enemies[i].rotation.copy(from.enemies[i].rotation);
+    }
+  }
+  private blendRenderPose(alpha: number) {
+    const a = this.interpolationPrevious!, b = this.interpolationCurrent!;
+    this.player.mesh.position.lerpVectors(a.player.position, b.player.position, alpha);
+    this.player.mesh.quaternion.copy(a.player.rotation).slerp(b.player.rotation, alpha);
+    for (let i = 0; i < Math.min(this.enemies.length, a.enemies.length, b.enemies.length); i++) {
+      this.enemies[i].mesh.position.lerpVectors(a.enemies[i].position, b.enemies[i].position, alpha);
+      this.enemies[i].mesh.quaternion.copy(a.enemies[i].rotation).slerp(b.enemies[i].rotation, alpha);
+    }
+    this.camera.position.lerpVectors(a.camera.position, b.camera.position, alpha);
+    this.camera.quaternion.copy(a.camera.rotation).slerp(b.camera.rotation, alpha);
+  }
+  private restoreCurrentPose() {
+    const pose = this.interpolationCurrent!;
+    this.player.mesh.position.copy(pose.player.position); this.player.mesh.quaternion.copy(pose.player.rotation);
+    for (let i = 0; i < Math.min(this.enemies.length, pose.enemies.length); i++) {
+      this.enemies[i].mesh.position.copy(pose.enemies[i].position); this.enemies[i].mesh.quaternion.copy(pose.enemies[i].rotation);
+    }
+    this.camera.position.copy(pose.camera.position); this.camera.quaternion.copy(pose.camera.rotation);
+  }
+
   // ---------------------------------------------------------------- loop
   loop = () => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const now = performance.now(); const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     this.fpsAcc += dt; this.fpsN++; if (this.fpsAcc > 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
+    let blended = false;
     try {
-      this.update(dt);
+      if (this.settings.frameInterpolation && this.interpolationPrevious && this.interpolationCurrent) {
+        this.interpolationAccumulator = Math.min(this.interpolationAccumulator + dt, this.interpolationStep * 4);
+        let steps = 0;
+        while (this.interpolationAccumulator >= this.interpolationStep && steps < 4) {
+          this.copyRenderPose(this.interpolationCurrent, this.interpolationPrevious);
+          this.update(this.interpolationStep);
+          this.captureRenderPose(this.interpolationCurrent);
+          this.interpolationAccumulator -= this.interpolationStep; steps++;
+        }
+        this.blendRenderPose(this.interpolationAccumulator / this.interpolationStep); blended = true;
+      } else {
+        this.interpolationAccumulator = 0;
+        this.update(dt);
+        if (this.interpolationPrevious && this.interpolationCurrent) {
+          this.captureRenderPose(this.interpolationCurrent);
+          this.copyRenderPose(this.interpolationCurrent, this.interpolationPrevious);
+        }
+      }
       if ((this.settings.bloom || this.settings.antialiasFxaa) && this.halfFloat) this.composer.render(); else this.renderer.render(this.scene, this.camera);
     } catch (e) {
       // A failure in the render loop would otherwise leave a silently frozen/black scene.
       this.disposed = true; cancelAnimationFrame(this.raf);
       console.error('[MagicCloud] render loop stopped', e);
       this.onFatal(e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    } finally {
+      if (blended && this.interpolationCurrent) this.restoreCurrentPose();
     }
   };
   update(dt: number) {

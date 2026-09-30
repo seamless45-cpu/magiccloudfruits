@@ -227,7 +227,7 @@ export function fallingRock(g: any, target: THREE.Vector3, size: number, speed: 
 
 /** Tsunami wave wall moving through; damages & pushes enemies it passes. */
 export class Tsunami implements Effect {
-  t = 0; grp = new THREE.Group(); hits = new Map<any, number>(); dir: THREE.Vector3; pos: THREE.Vector3; dist: number;
+  t = 0; grp = new THREE.Group(); hits = new Map<any, number>(); dir: THREE.Vector3; pos: THREE.Vector3; dist: number; detonated = false;
   constructor(public g: any, from: THREE.Vector3, to: THREE.Vector3, public w: number, public h: number, public speed: number, public dmg: number, color = 0x1e6fd0) {
     this.pos = from.clone(); this.pos.y = 0; this.dir = to.clone().sub(from).setY(0).normalize(); this.dist = from.distanceTo(to) * 2;
     const geo = new THREE.PlaneGeometry(1, 1, 24, 10); const p = geo.attributes.position as THREE.BufferAttribute;
@@ -239,7 +239,26 @@ export class Tsunami implements Effect {
     this.grp.lookAt(this.pos.clone().add(this.dir)); g.scene.add(this.grp);
   }
   update(dt: number) {
+    if (this.detonated) return false;
     this.t += dt; const step = this.speed * dt; this.pos.addScaledVector(this.dir, step); this.grp.position.copy(this.pos);
+    // Detect converging waves by their moving centers. This avoids detonating adjacent
+    // same-direction lanes just because their deliberately broad visual fronts overlap.
+    for (const other of this.g.effects as Effect[]) {
+      if (!(other instanceof Tsunami) || other === this || other.detonated || other.t < 0.04) continue;
+      const rel = other.pos.clone().sub(this.pos), dist = rel.length();
+      const relativeVelocity = other.dir.clone().multiplyScalar(other.speed).sub(this.dir.clone().multiplyScalar(this.speed));
+      const closing = relativeVelocity.dot(rel) < 0;
+      const contactRange = (this.h + other.h) * 0.45;
+      if (closing && dist < contactRange) {
+        const impact = this.pos.clone().add(other.pos).multiplyScalar(0.5);
+        this.detonated = true; other.detonated = true;
+        const radius = Math.max(12, Math.min(150, Math.max(this.w, other.w) * 0.28));
+        explosion(this.g, impact, radius, { core: 0xe9ffff, mid: 0x39c9ff, ring: 0x9feaff, smoke: 0x163e65, debrisCount: 8, smokeCount: 12, shake: 16 });
+        this.g.damageRadius(impact, radius, Math.max(12000, (this.dmg + other.dmg) * 0.7), { knock: 12, stun: 0.8 });
+        this.g.shake(impact, 16, 0.55);
+        return false;
+      }
+    }
     const k = Math.min(1, this.t / 0.4) * Math.min(1, (this.dist / this.speed - this.t) / 0.6);
     this.grp.scale.set(1, Math.max(0.01, k), 1);
     const side = V(-this.dir.z, 0, this.dir.x);

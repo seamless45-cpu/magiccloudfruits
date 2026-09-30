@@ -15,7 +15,7 @@ export interface CloudOpts {
   rain?: number; rainDmg?: number; hail?: number; hailDmg?: number; hailShatter?: number; hailShatterDmg?: number;
   bolts?: number; boltDmg?: number; superChance?: number; superMul?: number; superName?: string;
   tornado?: boolean; tornadoRate?: number; wind?: number; windDmg?: number; supercellChance?: number;
-  length?: number; depth?: number; bow?: number; shade?: number; rainColor?: number; dmgMul?: number; spin?: number; coreFill?: number;
+  length?: number; depth?: number; bow?: number; shade?: number; rainColor?: number; dmgMul?: number; spin?: number;
 }
 
 /** Dynamic-growing volumetric-ish cloud built from instanced puffs, with rainshafts, hail, lightning, tornadoes. */
@@ -56,21 +56,6 @@ export class StormCloud implements Effect {
           this.addPuff(x,b+R*rnd(.12,1.2),z,R*rnd(.18,.27),rnd(.06,.7),rnd(.62,.84),rnd(.72,1.05)); }
       } else {
         const nc=N(26);for(let i=0;i<nc;i++){const [x,z]=disk(i,nc,R*.52,.37);this.addPuff(x,b+R*rnd(.18,1.15),z,R*rnd(.17,.25),rnd(.08,.68),rnd(.62,.84),rnd(.72,1.05));}
-      }
-      // Storm Suppression's rapid small cells used to expose holes between the sparse cloud layers.
-      // Interleave an early-forming, stratified core layer so each cell reads as one connected cloud.
-      if (k === 'cell') {
-        // Core-fill cells on a stratified 3D lattice, not a single disk. This keeps a large
-        // suppression parent cloud visually continuous from base through crown at every angle.
-        const fillN = this.o.coreFill ?? Math.max(40, Math.min(76, Math.round(66 * dens * (this.o.densityScale ?? 1))));
-        const layers = this.o.coreFill ? 8 : 4, perLayer = Math.ceil(fillN / layers);
-        for (let i = 0; i < fillN; i++) {
-          const layer = i % layers, point = Math.floor(i / layers);
-          const [x,z] = disk(point, perLayer, R * (this.o.coreFill ? 0.84 : 0.72), 0.91 + layer * 0.41);
-          const layerStep = this.o.coreFill ? 0.145 : 0.27;
-          this.addPuff(x, b + R * (0.14 + layer * layerStep + rnd(-0.035, 0.035)), z,
-            R * (this.o.coreFill ? rnd(0.31, 0.42) : rnd(0.23, 0.34)), rnd(0.025, 0.18), rnd(0.68, 0.9), rnd(0.9, 1.1));
-        }
       }
       if(k==='supercell'||k==='cumulus'){
         // Broad, flattened anvil canopy: it develops late on Cumulonimbus and fills the supercell crown.
@@ -150,7 +135,10 @@ export class StormCloud implements Effect {
     return out.set(c.x+Math.cos(a)*r,0,c.z+Math.sin(a)*r);
   }
   rainRadius() {
-    const factor = this.o.kind === 'nimbo' ? 0.85 : (this.o.kind === 'cumulus' || this.isSuper) ? 0.75 : 0.5;
+    // Cell clouds have a broad, low underbase extending beyond their nominal R;
+    // the old generic 0.5R rain disk left much of that visible footprint dry.
+    // Match the actual puff footprint without increasing the particle budget.
+    const factor = this.o.kind === 'cell' ? 1.3 : this.o.kind === 'nimbo' ? 0.85 : (this.o.kind === 'cumulus' || this.isSuper) ? 0.75 : 0.5;
     return this.R * factor;
   }
   inRain(p: THREE.Vector3) {

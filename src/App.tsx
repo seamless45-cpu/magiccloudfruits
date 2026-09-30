@@ -40,6 +40,7 @@ const clampSettings = (raw: unknown): GraphicsSettings => {
     rotationShake: bool(s.rotationShake, d.rotationShake),
     showFps: bool(s.showFps, d.showFps),
     antialiasFxaa: bool(s.antialiasFxaa, d.antialiasFxaa),
+    frameInterpolation: bool(s.frameInterpolation, d.frameInterpolation),
     drawDistance: num(s.drawDistance, 1000, 60000, d.drawDistance),
     clouds: num(s.clouds, 0.3, 1.5, d.clouds),
   };
