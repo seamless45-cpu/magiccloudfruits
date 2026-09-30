@@ -218,7 +218,7 @@ export class StormCloud implements Effect {
         this.boltT = rnd(0.2, 2) / o.bolts;
         const isSuper = Math.random() < (o.superChance ?? 0); const mul = isSuper ? (o.superMul ?? 3) : 1;
         const rp = this.rainPoint(V()); rp.x += rnd(-10, 10);
-        const top = V(rp.x + rnd(-20, 20), this.base * 2.7, rp.z + rnd(-20, 20));
+        const top = V(rp.x + rnd(-20, 20), this.base * 5.4, rp.z + rnd(-20, 20));
         const col = isSuper ? (mul >= 12 ? 0xff66ff : 0xaaddff) : 0xcfe0ff;
         for (let k = 0; k < (isSuper ? 3 : 1); k++) g.bolt(top, rp, { color: col, width: isSuper ? (mul >= 12 ? 3.2 : 1.8) : 0.8, life: isSuper ? 0.6 : 0.3, segs: 18, jag: 0.045, branches: isSuper ? 3 : 2 });
         g.audio.thunder(rp.distanceTo(g.player.pos), isSuper ? 1.25 : 0.75);

@@ -42,6 +42,14 @@ const clampSettings = (raw: unknown): GraphicsSettings => {
     antialiasFxaa: bool(s.antialiasFxaa, d.antialiasFxaa),
     frameInterpolation: bool(s.frameInterpolation, d.frameInterpolation),
     frameInterpolationMethod: s.frameInterpolationMethod === 'frameHold' ? 'frameHold' : 'linear',
+    motionBlur: bool(s.motionBlur, d.motionBlur),
+    motionBlurStrength: num(s.motionBlurStrength, 0.5, 0.96, d.motionBlurStrength),
+    lightningSegments: num(s.lightningSegments, 6, 36, d.lightningSegments),
+    lightningJitter: num(s.lightningJitter, 0, 2.5, d.lightningJitter),
+    lightningBranches: num(s.lightningBranches, 0, 6, d.lightningBranches),
+    lightningJaggedness: num(s.lightningJaggedness, 0.1, 3, d.lightningJaggedness),
+    lightningWidth: num(s.lightningWidth, 0.4, 2.5, d.lightningWidth),
+    lightningHeight: num(s.lightningHeight, 0.5, 2.5, d.lightningHeight),
     drawDistance: num(s.drawDistance, 1000, 60000, d.drawDistance),
     clouds: num(s.clouds, 0.3, 1.5, d.clouds),
   };
@@ -189,6 +197,9 @@ export default function App() {
       )}
       {game && snap && !showTitle && (showGui || guiClosing) && (
         <div className={`absolute inset-0 pointer-events-none ${guiClosing ? 'ui-hud-closing' : ''}`} onAnimationEnd={onGuiCloseAnimationEnd}>
+          <div className="damage-indicator-layer absolute inset-0 overflow-hidden" aria-hidden="true">
+            {snap.damageIndicators.map(d => <div key={d.id} className={`damage-indicator ${d.crit ? 'damage-indicator-crit' : ''}`} style={{ left: `${d.x}%`, top: `${d.y}%` }}>{d.crit && <span>CRIT </span>}{fmt(d.amount)}</div>)}
+          </div>
           {/* Left rail: vitals and controls stack in one column, so they cannot overlap */}
           <div className="absolute left-2 top-2 hud-rail-left w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
           <div data-panel="vitals" className="sf-panel p-2.5 w-full shrink-0 pointer-events-auto">

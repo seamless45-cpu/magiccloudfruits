@@ -35,6 +35,28 @@
       @keyframes boot-sweep { to { transform:translateX(365%); } }
       @keyframes boot-dot { 50% { opacity:.45; transform:scale(.72); } }
       @keyframes d { 0% { content:''; } 25% { content:'.'; } 50% { content:'..'; } 75% { content:'...'; } }
+      #boot .box { display:grid; grid-template-columns:minmax(150px,.68fr) minmax(0,1.32fr); gap:clamp(20px,4vw,44px); width:min(100%,820px); max-height:calc(100dvh - 28px); overflow:auto; padding:clamp(22px,4.5vw,42px); border-radius:4px; text-align:left; background:linear-gradient(135deg,rgba(43,54,47,.97),rgba(21,29,26,.99)); box-shadow:0 30px 90px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.08),inset 0 0 45px rgba(197,176,127,.035); }
+      #boot .boot-brand { display:flex; flex-direction:column; justify-content:center; min-width:0; padding-right:clamp(12px,2.5vw,28px); border-right:1px solid rgba(239,232,214,.18); }
+      #boot .boot-mark { width:58px; height:58px; margin:0 0 24px 8px; }
+      #boot .kicker { font-size:8px; letter-spacing:.19em; }
+      #boot .title { font-size:clamp(21px,3.8vw,32px); line-height:1.04; letter-spacing:.075em; }
+      #boot .subtitle { font-size:9px; letter-spacing:.14em; line-height:1.5; }
+      #boot .boot-code { margin-top:24px; color:rgba(239,232,214,.43); font:600 8px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.14em; line-height:1.8; }
+      #boot .boot-main { min-width:0; align-self:center; }
+      #boot .boot-topline { display:flex; align-items:center; justify-content:space-between; gap:10px; padding-bottom:11px; border-bottom:1px solid rgba(239,232,214,.13); color:rgba(239,232,214,.48); font:600 8px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.17em; }
+      #boot .boot-phase { color:#d8c799; white-space:nowrap; }
+      #boot .boot-status { justify-content:flex-start; min-height:28px; margin-top:17px; }
+      #boot .msg { font-size:13px; }
+      #boot .boot-progress { height:4px; margin:14px 0 0; background:rgba(239,232,214,.09); }
+      #boot .boot-progress i { background:linear-gradient(90deg,transparent,#c8ae77 42%,#f0ecdf 52%,#c8ae77 62%,transparent); }
+      #boot .boot-modules { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin-top:18px; }
+      #boot .boot-module { min-width:0; padding:9px 8px; border:1px solid rgba(239,232,214,.13); background:linear-gradient(150deg,rgba(239,232,214,.055),rgba(0,0,0,.12)); }
+      #boot .boot-module b { display:block; margin-bottom:5px; color:rgba(239,232,214,.4); font:600 7px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.12em; }
+      #boot .boot-module span { display:block; color:#e6e0d1; font:600 8px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.08em; white-space:nowrap; }
+      #boot .boot-footer { grid-column:1/-1; display:flex; justify-content:space-between; gap:12px; padding-top:11px; border-top:1px solid rgba(239,232,214,.12); color:rgba(239,232,214,.35); font:600 7px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.13em; }
+      #boot .hint { margin-top:13px; font-size:11px; }
+      #boot .actions { justify-content:flex-start; }
+      @media (max-width:560px) { #boot .box { grid-template-columns:1fr; gap:19px; text-align:center; } #boot .boot-brand { align-items:center; padding:0 0 15px; border-right:0; border-bottom:1px solid rgba(239,232,214,.18); } #boot .boot-mark { margin:0 0 13px; } #boot .boot-code { display:none; } #boot .boot-topline { font-size:7px; } #boot .boot-modules { gap:5px; } #boot .boot-module { padding:8px 5px; } #boot .boot-module span { font-size:7px; } #boot .boot-status,#boot .actions { justify-content:center; } #boot .boot-footer { font-size:6px; } }
       @media (prefers-reduced-motion:reduce) { #boot *,#boot:before,#boot:after { animation-duration:.01ms !important; animation-iteration-count:1 !important; } #boot { transition:none; } }
     </style>
     <!-- No external requests at all: the page loads nothing but the document itself, so a
@@ -43,24 +65,31 @@
   </head>
   <body>
     <div id="root"></div>
-    <div id="boot">
+    <div id="boot" role="status" aria-live="polite">
       <div class="box">
-        <div class="boot-mark" aria-hidden="true"><span>MC</span></div>
-        <div class="kicker">FIELD OPERATIONS / BOOT SEQUENCE</div>
-        <div class="title">MAGIC CLOUD</div>
-        <div class="subtitle">OPEN FIELD COMBAT ARENA</div>
-        <div class="boot-status"><span class="status-dot" aria-hidden="true"></span><div class="msg" id="boot-msg">Preparing the arena<span class="dots"></span></div></div>
-        <div class="boot-progress" aria-hidden="true"><i></i></div>
-        <div class="hint" id="boot-hint"></div>
-        <div class="actions" id="boot-actions">
-          <button type="button" class="btn" onclick="go('/?r=' + Date.now())">RETRY</button>
-          <button type="button" class="btn" onclick="go('/?safe=1&r=' + Date.now())">SAFE MODE</button>
+        <div class="boot-brand">
+          <div class="boot-mark" aria-hidden="true"><span>MC</span></div>
+          <div class="kicker">FIELD OPERATIONS / BOOT SEQUENCE</div>
+          <div class="title">MAGIC CLOUD</div>
+          <div class="subtitle">OPEN FIELD COMBAT ARENA</div>
+          <div class="boot-code">LOCAL BUILD<br>GRAPHICS · WEATHER · COMBAT</div>
         </div>
-        <noscript>
-          <div class="msg" style="margin-top:14px">JavaScript is disabled in this browser.</div>
-          <div class="hint">The 3D arena is rendered entirely by JavaScript, so it cannot start without it.
-            Enable JavaScript for this site, then reload.</div>
-        </noscript>
+        <div class="boot-main">
+          <div class="boot-topline"><span>ARENA SYSTEMS INITIALIZATION</span><span class="boot-phase" id="boot-phase">PREPARING</span></div>
+          <div class="boot-status"><span class="status-dot" aria-hidden="true"></span><div class="msg" id="boot-msg">Preparing the arena<span class="dots"></span></div></div>
+          <div class="boot-progress" aria-hidden="true"><i></i></div>
+          <div class="boot-modules" aria-hidden="true">
+            <div class="boot-module"><b>01 / ENGINE</b><span>WEBGL2 CORE</span></div>
+            <div class="boot-module"><b>02 / WORLD</b><span>FIELD ASSEMBLY</span></div>
+            <div class="boot-module"><b>03 / SYSTEMS</b><span>READY CHECK</span></div>
+          </div>
+          <div class="hint" id="boot-hint"></div>
+          <div class="actions" id="boot-actions">
+            <button type="button" class="btn" onclick="go('/?r=' + Date.now())">RETRY</button>
+            <button type="button" class="btn" onclick="go('/?safe=1&r=' + Date.now())">SAFE MODE</button>
+          </div>
+        </div>
+        <div class="boot-footer"><span>MAGIC CLOUD // FIELD CONSOLE</span><span>INITIALIZING<span class="dots"></span></span></div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx" onerror="window.__bootScriptFailed = true"></script>
@@ -87,10 +116,10 @@
 
         // Progress feedback: a slow first load must not look like a freeze.
         window.__bootTimer = setTimeout(function () {
-          if (!started()) setMsg('Downloading engine<span class="dots"></span>');
+          if (!started()) { setMsg('Loading the graphics engine<span class="dots"></span>'); var phase = document.getElementById('boot-phase'); if (phase) phase.textContent = 'ENGINE'; }
         }, 1200);
         window.__bootSlowTimer = setTimeout(function () {
-          if (!mounted()) setMsg('Building arena<span class="dots"></span>');
+          if (!mounted()) { setMsg('Assembling the arena<span class="dots"></span>'); var phase = document.getElementById('boot-phase'); if (phase) phase.textContent = 'WORLD'; }
         }, 4000);
 
         setTimeout(function () {

@@ -28,6 +28,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 export function Settings({ settings, closing, onChange, onClose, onExited }: { settings: GraphicsSettings; closing: boolean; onChange: (s: GraphicsSettings) => void; onClose: () => void; onExited: () => void }) {
   const [interpolationMethodsOpen, setInterpolationMethodsOpen] = useState(false);
+  const [lightningSettingsOpen, setLightningSettingsOpen] = useState(false);
   const set = <K extends keyof GraphicsSettings>(k: K, v: GraphicsSettings[K]) => onChange({ ...settings, [k]: v });
   const num = (k: keyof GraphicsSettings, min: number, max: number, step: number, fmt = (v: number) => v.toFixed(2)) => (
     <><input type="range" min={min} max={max} step={step} value={settings[k] as number} onChange={e => set(k, +e.target.value as any)} className="w-28" /><span className="w-12 text-right font-orb text-[10px]">{fmt(settings[k] as number)}</span></>
@@ -62,6 +63,18 @@ export function Settings({ settings, closing, onChange, onClose, onExited }: { s
           </button>
         </div>}
         <p className="text-[10px] text-cyan-200/45 py-1">Both methods use a fixed 60 Hz simulation for player, enemies, and camera. Linear mode adds a one-tick presentation delay; no AI or optical-flow generation is claimed.</p>
+        <Row label="Jelly Motion Blur">{tog('motionBlur')}</Row>
+        <Row label="Trail Retention">{num('motionBlurStrength', 0.5, 0.96, 0.02, v => `${Math.round(v * 100)}%`)}</Row>
+        <p className="text-[10px] text-cyan-200/45 py-1">Lightweight after-image trail; uses post-processing when supported.</p>
+        <Row label="Advanced Lightning"><button className="sf-btn px-2 text-[9px] font-orb" onClick={() => setLightningSettingsOpen(v => !v)} aria-expanded={lightningSettingsOpen} aria-controls="advanced-lightning-settings" data-ui-sound="toggle">{lightningSettingsOpen ? 'CLOSE −' : 'TUNE +'}</button></Row>
+        {lightningSettingsOpen && <div id="advanced-lightning-settings" className="lightning-settings-drawer ui-scroll" role="group" aria-label="Advanced lightning settings">
+          <Row label="Segments / detail">{num('lightningSegments', 6, 36, 2, v => `${v}`)}</Row>
+          <Row label="Point jitter">{num('lightningJitter', 0, 2.5, 0.05, v => `${v.toFixed(2)}×`)}</Row>
+          <Row label="Branches">{num('lightningBranches', 0, 6, 1, v => `${v}`)}</Row>
+          <Row label="Jaggedness">{num('lightningJaggedness', 0.1, 3, 0.05, v => `${v.toFixed(2)}×`)}</Row>
+          <Row label="Bolt width">{num('lightningWidth', 0.4, 2.5, 0.05, v => `${v.toFixed(2)}×`)}</Row>
+          <Row label="Strike height">{num('lightningHeight', 0.5, 2.5, 0.05, v => `${v.toFixed(2)}×`)}</Row>
+        </div>}
         <Row label="Particle Density">{num('particles', 0.1, 1, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
         <Row label="Debris Density">{num('debris', 0.1, 1, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
         <Row label="Cloud Detail">{num('clouds', 0.3, 1.5, 0.05, v => `${Math.round(v * 100)}%`)}</Row>

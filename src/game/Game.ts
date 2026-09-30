@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
+import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
 import { ParticleSystem, DebrisSystem, HailSystem } from './particles';
 import { GameAudio } from './audio';
 import { Bolt, boltStats, type BoltOpts } from './lightning';
@@ -22,14 +23,14 @@ export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSetting
   high: { resolution: 1, shadows: true, shadowRes: 2048, bloom: true, particles: 0.85, debris: 0.85, maxBolts: 200, clouds: 1, antialiasFxaa: true, drawDistance: 40000 },
   ultra: { resolution: 1.25, shadows: true, shadowRes: 4096, bloom: true, particles: 1, debris: 1, maxBolts: 320, clouds: 1.2, antialiasFxaa: true, drawDistance: 60000 },
 };
-export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, frameInterpolationMethod: 'linear', drawDistance: 40000, clouds: 1 });
+export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, frameInterpolationMethod: 'linear', motionBlur: false, motionBlurStrength: 0.88, lightningSegments: 18, lightningJitter: 1, lightningBranches: 2, lightningJaggedness: 1, lightningWidth: 1, lightningHeight: 1, drawDistance: 40000, clouds: 1 });
 
 interface CdState { rem: number; total: number; charges: number; interval: number; regenT: number; holding: boolean }
 type Pose = { position: THREE.Vector3; rotation: THREE.Quaternion };
 type RenderPose = { player: Pose; enemies: Pose[]; camera: Pose };
 
 export class Game {
-  renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera; composer: EffectComposer; bloom: UnrealBloomPass; fxaa: ShaderPass;
+  renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera; composer: EffectComposer; bloom: UnrealBloomPass; fxaa: ShaderPass; afterimage: AfterimagePass;
   sun!: THREE.DirectionalLight; flashLight!: THREE.PointLight; flashI = 0;
   fx: ParticleSystem; smoke: ParticleSystem; debris: DebrisSystem;
   effects: Effect[] = []; timers: { t: number; fn: () => void }[] = [];
@@ -49,6 +50,9 @@ export class Game {
   fps = 60; fpsAcc = 0; fpsN = 0;
   private readonly interpolationStep = 1 / 60; private interpolationAccumulator = 0;
   private interpolationPrevious: RenderPose | null = null; private interpolationCurrent: RenderPose | null = null;
+  private settingsApplied = false; private afterimageWarmup = 0;
+  damageIndicators: { id: number; targetId: number; amount: number; pos: THREE.Vector3; age: number; crit: boolean }[] = [];
+  private nextDamageIndicator = 1;
   overlay = { color: '#000', a: 0, fade: 0 };
   onToast: (m: string, c: string) => void = () => {};
   onFatal: (m: string) => void = () => {};
@@ -81,6 +85,7 @@ export class Game {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.9, 0.5, 0.82); this.composer.addPass(this.bloom);
     this.fxaa = new ShaderPass(FXAAShader); this.composer.addPass(this.fxaa);
+    this.afterimage = new AfterimagePass(0.88); this.composer.addPass(this.afterimage);
     this.composer.addPass(new OutputPass());
     for (const it of this.items) this.cds[it.id] = it.skills.map(s => ({ rem: 0, total: s.cd, charges: s.charges?.max ?? 0, interval: 0, regenT: 0, holding: false }));
     for (let i = 0; i < 48; i++) this.enemies.push(new Enemy(this, 'normal'));
@@ -245,18 +250,24 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
 
   // ---------------------------------------------------------------- settings
   applySettings(s: GraphicsSettings) {
-    this.settings = s;
-    for (const cloud of this.cloudGroups) cloud.scale.setScalar(s.clouds);
-    this.renderer.setPixelRatio(Math.min(2.5, window.devicePixelRatio * s.resolution));
+    const previous = this.settings, initial = !this.settingsApplied;
+    this.settingsApplied = true; this.settings = s;
+    if (initial || previous.clouds !== s.clouds) for (const cloud of this.cloudGroups) cloud.scale.setScalar(s.clouds);
+    if (initial || previous.resolution !== s.resolution) this.renderer.setPixelRatio(Math.min(2.5, window.devicePixelRatio * s.resolution));
     this.renderer.shadowMap.enabled = s.shadows; this.sun.castShadow = s.shadows;
-    if (this.sun.shadow.mapSize.x !== s.shadowRes) { this.sun.shadow.mapSize.set(s.shadowRes, s.shadowRes); this.sun.shadow.map?.dispose(); (this.sun.shadow as any).map = null; }
-    this.scene.traverse((o: any) => { if (o.material) o.material.needsUpdate = true; });
-    this.bloom.enabled = s.bloom && this.halfFloat; this.bloom.strength = s.bloomStrength; this.fxaa.enabled = s.antialiasFxaa && this.halfFloat;
-    this.fx.density = s.particles; this.smoke.density = s.particles; this.debris.density = s.debris;
-    (this.scene.fog as THREE.FogExp2).density = s.fog ? 0.0009 * (25000 / s.drawDistance) : 0;
-    this.renderer.toneMappingExposure = s.exposure;
-    this.camera.far = s.drawDistance; this.camera.updateProjectionMatrix();
-    this.resize();
+    if (initial || previous.shadowRes !== s.shadowRes) { this.sun.shadow.mapSize.set(s.shadowRes, s.shadowRes); this.sun.shadow.map?.dispose(); (this.sun.shadow as any).map = null; }
+    if (initial || previous.shadows !== s.shadows) this.scene.traverse((o: any) => { if (o.material) o.material.needsUpdate = true; });
+    if (initial || previous.bloom !== s.bloom) this.bloom.enabled = s.bloom && this.halfFloat;
+    if (initial || previous.bloomStrength !== s.bloomStrength) this.bloom.strength = s.bloomStrength;
+    if (initial || previous.antialiasFxaa !== s.antialiasFxaa) this.fxaa.enabled = s.antialiasFxaa && this.halfFloat;
+    if (s.motionBlur && !previous.motionBlur) this.afterimageWarmup = 1;
+    this.afterimage.enabled = s.motionBlur && this.halfFloat; this.afterimage.damp = s.motionBlurStrength;
+    if (initial || previous.particles !== s.particles) { this.fx.density = s.particles; this.smoke.density = s.particles; }
+    if (initial || previous.debris !== s.debris) this.debris.density = s.debris;
+    if (initial || previous.fog !== s.fog || previous.drawDistance !== s.drawDistance) (this.scene.fog as THREE.FogExp2).density = s.fog ? 0.0009 * (25000 / s.drawDistance) : 0;
+    if (initial || previous.exposure !== s.exposure) this.renderer.toneMappingExposure = s.exposure;
+    if (initial || previous.drawDistance !== s.drawDistance) { this.camera.far = s.drawDistance; this.camera.updateProjectionMatrix(); }
+    if (initial || previous.resolution !== s.resolution) this.resize();
   }
   resize = () => {
     const w = this.container.clientWidth, h = this.container.clientHeight;
@@ -450,10 +461,17 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     }
     return wind.clampLength(0, 78);
   }
-  bolt(a: THREE.Vector3, b: THREE.Vector3, o: BoltOpts = {}) { if (boltStats.active >= this.settings.maxBolts) return null; return this.add(new Bolt(this.scene, a, b, { ...o, width: (o.width ?? 0.6) * 1.2 })) as Bolt; }
+  bolt(a: THREE.Vector3, b: THREE.Vector3, o: BoltOpts = {}) {
+    if (boltStats.active >= this.settings.maxBolts) return null;
+    const baseSegs = o.segs ?? 18, baseBranches = o.branches ?? 2;
+    const segs = THREE.MathUtils.clamp(Math.round(baseSegs * this.settings.lightningSegments / 18), 4, 48);
+    const branches = THREE.MathUtils.clamp(Math.round(baseBranches * this.settings.lightningBranches / 2), 0, 8);
+    return this.add(new Bolt(this.scene, a, b, { ...o, segs, branches, jag: (o.jag ?? 0.07) * this.settings.lightningJaggedness,
+      jitter: this.settings.lightningJitter, width: (o.width ?? 0.6) * 1.2 * this.settings.lightningWidth })) as Bolt;
+  }
   /** tall vertical jagged bolt from sky to ground point; `n` overlapped bolts */
   strike(x: number, z: number, o: BoltOpts & { h?: number; n?: number; spread?: number } = {}) {
-    const h = (o.h ?? rnd(175, 245)) * 3; const n = o.n ?? 1;
+    const h = (o.h ?? rnd(175, 245)) * 6 * this.settings.lightningHeight; const n = o.n ?? 1;
     for (let i = 0; i < n; i++) { const s = o.spread ?? 0.6; this.bolt(V(x + rnd(-8, 8), h, z + rnd(-8, 8)), V(x + rnd(-s, s), 0.1, z + rnd(-s, s)), { segs: 18, jag: 0.035, branches: 2, width: 0.38, life: 0.32, ...o }); }
     const c = new THREE.Color(o.color ?? 0x88aaff);
     for (let i = 0; i < 14; i++) this.fx.spawn(x, 0.4, z, rnd(-12, 12), rnd(4, 16), rnd(-12, 12), c, 0.5, rnd(0.2, 0.5), { grav: 20 });
@@ -504,9 +522,16 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
     }
     if (o.pull) { const dir = o.pull.clone().sub(e.pos).setY(0); const l = dir.length(); if (l > 0.5) e.pos.addScaledVector(dir.normalize(), Math.min(l, 6)); }
     e.hp -= d; e.lastHit = this.time; this.stats.dmg += d; this.stats.dmgWin.push({ t: this.time, d });
+    if (d > 0) this.addDamageIndicator(e, d, !!o.crit);
     if (!o.noCharge && this.time - this.chargeT > 0.25) { this.chargeT = this.time; this.lightningCharge = Math.min(100, this.lightningCharge + 10); }
     if (e.hp <= 0) this.kill(e);
     return d;
+  }
+  private addDamageIndicator(e: Enemy, amount: number, crit: boolean) {
+    const merge = this.damageIndicators.find(p => p.targetId === e.id && p.age < 0.18);
+    if (merge) { merge.amount += amount; merge.pos.set(e.pos.x, e.pos.y + e.height + 0.7, e.pos.z); merge.crit ||= crit; return; }
+    this.damageIndicators.push({ id: this.nextDamageIndicator++, targetId: e.id, amount, pos: V(e.pos.x, e.pos.y + e.height + 0.7, e.pos.z), age: 0, crit });
+    if (this.damageIndicators.length > 28) this.damageIndicators.splice(0, this.damageIndicators.length - 28);
   }
   kill(e: Enemy) {
     if (e.dead) return; e.dead = true; e.deadT = 0; e.hp = 0; this.stats.kills++;
@@ -625,7 +650,10 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
           this.copyRenderPose(this.interpolationCurrent, this.interpolationPrevious);
         }
       }
-      if ((this.settings.bloom || this.settings.antialiasFxaa) && this.halfFloat) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+      if ((this.settings.bloom || this.settings.antialiasFxaa || this.settings.motionBlur) && this.halfFloat) {
+        if (this.afterimageWarmup > 0 && this.settings.motionBlur) { this.afterimage.damp = 0; this.composer.render(); this.afterimageWarmup--; this.afterimage.damp = this.settings.motionBlurStrength; }
+        else this.composer.render();
+      } else this.renderer.render(this.scene, this.camera);
     } catch (e) {
       // A failure in the render loop would otherwise leave a silently frozen/black scene.
       this.disposed = true; cancelAnimationFrame(this.raf);
@@ -637,6 +665,8 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
   };
   update(dt: number) {
     this.time += dt;
+    for (const indicator of this.damageIndicators) indicator.age += dt;
+    this.damageIndicators = this.damageIndicators.filter(indicator => indicator.age < 0.9);
     for (const cloud of this.cloudGroups) { cloud.position.x += dt * cloud.userData.drift; cloud.position.z += Math.sin(this.time * 0.08 + cloud.userData.phase) * dt * 0.7; cloud.rotation.y += dt * 0.002; }
     if (this.paused) { const P = this.player, tgt = V(P.pos.x, P.pos.y + 1.6, P.pos.z), cp = Math.cos(this.cam.pitch), sp = Math.sin(this.cam.pitch);
       if (this.firstPerson) { this.camera.position.set(P.pos.x, P.pos.y + 1.62, P.pos.z); this.camera.lookAt(this.camera.position.clone().add(V(-Math.sin(this.cam.yaw) * cp, -sp, -Math.cos(this.cam.yaw) * cp))); }
@@ -731,12 +761,19 @@ diffuseColor.rgb*=mix(grass,sand,desert);`);
       nearest: ne ? ne.pos.distanceTo(P.pos) : 0, alive: this.enemies.filter(e => !e.dead).length, equipped: this.equipped,
       buffs: Object.entries(this.buffs).filter(([, v]) => v > this.time).map(([k, v]) => ({ k, rem: v - this.time })),
       charge: this.lightningCharge, bolts: boltStats.active, effects: this.effects.length, invincible: P.invincible > 0, pos: [P.pos.x, P.pos.z],
+      damageIndicators: this.damageIndicators.flatMap((indicator) => {
+        const projected = indicator.pos.clone().add(V(0, indicator.age * 1.8, 0)).project(this.camera);
+        if (projected.z < -1 || projected.z > 1 || Math.abs(projected.x) > 1.08 || Math.abs(projected.y) > 1.08) return [];
+        return [{ id: indicator.id, amount: indicator.amount, crit: indicator.crit, age: indicator.age, x: (projected.x + 1) * 50, y: (1 - projected.y) * 50 }];
+      }),
     };
   }
   dispose() {
     this.disposed = true; cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.resize); window.removeEventListener('keydown', this.onKeyDown); window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('pointermove', this.onPointerMove); window.removeEventListener('pointerup', this.onPointerUp);
-    this.audio.dispose(); this.hail.dispose(); this.renderer.dispose(); this.renderer.domElement.remove();
+    this.audio.dispose(); this.hail.dispose();
+    for (const pass of this.composer.passes as Array<any>) pass.dispose?.();
+    this.composer.dispose(); this.renderer.dispose(); this.renderer.domElement.remove();
   }
 }

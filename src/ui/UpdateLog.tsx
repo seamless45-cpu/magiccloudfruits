@@ -1,6 +1,9 @@
 import type { AnimationEvent, CSSProperties } from 'react';
 
 const PATCHES = [
+  { tag: 'COMBAT FEEDBACK', title: 'Floating damage indicators', detail: 'Damage numbers pop above hit targets, critical hits stand out, and rapid repeat hits aggregate to keep the display readable.' },
+  { tag: 'LIGHTNING', title: 'Taller strikes and adjustable bolt geometry', detail: 'Lightning strike columns are twice as tall. Advanced controls tune segment detail, jitter, branches, jaggedness, width, and height.' },
+  { tag: 'PRESENTATION', title: 'Boot console and lightweight motion trails', detail: 'Reworked the loading screen into a staged field-operations console and added an optional Afterimage motion-blur toggle with trail retention.' },
   { tag: 'ENEMIES', title: 'Three new arena archetypes', detail: 'Gale Stalkers rush in, Storm Casters fire aimed energy shots, and armored Cloudbreakers resist knockback.' },
   { tag: 'STORM SUPPRESSION', title: 'Rolling cell behavior restored; underbase rain coverage fixed', detail: 'Removed the extra parent canopy and restored rolling cell deployments around the player. Precipitation now spans the full visible underbase (1.3× the nominal cloud radius) instead of leaving its outer edge dry.' },
   { tag: 'QUAKE + POLE', title: 'Bigger colliding tsunami walls; two Pole techniques', detail: 'Seaquake waves are five times wider and taller, detonate when converging waves collide, and Pole gains Thunder Lance and Storm Vault.' },
@@ -25,7 +28,7 @@ export function UpdateLog({ closing, onClose, onExited }: { closing: boolean; on
           <div>
             <div className="font-orb text-[9px] tracking-[.28em] text-emerald-200/75">FIELD BULLETIN // 30 SEP 2026</div>
             <h2 id="update-log-title" className="mt-1 font-orb text-xl sm:text-2xl tracking-[.12em] text-white">UPDATE LOG</h2>
-            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.2</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
+            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.3</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
           </div>
           <button className="sf-btn px-3 py-2 font-orb text-xs" onClick={onClose} data-ui-sound="close" aria-label="Close update log">CLOSE ×</button>
         </header>

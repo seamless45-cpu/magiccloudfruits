@@ -496,3 +496,39 @@ button,input,select { font-family:inherit; }
   [data-panel="settings-dialog"] { padding:10px !important; }
   .interpolation-method-drawer { max-height:28dvh; }
 }
+
+/* Floating enemy damage readouts stay capped and short-lived, so combat feedback remains cheap. */
+.damage-indicator {
+  position:absolute;
+  min-width:max-content;
+  transform:translate(-50%,-50%);
+  color:#f7f1dc;
+  font:700 11px 'Space Grotesk',sans-serif;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:.04em;
+  text-shadow:0 1px 2px #000,0 0 9px rgba(224,245,232,.7);
+  animation:damage-number-rise .82s cubic-bezier(.18,.78,.2,1) both;
+  will-change:transform,opacity;
+}
+.damage-indicator-crit { color:#ffd27c; font-size:14px; text-shadow:0 1px 2px #000,0 0 13px rgba(255,179,73,.8); }
+@keyframes damage-number-rise {
+  0% { opacity:0; transform:translate(-50%,10px) scale(.58); }
+  18% { opacity:1; transform:translate(-50%,-4px) scale(1.22); }
+  34% { transform:translate(-50%,0) scale(1); }
+  100% { opacity:0; transform:translate(-50%,-28px) scale(.92); }
+}
+.lightning-settings-drawer {
+  display:grid;
+  gap:2px;
+  max-height:44dvh;
+  margin:5px 0 8px;
+  padding:8px;
+  border:1px solid rgba(239,232,214,.2);
+  background:linear-gradient(145deg,rgba(8,18,17,.92),rgba(28,32,28,.92));
+}
+.lightning-settings-drawer [data-panel] { min-height:31px; }
+@media (orientation:landscape) and (max-height:560px) {
+  .lightning-settings-drawer { max-height:36dvh; padding:5px; }
+  .damage-indicator { font-size:10px; }
+}
+@media (prefers-reduced-motion:reduce) { .damage-indicator { animation-duration:.01ms !important; } }

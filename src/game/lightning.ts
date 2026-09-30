@@ -25,7 +25,7 @@ void main(){
 
 export interface BoltOpts {
   color?: number; core?: number; width?: number; life?: number; segs?: number; jag?: number;
-  branches?: number; flat?: boolean; opacity?: number; follow?: () => [THREE.Vector3, THREE.Vector3] | null;
+  branches?: number; jitter?: number; flat?: boolean; opacity?: number; follow?: () => [THREE.Vector3, THREE.Vector3] | null;
 }
 
 let active = 0;
@@ -45,7 +45,7 @@ export class Bolt implements Effect {
   constructor(scene: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, opts: BoltOpts = {}) {
     active++;
     this.a = a.clone(); this.b = b.clone();
-    this.o = { color: 0x88aaff, core: 0xffffff, width: 0.6, life: 0.35, segs: 18, jag: 0.07, branches: 2, flat: false, opacity: 1, ...opts } as any;
+    this.o = { color: 0x88aaff, core: 0xffffff, width: 0.6, life: 0.35, segs: 18, jag: 0.07, branches: 2, jitter: 1, flat: false, opacity: 1, ...opts } as any;
     this.life = this.o.life;
     const segs = this.o.segs; this.bsegs = Math.max(3, Math.floor(segs / 2.5));
     const nPts = segs + 1 + this.o.branches * (this.bsegs + 1);
@@ -90,7 +90,7 @@ export class Bolt implements Effect {
     for (let j = 0; j < n; j++) {
       const t = j / (n - 1);
       const env = j === 0 || (j === n - 1 && start === 0) ? 0 : 1;
-      px = (px * 0.35 + (Math.random() - 0.5) * 2) * env; py = (py * 0.35 + (Math.random() - 0.5) * 2) * env;
+      px = (px * 0.35 + (Math.random() - 0.5) * 2 * this.o.jitter) * env; py = (py * 0.35 + (Math.random() - 0.5) * 2 * this.o.jitter) * env;
       _t.copy(a).addScaledVector(_d, len * t).addScaledVector(_u, px * amp).addScaledVector(_v, py * amp);
       const v = (start + j) * 2 * 3;
       P[v] = _t.x; P[v + 1] = _t.y; P[v + 2] = _t.z; P[v + 3] = _t.x; P[v + 4] = _t.y; P[v + 5] = _t.z;
@@ -115,7 +115,7 @@ export class Bolt implements Effect {
       const v = k * 6;
       _a.set(this.pts[v], this.pts[v + 1], this.pts[v + 2]);
       _d.subVectors(this.b, this.a).normalize();
-      _b.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(1.4).add(_d).normalize()
+      _b.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(1.4 * this.o.jitter).add(_d).normalize()
         .multiplyScalar(len * (0.12 + Math.random() * 0.25)).add(_a);
       if (!this.o.flat && _b.y < 0.2) _b.y = 0.2;
       if (this.o.flat) _b.y = _a.y;
