@@ -146,3 +146,21 @@ input[type=range] { accent-color:#e9e2cf; }
   .mobile-actions .sf-btn:last-child { width:48px; height:30px; }
   [data-panel="skills"] { max-height:calc(100% - 160px) !important; }
 }
+
+/* Compact, scannable telemetry: values stay legible without a tall list of readouts. */
+.telemetry-panel { padding:7px !important; }
+.telemetry-head { display:flex; align-items:center; justify-content:space-between; gap:4px; margin-bottom:5px; white-space:nowrap; }
+.telemetry-fps { max-width:55%; overflow:hidden; font-size:8px; letter-spacing:.025em; text-overflow:ellipsis; }
+.telemetry-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px 5px; }
+.telemetry-cell { display:flex; min-width:0; flex-direction:column; padding:2px 4px; border-left:1px solid rgba(239,232,214,.2); background:rgba(239,232,214,.035); line-height:1.15; }
+.telemetry-cell span { overflow:hidden; color:rgba(232,225,207,.58); font-size:7px; letter-spacing:.08em; text-overflow:ellipsis; }
+.telemetry-cell b { overflow:hidden; color:#f0ecdf; font-family:var(--font-display); font-size:10px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.telemetry-actions { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:3px; margin-top:5px; }
+.telemetry-actions .sf-btn { min-width:0; padding:2px 0; font-size:8px; line-height:1.15; }
+@media (orientation:landscape) and (max-height:560px) {
+  .telemetry-panel { padding:5px !important; }
+  .telemetry-head { margin-bottom:3px; }
+  .telemetry-grid { gap:2px 3px; }
+  .telemetry-cell { padding:1px 3px; }
+  .telemetry-actions { margin-top:3px; gap:2px; }
+}

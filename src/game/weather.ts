@@ -21,7 +21,7 @@ export interface CloudOpts {
 export class StormCloud implements Effect {
   t = 0; o: CloudOpts & Required<Pick<CloudOpts, 'vel' | 'grow' | 'rain' | 'rainDmg' | 'hail' | 'bolts'>>;
   puffs: Puff[] = []; mesh: THREE.InstancedMesh; mat: THREE.MeshStandardMaterial; base: number; R: number; growth = 0;
-  rainTick = 0; boltT = 0; hailT = 0; tornT = 0; layoutT = 0; isSuper = false; evolved = false; dir: THREE.Vector3; side: THREE.Vector3; stageName = '';
+  rainTick = 0; boltT = 0; hailT = 0; tornT = 0; layoutT = 0; rainSeq = 0; gustSeq = 0; shaftAcc = 0; dropAcc = 0; gustAcc = 0; rainSeed = Math.random(); isSuper = false; evolved = false; dir: THREE.Vector3; side: THREE.Vector3; stageName = '';
   constructor(public g: any, o: CloudOpts) {
     this.o = { vel: V(), grow: 0.01, rain: 0, rainDmg: 0, hail: 0, bolts: 0, ...o } as any;
     this.R = o.size / 2;
@@ -42,18 +42,20 @@ export class StormCloud implements Effect {
   build() {
     const R = this.R, b = this.base, k = this.o.kind, dens = this.g.settings.clouds;
     const N = (n: number) => Math.max(3, Math.round(n * dens));
+    const disk=(i:number,n:number,radius:number,phase=0):[number,number]=>{const rr=Math.sqrt((i+.5)/n)*radius,a=i*2.399963229728653+phase;return [Math.cos(a)*rr,Math.sin(a)*rr];};
     if (k === 'cumulus' || k === 'cell' || k === 'supercell' || k === 'hail') {
-      for (let i = 0; i < N(16); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.55; this.addPuff(Math.cos(a) * r, b + rnd(0, R * 0.08), Math.sin(a) * r, R * rnd(0.22, 0.34), rnd(0, 0.2), rnd(0.5, 0.68), 0.55); }
-      for (let i = 0; i < N(14); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.4; this.addPuff(Math.cos(a) * r, b + R * rnd(0.2, 0.7), Math.sin(a) * r, R * rnd(0.22, 0.32), rnd(0.2, 0.45), rnd(0.8, 0.95)); }
-      for (let i = 0; i < N(12); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.3; this.addPuff(Math.cos(a) * r, b + R * rnd(0.7, 1.4), Math.sin(a) * r, R * rnd(0.2, 0.28), rnd(0.45, 0.72), rnd(0.9, 1)); }
-      for (let i = 0; i < N(20); i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 1.25; this.addPuff(Math.cos(a) * r + R * 0.25, b + R * rnd(1.5, 1.7), Math.sin(a) * r, R * rnd(0.28, 0.4), rnd(0.72, 0.98), rnd(0.88, 1), 0.3); }
+      const n0=N(16),n1=N(14),n2=N(12),n3=N(20);
+      for (let i = 0; i < n0; i++) { const [x,z]=disk(i,n0,R*.55); this.addPuff(x,b+rnd(0,R*.08),z,R*rnd(.22,.34),rnd(0,.2),rnd(.5,.68),.55); }
+      for (let i = 0; i < n1; i++) { const [x,z]=disk(i,n1,R*.4,.7); this.addPuff(x,b+R*rnd(.2,.7),z,R*rnd(.22,.32),rnd(.2,.45),rnd(.8,.95)); }
+      for (let i = 0; i < n2; i++) { const [x,z]=disk(i,n2,R*.3,1.4); this.addPuff(x,b+R*rnd(.7,1.4),z,R*rnd(.2,.28),rnd(.45,.72),rnd(.9,1)); }
+      for (let i = 0; i < n3; i++) { const [x,z]=disk(i,n3,R*1.25,2.1); this.addPuff(x+R*.25,b+R*rnd(1.5,1.7),z,R*rnd(.28,.4),rnd(.72,.98),rnd(.88,1),.3); }
       // Overlapping core puffs close the visual gaps above the rain/hail column and tornado origin.
-      for (let i = 0; i < N(26); i++) { const a=Math.random()*6.28, r=Math.sqrt(Math.random())*R*.52;
-        this.addPuff(Math.cos(a)*r,b+R*rnd(.18,1.15),Math.sin(a)*r,R*rnd(.17,.25),rnd(.08,.68),rnd(.62,.84),rnd(.72,1.05)); }
+      const nc=N(26);for (let i = 0; i < nc; i++) { const [x,z]=disk(i,nc,R*.52,.37);
+        this.addPuff(x,b+R*rnd(.18,1.15),z,R*rnd(.17,.25),rnd(.08,.68),rnd(.62,.84),rnd(.72,1.05)); }
       this.addPuff(0, b + R * 1.85, 0, R * 0.25, 0.9, 1); // overshooting top
     } else if (k === 'stratus' || k === 'nimbo') {
-      const n = k === 'nimbo' ? N(26) : N(7);
-      for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * R * 0.85; this.addPuff(Math.cos(a) * r, b + rnd(0, R * 0.05), Math.sin(a) * r, R * rnd(0.25, 0.38), 0, k === 'nimbo' ? rnd(0.42, 0.55) : rnd(0.7, 0.8), 0.28); }
+      const n = k === 'nimbo' ? Math.max(18,N(36)) : Math.max(9,N(16));
+      for (let i = 0; i < n; i++) { const [x,z]=disk(i,n,R*.85,.23); this.addPuff(x,b+rnd(0,R*.05),z,R*rnd(.25,.38),0,k==='nimbo'?rnd(.42,.55):rnd(.7,.8),.28); }
     } else { // squall / derecho line: shelf cloud front + taller body behind
       const L = this.o.length!, D = this.o.depth!, bow = this.o.bow ?? 0;
       const cols = N(Math.min(60, Math.ceil(L / (D * 0.25)))); const pr = Math.max(L / cols, D * 0.12);
@@ -105,13 +107,14 @@ export class StormCloud implements Effect {
   }
   /** random rain point in world space under the cloud */
   rainPoint(out: THREE.Vector3) {
-    const c = this.mesh.position;
-    if (this.o.kind === 'squall' || this.o.kind === 'derecho') {
-      const u = rnd(-1, 1); const fwd = (this.o.bow ?? 0) * this.o.depth! * (1 - u * u) - this.o.depth! * rnd(0.05, 0.6);
-      return out.set(c.x, 0, c.z).addScaledVector(this.side, u * this.o.length! / 2).addScaledVector(this.dir, fwd);
+    const c=this.mesh.position,seq=++this.rainSeq;
+    const u=(seq*.6180339887498949+this.rainSeed)%1,v=(seq*.7548776662466927+this.rainSeed*.371)%1;
+    if(this.o.kind==='squall'||this.o.kind==='derecho'){
+      const cross=u*2-1,fwd=(this.o.bow??0)*this.o.depth!*(1-cross*cross)-this.o.depth!*(.05+v*.55);
+      return out.set(c.x,0,c.z).addScaledVector(this.side,cross*this.o.length!/2).addScaledVector(this.dir,fwd);
     }
-    const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * this.R * (this.o.kind === 'nimbo' ? 0.85 : 0.5);
-    return out.set(c.x + Math.cos(a) * r, 0, c.z + Math.sin(a) * r);
+    const a=u*6.28318530718,r=Math.sqrt(v)*this.R*(this.o.kind==='nimbo'?.85:.5);
+    return out.set(c.x+Math.cos(a)*r,0,c.z+Math.sin(a)*r);
   }
   inRain(p: THREE.Vector3) {
     const c = this.mesh.position;
@@ -140,7 +143,8 @@ export class StormCloud implements Effect {
     const dens = g.settings.particles;
     if (rainOn > 0 && fadeK > 0) {
       // rainshafts: white smoke with fluid (curl + ground outflow) behaviour
-      const shafts = Math.min(30, Math.ceil(rainOn * (this.R / 40) * 3 * dens * dt * 60));
+      this.shaftAcc+=dt*Math.min(1800,rainOn*(this.R/40)*3*dens*60);
+      const shafts=Math.min(Math.min(60,Math.max(1,Math.ceil(30*dt*60))),Math.floor(this.shaftAcc));this.shaftAcc-=shafts;if(this.shaftAcc>30)this.shaftAcc%=1;
       const rp = V();
       for (let i = 0; i < shafts; i++) {
         this.rainPoint(rp); const vy = -(o.kind === 'squall' || o.kind === 'derecho' ? rnd(34, 48) : rnd(14, 24)) * (0.8 + rainOn * 0.4);
@@ -149,7 +153,8 @@ export class StormCloud implements Effect {
         g.smoke.spawn(rp.x, h, rp.z, wx + rnd(-2, 2), vy, wz + rnd(-2, 2), o.rainColor ?? 0xd9dee6, Math.min(135, this.R * (o.kind === 'squall' || o.kind === 'derecho' ? rnd(0.18, 0.28) : rnd(0.12, 0.22))), h / -vy + rnd(1.5, 3),
           { turb: 5, spread: 0.55, drag: 0.04, grow: 1.4, alpha: (o.kind === 'squall' || o.kind === 'derecho' ? 0.2 : 0.1) + 0.12 * Math.min(1, rainOn), ox: rp.x + rnd(-3, 3), oz: rp.z + rnd(-3, 3), windX: wx, windZ: wz, windResponse: 1.15, windDynamic: true });
       }
-      const drops = Math.min(60, Math.ceil(rainOn * this.R * 0.3 * dens * dt * 60));
+      this.dropAcc+=dt*Math.min(3600,rainOn*this.R*.3*dens*60);
+      const drops=Math.min(Math.min(120,Math.max(1,Math.ceil(60*dt*60))),Math.floor(this.dropAcc));this.dropAcc-=drops;if(this.dropAcc>60)this.dropAcc%=1;
       for (let i = 0; i < drops; i++) { this.rainPoint(rp); const w = g.windAt(rp); const wx = w.x + o.vel.x * 0.15, wz = w.z + o.vel.z * 0.15;
         g.smoke.spawn(rp.x, this.base * 0.6, rp.z, wx, -60, wz, 0xbcd4ff, 0.35, this.base * 0.6 / 60, { alpha: 0.7, windX: wx, windZ: wz, windResponse: 2.1, windDynamic: true }); }
       // rain damage every 0.05s
@@ -169,9 +174,11 @@ export class StormCloud implements Effect {
       }
       const pr = V(g.player.pos.x - c.x, 0, g.player.pos.z - c.z); const pu = pr.dot(this.side) / (o.length! / 2); const pf = pr.dot(this.dir) - (o.bow ?? 0) * o.depth! * (1 - pu * pu);
       if (Math.abs(pu) < 1 && Math.abs(pf) < o.depth! * 0.35) g.shakeRaw(o.wind / 60 * (1 - Math.abs(pf) / (o.depth! * 0.35)), 0.1);
-      // gust front dust
-      for (let i = 0; i < 20 * dens; i++) { const u = rnd(-1, 1); const p = V(c.x, 0, c.z).addScaledVector(this.side, u * o.length! / 2).addScaledVector(this.dir, (o.bow ?? 0) * o.depth! * (1 - u * u) + rnd(0, 20));
-        const w = g.windAt(p); g.smoke.spawn(p.x, rnd(1, 12), p.z, w.x + rnd(-5, 5), rnd(0, 3), w.z + rnd(-5, 5), 0xc8c2b8, rnd(8 * 1.3, 18 * 1.3), 2.2, { alpha: 0.2, grow: 1.5, turb: 6, drag: 0.06, windX:w.x, windZ:w.z, windResponse:1.8, windDynamic:true }); }
+      // Evenly seed the moving gust-front curtain so dust doesn't appear in isolated patches.
+      this.gustAcc+=dt*20*dens*60;const gusts=Math.min(Math.min(60,Math.max(1,Math.ceil(20*dt*60))),Math.floor(this.gustAcc));this.gustAcc-=gusts;if(this.gustAcc>30)this.gustAcc%=1;
+      for(let i=0;i<gusts;i++){const seq=++this.gustSeq,u=((seq*.6180339887498949+this.rainSeed*.71)%1)*2-1,v=(seq*.7548776662466927+this.rainSeed*.23)%1;
+        const p=V(c.x,0,c.z).addScaledVector(this.side,u*o.length!/2).addScaledVector(this.dir,(o.bow??0)*o.depth!*(1-u*u)+v*20),w=g.windAt(p);
+        g.smoke.spawn(p.x,rnd(1,12),p.z,w.x+rnd(-5,5),rnd(0,3),w.z+rnd(-5,5),0xc8c2b8,rnd(8*1.3,18*1.3),2.2,{alpha:.2,grow:1.5,turb:6,drag:.06,windX:w.x,windZ:w.z,windResponse:1.8,windDynamic:true});}
     }
     // lightning
     if (o.bolts > 0 && this.growth > 0.7 && fadeK > 0) {
@@ -309,7 +316,7 @@ function spiralTexture() {
 
 /** 25 km hurricane with a calm eye, towering eyewall, spiral bands, rain-wall mist & outward wind. */
 export class Hurricane implements Effect {
-  t = 0; grp = new THREE.Group(); disk: THREE.Mesh; disk2: THREE.Mesh; wall: THREE.InstancedMesh; tex: THREE.Texture; pos: THREE.Vector3; dir: THREE.Vector3; dmgT = 0;
+  t = 0; grp = new THREE.Group(); disk: THREE.Mesh; disk2: THREE.Mesh; wall: THREE.InstancedMesh; tex: THREE.Texture; pos: THREE.Vector3; dir: THREE.Vector3; dmgT = 0; mistSeq=0; localSeq=0; mistSeed=Math.random();
   eye = 320; wallR = 2600; R = 12500;
   constructor(public g: any, at: THREE.Vector3, dir: THREE.Vector3, public life = 300, public dmg = 4000) {
     this.pos = at.clone().setY(0); this.dir = dir.clone().setY(0).normalize();
@@ -340,13 +347,15 @@ export class Hurricane implements Effect {
     (this.disk.material as THREE.MeshBasicMaterial).opacity = 0.95 * k; (this.disk2.material as THREE.MeshBasicMaterial).opacity = 0.6 * k; (this.wall.material as THREE.MeshStandardMaterial).opacity = 0.9 * k;
     const dens = g.settings.particles;
     // Eyewall rain mist samples the local swirl so particle advection changes around the vortex.
-    for (let i = 0; i < 60 * dens; i++) { const a = Math.random() * 6.28; const r = this.eye + rnd(0, this.wallR - this.eye);
-      const x=this.pos.x+Math.cos(a)*r, y=rnd(8,180), z=this.pos.z+Math.sin(a)*r, localWind=g.windAt(V(x,y,z));
+    for (let i = 0; i < 60 * dens; i++) { const seq=++this.mistSeq,u=(seq*.6180339887498949+this.mistSeed)%1,v=(seq*.7548776662466927+this.mistSeed*.37)%1;
+      const a=u*6.28318530718,r=Math.sqrt(this.eye*this.eye+v*(this.wallR*this.wallR-this.eye*this.eye));
+      const x=this.pos.x+Math.cos(a)*r, y=8+((seq*.38196601125+this.mistSeed*.13)%1)*172, z=this.pos.z+Math.sin(a)*r, localWind=g.windAt(V(x,y,z));
       g.smoke.spawn(x, y, z, localWind.x+rnd(-8,8), rnd(-24,-7), localWind.z+rnd(-8,8), 0xe6e9ee, rnd(28,68), rnd(2,3.2), { alpha:0.32*k, grow:1.2, turb:10, spread:0.3, windX:localWind.x, windZ:localWind.z, windResponse:2.2, windDynamic:true }); }
     // mist around player if inside rain bands
     const pp = g.player.pos; const pd = Math.hypot(pp.x - this.pos.x, pp.z - this.pos.z);
     if (pd > this.eye && pd < this.R) { const inten = pd < this.wallR ? 1 : Math.max(0.15, 1 - (pd - this.wallR) / 4000);
-      for (let i = 0; i < 36 * dens * inten; i++) { const x=pp.x+rnd(-100,100), y=rnd(3,65), z=pp.z+rnd(-100,100), localWind=g.windAt(V(x,y,z));
+      for (let i = 0; i < 36 * dens * inten; i++) { const seq=++this.localSeq,u=(seq*.6180339887498949+this.mistSeed*.53)%1,v=(seq*.7548776662466927+this.mistSeed*.19)%1;
+        const x=pp.x+(u-.5)*200,y=3+((seq*.38196601125+this.mistSeed*.41)%1)*62,z=pp.z+(v-.5)*200,localWind=g.windAt(V(x,y,z));
         g.smoke.spawn(x,y,z,localWind.x+rnd(-4,4),-18,localWind.z+rnd(-4,4),0xdfe3ea,rnd(10,28),2,{alpha:0.24,grow:1,turb:8,windX:localWind.x,windZ:localWind.z,windResponse:1.8,windDynamic:true}); }
       g.shakeRaw(inten * 3 * k, 0.1); }
     this.dmgT += dt; const tick = this.dmgT >= 0.25; if (tick) this.dmgT = 0;
@@ -382,7 +391,7 @@ export class Flood implements Effect {
 
 /** Microburst: scattered cells form, merge, then a 145 mph downburst gust with an expanding rain wall. */
 export class Microburst implements Effect {
-  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; dmgT = 0;
+  t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; ringMesh: THREE.Mesh; dmgT = 0; dustSeq=0; dustSeed=Math.random();
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {
     for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * size * 0.9, 0, Math.sin(a) * size * 0.9); this.offs.push(off);
       const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: size * 0.55, life: 16, grow: 2.2, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
@@ -402,8 +411,8 @@ export class Microburst implements Effect {
     this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge * 0.85), 0, this.pos.z + this.offs[i].z * (1 - merge * 0.85)); });
     if (this.t > 5 && this.t < 15) {
       const k = Math.min(1, (this.t - 5) / 0.5); const base = this.cells[0].base * 0.7; const dens = g.settings.particles;
-      for (let i = 0; i < 40 * dens; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * this.size * 0.35;
-        const x=this.pos.x+Math.cos(a)*r, z=this.pos.z+Math.sin(a)*r, localWind=g.windAt(V(x,base,z));
+      for (let i = 0; i < 40 * dens; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1;
+        const a=u*6.28318530718,r=Math.sqrt(v)*this.size*.35,x=this.pos.x+Math.cos(a)*r,z=this.pos.z+Math.sin(a)*r,localWind=g.windAt(V(x,base,z));
         g.smoke.spawn(x,base,z,localWind.x+rnd(-5,5),-70,localWind.z+rnd(-5,5),0xf0f3f8,rnd(12,26),base/70+rnd(1.2,2.2),{alpha:0.22*k,spread:0.45,drag:0.35,grow:1.6,turb:6,ox:this.pos.x,oz:this.pos.z,windX:localWind.x,windZ:localWind.z,windResponse:2.2,windDynamic:true}); }
       const wallR = Math.min(this.size, (this.t - 5) * 60);
       this.ringMesh.scale.set(wallR, wallR, wallR * 8); (this.ringMesh.material as THREE.MeshBasicMaterial).opacity = 0.25;

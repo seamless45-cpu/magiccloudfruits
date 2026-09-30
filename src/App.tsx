@@ -170,19 +170,21 @@ export default function App() {
           </div>
           {/* Right rail: telemetry, skills and zoom stack in one column, so they cannot overlap */}
           <div className="absolute right-2 top-2 hud-rail-right w-[236px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
-          <div data-panel="telemetry" className="sf-panel p-2.5 w-full text-[10px] shrink-0 pointer-events-auto">
-            <div className="font-orb text-[10px] sf-glow text-cyan-200 mb-1">RANGE TELEMETRY</div>
-            <div className="flex justify-between"><span className="text-cyan-300/70">AIM (ground)</span><span className="font-orb tabular-nums">{snap.aimDist.toFixed(2)} m</span></div>
-            <div className="flex justify-between"><span className="text-cyan-300/70">AIM (3D)</span><span className="font-orb tabular-nums">{snap.aim3D.toFixed(2)} m</span></div>
-            <div className="flex justify-between"><span className="text-cyan-300/70">VIEW · CAMERA</span><span className="font-orb tabular-nums">{game.firstPerson ? 'FIRST PERSON' : `THIRD · ${snap.camDist.toFixed(1)}m`}</span></div>
-            <div className="flex justify-between"><span className="text-cyan-300/70">NEAREST HOSTILE</span><span className="font-orb tabular-nums">{snap.nearest.toFixed(2)} m</span></div>
-            <div className="flex justify-between"><span className="text-cyan-300/70">POS</span><span className="font-orb tabular-nums">{snap.pos[0].toFixed(0)}, {snap.pos[1].toFixed(0)}</span></div>
-            {settings.showFps && <div className="flex justify-between mt-1 pt-1 border-t border-cyan-300/15"><span className="text-cyan-300/70">FPS · BOLTS · FX</span><span className="font-orb tabular-nums" style={{ color: snap.fps > 45 ? '#7fffc0' : snap.fps > 25 ? '#ffe070' : '#ff7080' }}>{snap.fps} · {snap.bolts} · {snap.effects}</span></div>}
-            <div className="flex gap-1 mt-1.5 pointer-events-auto">
-              <button className="sf-btn flex-1 py-0.5 font-orb text-[9px]" onClick={() => setShowSettings(true)}>SETTINGS</button>
-              <button className={`sf-btn flex-1 py-0.5 font-orb text-[9px] ${game.firstPerson ? 'on' : ''}`} onClick={() => game.toggleFirstPerson()}>{game.firstPerson ? 'FIRST PERSON' : 'THIRD PERSON'}</button>
-              <button className="sf-btn flex-1 py-0.5 font-orb text-[9px]" onClick={() => setHelp(h => !h)}>CONTROLS</button>
-              <button className={`sf-btn flex-1 py-0.5 font-orb text-[9px] ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} aria-label={soundEnabled ? 'Mute weather audio' : 'Enable weather audio'}>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</button>
+          <div data-panel="telemetry" className="sf-panel telemetry-panel p-2 w-full text-[9px] shrink-0 pointer-events-auto">
+            <div className="telemetry-head"><span className="font-orb text-[10px] sf-glow text-cyan-200">FIELD TELEMETRY</span>{settings.showFps && <span className="font-orb telemetry-fps" style={{ color:snap.fps>45?'#a8d8a4':snap.fps>25?'#e5d49f':'#d99183' }}>{snap.fps} FPS · {snap.bolts}B · {snap.effects}FX</span>}</div>
+            <div className="telemetry-grid">
+              <div className="telemetry-cell"><span>AIM GND</span><b>{snap.aimDist.toFixed(1)}m</b></div>
+              <div className="telemetry-cell"><span>AIM 3D</span><b>{snap.aim3D.toFixed(1)}m</b></div>
+              <div className="telemetry-cell"><span>NEAREST</span><b>{snap.nearest.toFixed(0)}m</b></div>
+              <div className="telemetry-cell"><span>CAMERA</span><b>{game.firstPerson?'FP':`${snap.camDist.toFixed(0)}m`}</b></div>
+              <div className="telemetry-cell"><span>POSITION</span><b>{snap.pos[0].toFixed(0)},{snap.pos[1].toFixed(0)}</b></div>
+              <div className="telemetry-cell"><span>HOSTILES</span><b>{snap.alive}</b></div>
+            </div>
+            <div className="telemetry-actions pointer-events-auto">
+              <button className="sf-btn font-orb" onClick={() => setShowSettings(true)} title="Settings" aria-label="Settings">SET</button>
+              <button className={`sf-btn font-orb ${game.firstPerson ? 'on' : ''}`} onClick={() => game.toggleFirstPerson()} title="Toggle first/third person" aria-label="Toggle camera">{game.firstPerson?'FP':'TP'}</button>
+              <button className="sf-btn font-orb" onClick={() => setHelp(h => !h)} title="Controls" aria-label="Controls">HELP</button>
+              <button className={`sf-btn font-orb ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} title={soundEnabled?'Mute weather audio':'Enable weather audio'} aria-label={soundEnabled?'Mute weather audio':'Enable weather audio'}>SND</button>
             </div>
           </div>
           {/* Toasts */}
