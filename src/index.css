@@ -670,3 +670,5 @@ button,input,select { font-family:inherit; }
   .music-loop-status { font-size:6px; }
 }
 @media (prefers-reduced-motion:reduce) { .sf-file-picker { transition-duration:.01ms !important; } }
+.music-trim-heading { margin:9px 0 2px; color:#98f2df; font-size:8px; letter-spacing:.18em; text-shadow:0 0 9px rgba(112,245,223,.28); }
+.media-format-note { padding:4px 0 2px; color:rgba(198,222,219,.48); font:600 7px 'Space Grotesk',sans-serif; letter-spacing:.08em; line-height:1.5; }

@@ -19,12 +19,22 @@ export class GameAudio {
   private applied: WeatherSoundMix = { wind: -1, rain: -1, hail: -1 };
   private noiseBuffer: AudioBuffer | null = null;
   private masterArmed = false;
-  private musicElement: HTMLAudioElement | null = null;
+  private musicElement: HTMLMediaElement | null = null;
+  private musicTag: 'audio' | 'video' | null = null;
   private musicSource: MediaElementAudioSourceNode | null = null;
   private musicGain: GainNode | null = null;
   private musicUrl: string | null = null;
   private musicVolume = 0.35;
   private musicRate = 1;
+  private musicDuration = 0;
+  private musicTrimStart = 0;
+  private musicTrimEnd = 0;
+  private musicTimeUpdate: (() => void) | null = null;
+  private musicPlayHandler: (() => void) | null = null;
+  private musicPauseHandler: (() => void) | null = null;
+  private musicEndedHandler: (() => void) | null = null;
+  private musicTrimTimer: number | null = null;
+  private musicLoadId = 0;
 
   setEnabled(enabled: boolean) {
     this.enabled = enabled;
@@ -119,26 +129,102 @@ export class GameAudio {
     }
   }
 
-  /** Load a user-selected local track, route it through the dedicated music fader, and loop it indefinitely. */
-  loadMusic(file: File): Promise<void> {
-    this.unlock();
-    const ctx = this.ctx, master = this.master;
-    if (!ctx || !master) return Promise.reject(new Error('Web Audio is unavailable on this device.'));
-    const element = this.musicElement ?? new Audio();
-    if (!this.musicSource || !this.musicGain) {
-      this.musicSource = ctx.createMediaElementSource(element);
-      this.musicGain = ctx.createGain(); this.musicGain.gain.value = this.musicVolume;
-      this.musicSource.connect(this.musicGain); this.musicGain.connect(master);
-      this.musicElement = element;
+  private clearMusicLoopHandlers(element: HTMLMediaElement | null = this.musicElement) {
+    if (this.musicTrimTimer !== null) { window.clearInterval(this.musicTrimTimer); this.musicTrimTimer = null; }
+    if (element) {
+      if (this.musicTimeUpdate) element.removeEventListener('timeupdate', this.musicTimeUpdate);
+      if (this.musicPlayHandler) element.removeEventListener('play', this.musicPlayHandler);
+      if (this.musicPauseHandler) element.removeEventListener('pause', this.musicPauseHandler);
+      if (this.musicEndedHandler) element.removeEventListener('ended', this.musicEndedHandler);
     }
+    this.musicTimeUpdate = null; this.musicPlayHandler = null; this.musicPauseHandler = null; this.musicEndedHandler = null;
+  }
+
+  /** Load local audio or video media, route its soundtrack through the music fader, and prepare a looping trim. */
+  loadMusic(file: File): Promise<number> {
+    this.unlock();
+    const ctx = this.ctx, master = this.master, loadId = ++this.musicLoadId;
+    if (!ctx || !master) return Promise.reject(new Error('Web Audio is unavailable on this device.'));
+    const hasVideoStream = /\.(mp4|m4v|webm|mov|ogv|mkv|avi)$/i.test(file.name) && !file.type.startsWith('audio/');
+    const tag = file.type.startsWith('video/') || hasVideoStream ? 'video' : 'audio';
+    if (this.musicElement && this.musicTag !== tag) {
+      this.clearMusicLoopHandlers(this.musicElement);
+      this.musicElement.pause(); this.musicElement.removeAttribute('src'); this.musicElement.load();
+      this.musicSource?.disconnect(); this.musicSource = null; this.musicElement = null; this.musicTag = null;
+    }
+    let element = this.musicElement;
+    if (!element) {
+      element = tag === 'video' ? document.createElement('video') : new Audio();
+      element.preload = 'metadata'; element.loop = false;
+      if (tag === 'video') (element as HTMLVideoElement).playsInline = true;
+      this.musicSource = ctx.createMediaElementSource(element);
+      if (!this.musicGain) { this.musicGain = ctx.createGain(); this.musicGain.gain.value = this.musicVolume; this.musicGain.connect(master); }
+      this.musicSource.connect(this.musicGain); this.musicElement = element; this.musicTag = tag;
+    }
+    this.clearMusicLoopHandlers(element);
     element.pause();
-    const media = element as HTMLAudioElement & { webkitPreservesPitch?: boolean; mozPreservesPitch?: boolean };
+    const media = element as HTMLMediaElement & { webkitPreservesPitch?: boolean; mozPreservesPitch?: boolean };
     media.preservesPitch = false; media.webkitPreservesPitch = false; media.mozPreservesPitch = false;
-    element.loop = true; element.playbackRate = this.musicRate;
-    const nextUrl = URL.createObjectURL(file), previousUrl = this.musicUrl;
-    element.src = nextUrl; this.musicUrl = nextUrl; element.load();
+    element.playbackRate = this.musicRate; element.loop = false;
+    const previousUrl = this.musicUrl, nextUrl = URL.createObjectURL(file);
+    this.musicUrl = nextUrl; element.src = nextUrl; element.load();
     if (previousUrl) URL.revokeObjectURL(previousUrl);
-    return element.play().then(() => undefined);
+    const metadata = new Promise<number>((resolve, reject) => {
+      const onError = () => {
+        element!.removeEventListener('loadedmetadata', onMetadata);
+        reject(new Error('The selected media could not be decoded by this browser.'));
+      };
+      const onMetadata = () => {
+        element!.removeEventListener('error', onError);
+        if (loadId !== this.musicLoadId) { reject(new Error('A newer media file was selected.')); return; }
+        const duration = Math.floor(element!.duration * 10) / 10;
+        if (!Number.isFinite(duration) || duration < 0.1) { reject(new Error('This file has no usable audio duration.')); return; }
+        this.musicDuration = duration; this.musicTrimStart = 0; this.musicTrimEnd = duration;
+        const startTrimClock = () => {
+          if (this.musicTrimTimer === null) this.musicTrimTimer = window.setInterval(() => this.musicTimeUpdate?.(), 50);
+        };
+        const stopTrimClock = () => {
+          if (this.musicTrimTimer !== null) { window.clearInterval(this.musicTrimTimer); this.musicTrimTimer = null; }
+        };
+        this.musicTimeUpdate = () => {
+          const current = this.musicElement;
+          if (!current || current.paused || current.currentTime < this.musicTrimEnd) return;
+          current.currentTime = this.musicTrimStart;
+          void current.play().catch(() => {});
+        };
+        this.musicPlayHandler = startTrimClock; this.musicPauseHandler = stopTrimClock;
+        this.musicEndedHandler = () => {
+          const current = this.musicElement;
+          if (!current) return;
+          current.currentTime = this.musicTrimStart;
+          void current.play().then(startTrimClock).catch(() => {});
+        };
+        element!.addEventListener('timeupdate', this.musicTimeUpdate);
+        element!.addEventListener('play', this.musicPlayHandler);
+        element!.addEventListener('pause', this.musicPauseHandler);
+        element!.addEventListener('ended', this.musicEndedHandler);
+        if (!element!.paused) startTrimClock();
+        resolve(duration);
+      };
+      element!.addEventListener('loadedmetadata', onMetadata, { once: true });
+      element!.addEventListener('error', onError, { once: true });
+    });
+    let playback: Promise<void>;
+    try { playback = element.play(); }
+    catch (error) { return Promise.reject(error); }
+    return Promise.all([metadata, playback]).then(([duration]) => duration);
+  }
+
+  setMusicTrim(start: number, end: number) {
+    const duration = this.musicDuration;
+    if (duration < 0.1) return { start: 0, end: 0 };
+    const gap = Math.min(0.1, duration);
+    this.musicTrimStart = Math.max(0, Math.min(duration - gap, Number.isFinite(start) ? start : 0));
+    this.musicTrimEnd = Math.max(this.musicTrimStart + gap, Math.min(duration, Number.isFinite(end) ? end : duration));
+    if (this.musicElement && (this.musicElement.currentTime < this.musicTrimStart || this.musicElement.currentTime >= this.musicTrimEnd)) {
+      this.musicElement.currentTime = this.musicTrimStart;
+    }
+    return { start: this.musicTrimStart, end: this.musicTrimEnd };
   }
 
   setMusicVolume(value: number) {
@@ -257,10 +343,12 @@ export class GameAudio {
   }
 
   dispose() {
+    this.musicLoadId++;
+    this.clearMusicLoopHandlers(this.musicElement);
     this.musicElement?.pause();
     if (this.musicElement) { this.musicElement.removeAttribute('src'); this.musicElement.load(); }
     this.musicSource?.disconnect(); this.musicGain?.disconnect();
-    this.musicElement = null; this.musicSource = null; this.musicGain = null;
+    this.musicElement = null; this.musicTag = null; this.musicSource = null; this.musicGain = null;
     if (this.musicUrl) { URL.revokeObjectURL(this.musicUrl); this.musicUrl = null; }
     if (!this.ctx) return;
     const ctx = this.ctx; this.ctx = null;

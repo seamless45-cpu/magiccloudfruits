@@ -110,9 +110,13 @@ export default function App() {
   const [musicName, setMusicName] = useState('');
   const [musicVolume, setMusicVolumeValue] = useState(0.35);
   const [musicRate, setMusicRateValue] = useState(1);
+  const [musicDuration, setMusicDuration] = useState(0);
+  const [musicTrimStart, setMusicTrimStartValue] = useState(0);
+  const [musicTrimEnd, setMusicTrimEndValue] = useState(0);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicError, setMusicError] = useState('');
   const lastControlSoundAt = useRef(0);
+  const musicRequestId = useRef(0);
   const toggleSound = () => { const next=!soundEnabled; game?.audio.setEnabled(next); setSoundEnabled(next); if (next) game?.audio.uiSound('toggle'); };
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(!!document.fullscreenElement || !!(document as any).webkitFullscreenElement);
@@ -143,15 +147,29 @@ export default function App() {
   };
   const loadMusicFile = (file: File) => {
     if (!game) { setMusicError('Audio engine is still starting. Try again in a moment.'); return; }
-    if (!file.type.startsWith('audio/') && !/\.(mp3|wav|ogg|opus|flac|aac|m4a|aiff?)$/i.test(file.name)) {
-      setMusicError('Choose a supported audio file.'); return;
-    }
-    setMusicError('');
-    game.audio.loadMusic(file).then(() => { setMusicName(file.name); setMusicPlaying(true); })
-      .catch(error => setMusicError(error instanceof Error ? error.message : 'This audio file could not be played.'));
+    const supported = file.type.startsWith('audio/') || file.type.startsWith('video/') || /\.(mp3|wav|ogg|opus|flac|aac|m4a|aiff?|mp4|m4v|webm|mov|ogv|mkv|avi)$/i.test(file.name);
+    if (!supported) { setMusicError('Choose an audio file or a video containing an audio track.'); return; }
+    const requestId = ++musicRequestId.current;
+    setMusicError(''); setMusicName(''); setMusicPlaying(false); setMusicDuration(0); setMusicTrimStartValue(0); setMusicTrimEndValue(0);
+    game.audio.loadMusic(file).then(duration => {
+      if (requestId !== musicRequestId.current) return;
+      setMusicName(file.name); setMusicDuration(duration); setMusicTrimStartValue(0); setMusicTrimEndValue(duration); setMusicPlaying(true);
+    }).catch(error => {
+      if (requestId === musicRequestId.current) setMusicError(error instanceof Error ? error.message : 'This media file could not be played.');
+    });
   };
   const changeMusicVolume = (value: number) => { const next = Math.max(0, Math.min(1, value)); setMusicVolumeValue(next); game?.audio.setMusicVolume(next); };
   const changeMusicRate = (value: number) => { const next = Math.max(0.5, Math.min(1.5, value)); setMusicRateValue(next); game?.audio.setMusicPlaybackRate(next); };
+  const changeMusicTrimStart = (value: number) => {
+    const start = Math.max(0, Math.min(musicDuration - 0.1, Math.round(value * 10) / 10));
+    const trim = game?.audio.setMusicTrim(start, Math.max(start + 0.1, musicTrimEnd));
+    setMusicTrimStartValue(trim?.start ?? start); setMusicTrimEndValue(trim?.end ?? musicTrimEnd);
+  };
+  const changeMusicTrimEnd = (value: number) => {
+    const end = Math.max(musicTrimStart + 0.1, Math.min(musicDuration, Math.round(value * 10) / 10));
+    const trim = game?.audio.setMusicTrim(musicTrimStart, end);
+    setMusicTrimStartValue(trim?.start ?? musicTrimStart); setMusicTrimEndValue(trim?.end ?? end);
+  };
   const toggleMusic = async () => {
     if (!game || !musicName) return;
     try { setMusicPlaying(await game.audio.toggleMusic()); setMusicError(''); }
@@ -376,7 +394,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {showSettings && showGui && <Settings settings={settings} closing={closingSettings} onChange={changeSettings} onClose={closeSettings} onExited={finishSettingsClose} isFullscreen={isFullscreen} fullscreenError={fullscreenError} onToggleFullscreen={toggleFullscreen} musicAvailable={!!game} musicName={musicName} musicVolume={musicVolume} musicRate={musicRate} musicPlaying={musicPlaying} musicError={musicError} onMusicFile={loadMusicFile} onMusicVolume={changeMusicVolume} onMusicRate={changeMusicRate} onToggleMusic={toggleMusic} />}
+      {showSettings && showGui && <Settings settings={settings} closing={closingSettings} onChange={changeSettings} onClose={closeSettings} onExited={finishSettingsClose} isFullscreen={isFullscreen} fullscreenError={fullscreenError} onToggleFullscreen={toggleFullscreen} musicAvailable={!!game} musicName={musicName} musicVolume={musicVolume} musicRate={musicRate} musicPlaying={musicPlaying} musicError={musicError} musicDuration={musicDuration} musicTrimStart={musicTrimStart} musicTrimEnd={musicTrimEnd} onMusicFile={loadMusicFile} onMusicVolume={changeMusicVolume} onMusicRate={changeMusicRate} onMusicTrimStart={changeMusicTrimStart} onMusicTrimEnd={changeMusicTrimEnd} onToggleMusic={toggleMusic} />}
       {showUpdates && showTitle && <UpdateLog closing={closingUpdates} onClose={closeUpdates} onExited={finishUpdatesClose} />}
       {game && snap && !showTitle && (
         <button className={`gui-toggle ${showGui ? 'gui-toggle-visible' : 'gui-toggle-hidden'}`} onClick={toggleGui} data-ui-sound={showGui ? "close" : "open"} aria-label={showGui ? 'Hide interface' : 'Show interface'} title={showGui ? 'Hide interface' : 'Show interface'}>

@@ -30,10 +30,12 @@ type SettingsProps = {
   settings: GraphicsSettings; closing: boolean; onChange: (s: GraphicsSettings) => void; onClose: () => void; onExited: () => void;
   isFullscreen: boolean; fullscreenError: string; onToggleFullscreen: () => void;
   musicAvailable: boolean; musicName: string; musicVolume: number; musicRate: number; musicPlaying: boolean; musicError: string;
-  onMusicFile: (file: File) => void; onMusicVolume: (value: number) => void; onMusicRate: (value: number) => void; onToggleMusic: () => void;
+  musicDuration: number; musicTrimStart: number; musicTrimEnd: number;
+  onMusicFile: (file: File) => void; onMusicVolume: (value: number) => void; onMusicRate: (value: number) => void;
+  onMusicTrimStart: (value: number) => void; onMusicTrimEnd: (value: number) => void; onToggleMusic: () => void;
 };
 
-export function Settings({ settings, closing, onChange, onClose, onExited, isFullscreen, fullscreenError, onToggleFullscreen, musicAvailable, musicName, musicVolume, musicRate, musicPlaying, musicError, onMusicFile, onMusicVolume, onMusicRate, onToggleMusic }: SettingsProps) {
+export function Settings({ settings, closing, onChange, onClose, onExited, isFullscreen, fullscreenError, onToggleFullscreen, musicAvailable, musicName, musicVolume, musicRate, musicPlaying, musicError, musicDuration, musicTrimStart, musicTrimEnd, onMusicFile, onMusicVolume, onMusicRate, onMusicTrimStart, onMusicTrimEnd, onToggleMusic }: SettingsProps) {
   const [interpolationMethodsOpen, setInterpolationMethodsOpen] = useState(false);
   const [lightningSettingsOpen, setLightningSettingsOpen] = useState(false);
   const set = <K extends keyof GraphicsSettings>(k: K, v: GraphicsSettings[K]) => onChange({ ...settings, [k]: v });
@@ -49,9 +51,9 @@ export function Settings({ settings, closing, onChange, onClose, onExited, isFul
       <span className="sf-switch-state" aria-hidden="true">{active ? 'ON' : 'OFF'}</span>
     </button>;
   };
-  const musicRange = (value: number, min: number, max: number, label: string, format: (n: number) => string, onValue: (n: number) => void) => {
-    const fill = `${Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))}%`;
-    return <><input type="range" min={min} max={max} step="0.01" value={value} onChange={e => onValue(+e.target.value)} className="sf-range w-28" style={{ '--range-fill': fill } as CSSProperties} aria-label={label} /><span className="sf-range-value w-12 text-right font-orb text-[10px]">{format(value)}</span></>;
+  const musicRange = (value: number, min: number, max: number, step: number, label: string, format: (n: number) => string, onValue: (n: number) => void) => {
+    const fill = max > min ? `${Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))}%` : '0%';
+    return <><input type="range" min={min} max={max} step={step} value={value} onChange={e => onValue(+e.target.value)} className="sf-range w-28" style={{ '--range-fill': fill } as CSSProperties} aria-label={label} /><span className="sf-range-value w-12 text-right font-orb text-[10px]">{format(value)}</span></>;
   };
   return (
     <div className={`ui-modal-shell absolute inset-0 grid place-items-center bg-black/70 pointer-events-auto z-50 ${closing ? 'ui-modal-closing' : ''}`} onPointerDown={e => e.stopPropagation()} onAnimationEnd={e => { if (e.target === e.currentTarget && closing) onExited(); }}>
@@ -110,18 +112,24 @@ export function Settings({ settings, closing, onChange, onClose, onExited, isFul
         <div className="settings-section mt-4 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">AUDIO // LOCAL MUSIC DECK</div>
         <Row label="Audio track">
           <label className={`sf-file-picker ${!musicAvailable ? 'is-disabled' : ''}`}>
-            <input type="file" accept="audio/*,.mp3,.wav,.ogg,.opus,.flac,.aac,.m4a,.aiff" aria-label="Upload local music track" disabled={!musicAvailable} onChange={e => { const file = e.target.files?.[0]; if (file) onMusicFile(file); e.currentTarget.value = ''; }} />
+            <input type="file" accept="audio/*,video/mp4,video/webm,video/ogg,video/quicktime,.mp3,.wav,.ogg,.opus,.flac,.aac,.m4a,.aiff,.mp4,.m4v,.webm,.mov,.ogv,.mkv,.avi" aria-label="Upload local music or video media" disabled={!musicAvailable} onChange={e => { const file = e.target.files?.[0]; if (file) onMusicFile(file); e.currentTarget.value = ''; }} />
             <span>{musicName ? 'CHANGE TRACK' : 'LOAD TRACK'}</span><b aria-hidden="true">↥</b>
           </label>
         </Row>
+        <p className="media-format-note">LOCAL MEDIA: MP3 · WAV · OGG · FLAC · AAC · MP4 · WEBM · MOV &amp; browser-supported formats</p>
         <Row label="Now playing"><span className="music-track-name" title={musicName || 'No local track selected'}>{musicName || 'NO TRACK LOADED'}</span></Row>
         <Row label="Transport + loop">
           <button type="button" className="sf-btn music-transport px-2 py-1 text-[9px] font-orb" onClick={onToggleMusic} disabled={!musicName} data-ui-sound="toggle" aria-label={musicPlaying ? 'Pause music' : 'Play music'}>{musicPlaying ? 'PAUSE ‖' : 'PLAY ▷'}</button>
           <span className="music-loop-status" aria-label="Looping is always on"><i aria-hidden="true" />LOOP ON</span>
         </Row>
-        <Row label="Music volume">{musicRange(musicVolume, 0, 1, 'Music volume', v => `${Math.round(v * 100)}%`, onMusicVolume)}</Row>
-        <Row label="Playback speed">{musicRange(musicRate, 0.5, 1.5, 'Music playback speed', v => `${v.toFixed(2)}×`, onMusicRate)}</Row>
-        <p className="text-[10px] text-cyan-200/50 py-1">Playback rate shifts pitch with speed. Volume and speed move in 0.01 steps; repeat stays locked on.</p>
+        <Row label="Music volume">{musicRange(musicVolume, 0, 1, 0.01, 'Music volume', v => `${Math.round(v * 100)}%`, onMusicVolume)}</Row>
+        <Row label="Playback speed">{musicRange(musicRate, 0.5, 1.5, 0.01, 'Music playback speed', v => `${v.toFixed(2)}×`, onMusicRate)}</Row>
+        {musicName && musicDuration >= 0.1 && <>
+          <div className="music-trim-heading font-orb">TRIM // {musicDuration.toFixed(1)} SEC</div>
+          <Row label="Start point">{musicRange(musicTrimStart, 0, Math.max(0, musicDuration - 0.1), 0.1, 'Music trim start', v => `${v.toFixed(1)}s`, onMusicTrimStart)}</Row>
+          <Row label="End point">{musicRange(musicTrimEnd, Math.min(musicDuration, musicTrimStart + 0.1), musicDuration, 0.1, 'Music trim end', v => `${v.toFixed(1)}s`, onMusicTrimEnd)}</Row>
+        </>}
+        <p className="text-[10px] text-cyan-200/50 py-1">Playback rate shifts pitch with speed. Volume and speed step by 0.01; trim points step by 0.1s. Repeat stays locked on.</p>
         {musicError && <p role="alert" className="text-[10px] text-rose-200/90 py-1">{musicError}</p>}
         <p className="text-[10px] text-cyan-200/50 mt-2">Settings apply instantly. Lightning segments re-rotate every 0.01s via GPU-expanded ribbons (no geometry rebuilds).</p>
       </div>
