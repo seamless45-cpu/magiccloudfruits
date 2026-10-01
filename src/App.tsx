@@ -118,7 +118,7 @@ export default function App() {
   const [musicError, setMusicError] = useState('');
   const lastControlSoundAt = useRef(0);
   const musicRequestId = useRef(0);
-  const toggleSound = () => { const next=!soundEnabled; game?.audio.setEnabled(next); setSoundEnabled(next); if (next) game?.audio.uiSound('toggle'); };
+  const toggleSound = () => { const next=!soundEnabled; if (!next) game?.audio.uiSound('toggle'); game?.audio.setEnabled(next); setSoundEnabled(next); if (next) game?.audio.uiSound('toggle'); };
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(!!document.fullscreenElement || !!(document as any).webkitFullscreenElement);
     document.addEventListener('fullscreenchange', syncFullscreen);
@@ -178,7 +178,7 @@ export default function App() {
   };
   const enterArena = () => {
     if (!game || leavingTitle) return;
-    game.audio.unlock(); game.paused = false; setLeavingTitle(true);
+    game.audio.unlock(); game.audio.setArenaMode(true); game.paused = false; setLeavingTitle(true);
   };
   const onUiClickCapture = (e: MouseEvent<HTMLDivElement>) => {
     const button = (e.target as HTMLElement).closest('button');
@@ -371,7 +371,7 @@ export default function App() {
               <button className="sf-btn font-orb" onClick={openSettings} data-ui-sound="open" title="Settings" aria-label="Settings">SET</button>
               <button className={`sf-btn font-orb ${game.firstPerson ? 'on' : ''}`} onClick={() => game.toggleFirstPerson()} title="Toggle first/third person" aria-label="Toggle camera">{game.firstPerson?'FP':'TP'}</button>
               <button className="sf-btn font-orb" onClick={toggleHelp} data-ui-sound="toggle" title="Controls" aria-label="Controls">HELP</button>
-              <button className={`sf-btn font-orb ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} title={soundEnabled?'Mute weather audio':'Enable weather audio'} aria-label={soundEnabled?'Mute weather audio':'Enable weather audio'}>SND</button>
+              <button className={`sf-btn font-orb ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} data-ui-sound="none" title={soundEnabled?'Mute all game audio':'Enable all game audio'} aria-label={soundEnabled?'Mute all game audio':'Enable all game audio'}>SND</button>
             </div>
           </div>}
           {/* Toasts */}
@@ -393,13 +393,13 @@ export default function App() {
         <div className={`title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto ${leavingTitle ? 'title-screen-exit' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && e.animationName === 'ui-title-shutdown' && leavingTitle) setShowTitle(false); }}>
           <div className="title-card main-menu-card sf-panel w-full max-w-[780px] p-5 sm:p-8" onPointerMove={moveMenuCard} onPointerLeave={resetMenuCard}>
             <header className="menu-header flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3"><div className="title-mark"><span>MC</span><i /></div><div><p className="font-orb text-[9px] tracking-[.3em] text-cyan-100/60">OPEN FIELD // OPERATIONS</p><p className="mt-1 text-[10px] text-cyan-100/40">COMBAT SIMULATION · EST. 2026</p></div></div>
+              <div className="flex items-center gap-3"><div className="title-mark"><span>MC</span><i /></div><div><p className="font-orb text-[9px] tracking-[.3em] text-cyan-100/60">NEON FRONTIER // OPERATIONS</p><p className="mt-1 text-[10px] text-cyan-100/40">COMBAT SIMULATION · EST. 2026</p></div></div>
               <div className="menu-release font-orb text-[9px]">BUILD 1.5.0 <span>●</span></div>
             </header>
             <div className="title-rule my-5" />
             <div className="menu-columns grid grid-cols-1 md:grid-cols-[1.1fr_.9fr] gap-6 md:gap-8">
               <section className="menu-brief min-w-0">
-                <p className="menu-kicker font-orb text-[9px] tracking-[.28em] text-amber-200/80">FIELD COMMAND // READY</p>
+                <p className="menu-kicker font-orb text-[9px] tracking-[.28em] text-amber-200/80">REACTOR LINK // READY</p>
                 <h1 className="mt-3 font-orb text-4xl sm:text-6xl font-bold leading-none tracking-[.08em] text-white sf-glow">MAGIC<br/><span className="menu-title-second">CLOUD</span></h1>
                 <p className="mt-4 max-w-sm text-sm leading-relaxed text-cyan-50/65">Choose your power. Read the weather. Take the arena.</p>
                 <div className="menu-readouts mt-6 grid grid-cols-3 gap-2">
@@ -411,13 +411,13 @@ export default function App() {
               <nav className="menu-actions flex flex-col gap-2" aria-label="Main menu">
                 <p className="font-orb mb-1 text-[9px] tracking-[.2em] text-cyan-100/45">SELECT OPERATION</p>
                 <button className="play-btn menu-enter w-full px-4 py-4 text-left" onClick={enterArena} data-ui-sound="transition" disabled={!game || leavingTitle}>
-                  <span className="menu-action-index">01 / DEPLOY</span><strong className="block mt-1 font-orb text-base tracking-[.16em]">{leavingTitle ? 'ENTERING ARENA' : 'ENTER ARENA'} <span className="float-right">↗</span></strong><small className="mt-1 block text-[9px] tracking-[.08em]">DROP INTO THE OPEN FIELD</small>
+                  <span className="menu-action-index">01 / DEPLOY</span><strong className="block mt-1 font-orb text-base tracking-[.16em]">{leavingTitle ? 'ENTERING ARENA' : 'ENTER ARENA'} <span className="float-right">↗</span></strong><small className="mt-1 block text-[9px] tracking-[.08em]">BREACH THE CONTAINMENT FIELD</small>
                 </button>
                 <div className="menu-utility-grid grid grid-cols-2 gap-2">
                   <button className="menu-utility sf-btn" onClick={openSettings} data-ui-sound="open"><b>02</b><span>SETTINGS</span><i>↗</i></button>
                   <button className="menu-utility sf-btn" onClick={toggleHelp} data-ui-sound="toggle"><b>03</b><span>CONTROLS</span><i>↗</i></button>
                   <button className="menu-utility sf-btn" onClick={openUpdates} data-ui-sound="open"><b>04</b><span>UPDATE LOG</span><i>↗</i></button>
-                  <button className={`menu-utility sf-btn ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} disabled={!game} data-ui-sound="toggle"><b>05</b><span>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</span><i>{soundEnabled ? '♫' : '×'}</i></button>
+                  <button className={`menu-utility sf-btn ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} disabled={!game} data-ui-sound="none"><b>05</b><span>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</span><i>{soundEnabled ? '♫' : '×'}</i></button>
                 </div>
               </nav>
             </div>

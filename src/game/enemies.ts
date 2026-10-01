@@ -58,12 +58,12 @@ const G = {
   star: new THREE.TorusGeometry(0.5, 0.05, 4, 16),
 };
 const M = {
-  eye: new THREE.MeshBasicMaterial({ color: 0xff3344 }),
+  eye: new THREE.MeshBasicMaterial({ color: 0xff557c, toneMapped: false }),
   barBg: new THREE.MeshBasicMaterial({ color: 0x100a14, transparent: true, opacity: 0.8, depthWrite: false }),
   bars: [0x30ffb0, 0xc070ff, 0xff3040].map(color => new THREE.MeshBasicMaterial({ color, depthWrite: false })),
-  armor: [0xf0eee6, 0xe4e1d8, 0xd7d4cc].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.82, roughness: 0.28, emissive: color, emissiveIntensity: 0.22 })),
-  limbs: [0xc9cac5, 0xb5b6b2, 0xa7a69f].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.65, roughness: 0.38 })),
-  cores: [0xd8bb78, 0xb7a7cb, 0xb77d73].map(color => new THREE.MeshBasicMaterial({ color })),
+  armor: [0x527286, 0x405c75, 0x354a63].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.9, roughness: 0.22, emissive: 0x087594, emissiveIntensity: 0.36 })),
+  limbs: [0x17283d, 0x1d314a, 0x263a52].map(color => new THREE.MeshStandardMaterial({ color, metalness: 0.86, roughness: 0.26, emissive: 0x062d47, emissiveIntensity: 0.2 })),
+  cores: [0x53f7ff, 0xc179ff, 0xff4f89].map(color => new THREE.MeshBasicMaterial({ color, toneMapped: false })),
   cage: new THREE.LineBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0.95 }),
   ice: new THREE.MeshStandardMaterial({ color: 0x9fe6ff, transparent: true, opacity: 0.55, roughness: 0.05, metalness: 0.2, emissive: 0x114466 }),
   star: new THREE.MeshBasicMaterial({ color: 0xffee55 }),
@@ -91,8 +91,8 @@ export class Enemy {
     this.maxHp = kind === 'boss' ? 2.5e6 : kind === 'brute' ? 780000 : kind === 'elite' ? 1.5e5 : kind === 'ranged' ? 24000 : kind === 'runner' ? 8500 : 12000;
     this.hp = this.maxHp; this.radius = (kind === 'brute' ? 0.9 : kind === 'runner' ? 0.62 : 0.7) * this.scale; this.height = (kind === 'brute' ? 2.45 : 2.2) * this.scale;
     this.speed = kind === 'boss' ? 5 : kind === 'brute' ? 3.6 : kind === 'elite' ? 6.5 : kind === 'ranged' ? 4.6 : kind === 'runner' ? 12.5 : 7.5;
-    const col = kind === 'boss' ? 0x6f5a55 : kind === 'brute' ? 0x55483b : kind === 'ranged' ? 0x315b68 : kind === 'runner' ? 0x6f3940 : kind === 'elite' ? 0x62576b : 0x59636a;
-    this.bodyMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.35, emissive: 0x000000 });
+    const col = kind === 'boss' ? 0x2d2546 : kind === 'brute' ? 0x463252 : kind === 'ranged' ? 0x1e5367 : kind === 'runner' ? 0x5b284c : kind === 'elite' ? 0x34436f : 0x33485c;
+    this.bodyMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.36, metalness: 0.72, emissive: 0x03172d, emissiveIntensity: 0.25 });
     const inner = new THREE.Group();
     const body = new THREE.Mesh(G.body, this.bodyMat); body.castShadow = true;
     const eyes = new THREE.Mesh(G.eyes, M.eye);
