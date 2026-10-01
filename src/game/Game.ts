@@ -5,7 +5,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
-import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
+import { MotionBlurShader, MotionVectorPass } from './MotionBlur';
 import { ParticleSystem, DebrisSystem, HailSystem } from './particles';
 import { GameAudio } from './audio';
 import { Bolt, boltStats, type BoltOpts } from './lightning';
@@ -30,7 +30,7 @@ type Pose = { position: THREE.Vector3; rotation: THREE.Quaternion };
 type RenderPose = { player: Pose; enemies: Pose[]; camera: Pose };
 
 export class Game {
-  renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera; composer: EffectComposer; bloom: UnrealBloomPass; fxaa: ShaderPass; afterimage: AfterimagePass;
+  renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera; composer: EffectComposer; bloom: UnrealBloomPass; fxaa: ShaderPass; motionVectors: MotionVectorPass; motionBlurPass: ShaderPass;
   sun!: THREE.DirectionalLight; flashLight!: THREE.PointLight; flashI = 0;
   fx: ParticleSystem; smoke: ParticleSystem; debris: DebrisSystem;
   effects: Effect[] = []; timers: { t: number; fn: () => void }[] = [];
@@ -50,7 +50,8 @@ export class Game {
   fps = 60; fpsAcc = 0; fpsN = 0;
   private readonly interpolationStep = 1 / 60; private interpolationAccumulator = 0;
   private interpolationPrevious: RenderPose | null = null; private interpolationCurrent: RenderPose | null = null;
-  private settingsApplied = false; private afterimageWarmup = 0; private bootFrameReported = false;
+  private settingsApplied = false; private bootFrameReported = false;
+  private dynamicResolutionScale = 1; private dynamicResolutionClock = 0;
   damageIndicators: { id: number; targetId: number; amount: number; pos: THREE.Vector3; age: number; crit: boolean }[] = [];
   private nextDamageIndicator = 1;
   overlay = { color: '#000', a: 0, fade: 0 };
@@ -83,9 +84,14 @@ export class Game {
     this.scene.add(this.fx.points, this.smoke.points, this.debris.mesh);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.motionVectors = new MotionVectorPass(this.scene, this.camera);
+    this.motionVectors.enabled = false;
+    this.composer.addPass(this.motionVectors);
+    this.motionBlurPass = new ShaderPass(MotionBlurShader);
+    this.motionBlurPass.enabled = false;
+    this.composer.addPass(this.motionBlurPass);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.9, 0.5, 0.82); this.composer.addPass(this.bloom);
     this.fxaa = new ShaderPass(FXAAShader); this.composer.addPass(this.fxaa);
-    this.afterimage = new AfterimagePass(0.72); this.composer.addPass(this.afterimage);
     this.composer.addPass(new OutputPass());
     for (const it of this.items) this.cds[it.id] = it.skills.map(s => ({ rem: 0, total: s.cd, charges: s.charges?.max ?? 0, interval: 0, regenT: 0, holding: false }));
     for (let i = 0; i < 48; i++) this.enemies.push(new Enemy(this, 'normal'));
@@ -113,7 +119,9 @@ export class Game {
     const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
       vertexShader: 'varying vec3 vp; void main(){ vp=position; vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.); gl_Position=p.xyww; }',
       fragmentShader: 'varying vec3 vp; float starHash(vec3 p){ return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453); } void main(){ vec3 d=normalize(vp); float h=max(d.y,0.); vec3 zenith=vec3(.012,.022,.075), upper=vec3(.026,.12,.24), horizon=vec3(.14,.28,.39), violet=vec3(.17,.055,.31); float haze=pow(1.-h,3.2); vec3 col=mix(horizon,upper,smoothstep(0.,.38,h)); col=mix(col,zenith,smoothstep(.24,.9,h)); col=mix(col,violet,clamp(haze*.14,0.,.16)); vec3 sunDir=normalize(vec3(.43,.75,.50)); float mu=dot(d,sunDir); float halo=pow(max(mu,0.),22.)*.17+pow(max(mu,0.),110.)*.48; float disc=1.-smoothstep(.99988,.99995,mu); col+=vec3(.55,.88,1.)*(halo+disc*1.25); float ribbonCenter=.34+.055*sin(d.x*7.+d.z*11.)+.03*sin(d.x*21.-d.z*4.); float ribbon=exp(-pow((d.y-ribbonCenter)*18.,2.)); float ribbon2=exp(-pow((d.y-(ribbonCenter+.095))*25.,2.)); float spectrum=.5+.5*sin(d.x*16.+d.z*23.); col+=mix(vec3(.02,.34,.55),vec3(.32,.055,.58),spectrum)*(ribbon*.27+ribbon2*.12); vec3 starCell=floor(d*210.); float star=step(.9992,starHash(starCell)); col+=vec3(.55,.84,1.)*star*smoothstep(.08,.24,h)*.72; float under=clamp(-d.y,0.,1.); col=mix(col,horizon*.38,under*.55); gl_FragColor=vec4(col,1.); }' }));
-    sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = -10; sky.onBeforeRender = () => sky.position.copy(this.camera.position); this.scene.add(sky);
+    sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = -10;
+    sky.onBeforeRender = () => { sky.position.copy(this.camera.position); sky.updateMatrixWorld(true); };
+    this.scene.add(sky);
     // Alien alloy terrain: cool mineral patches under a subtle, distance-faded tactical lattice.
     const gmat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
     gmat.onBeforeCompile = (sh) => {
@@ -281,27 +289,36 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
     const previous = this.settings, initial = !this.settingsApplied;
     this.settingsApplied = true; this.settings = s;
     if (initial || previous.clouds !== s.clouds) for (const cloud of this.cloudGroups) cloud.scale.setScalar(s.clouds);
-    if (initial || previous.resolution !== s.resolution) this.renderer.setPixelRatio(Math.min(2.5, window.devicePixelRatio * s.resolution));
+    if (initial || previous.resolution !== s.resolution) {
+      if (!initial) this.dynamicResolutionScale = 1;
+      this.renderer.setPixelRatio(Math.min(2.5, window.devicePixelRatio * s.resolution * this.dynamicResolutionScale));
+    }
     this.renderer.shadowMap.enabled = s.shadows; this.sun.castShadow = s.shadows;
     if (initial || previous.shadowRes !== s.shadowRes) { this.sun.shadow.mapSize.set(s.shadowRes, s.shadowRes); this.sun.shadow.map?.dispose(); (this.sun.shadow as any).map = null; }
     if (initial || previous.shadows !== s.shadows) this.scene.traverse((o: any) => { if (o.material) o.material.needsUpdate = true; });
     if (initial || previous.bloom !== s.bloom) this.bloom.enabled = s.bloom && this.halfFloat;
     if (initial || previous.bloomStrength !== s.bloomStrength) this.bloom.strength = s.bloomStrength;
     if (initial || previous.antialiasFxaa !== s.antialiasFxaa) this.fxaa.enabled = s.antialiasFxaa && this.halfFloat;
-    if (s.motionBlur && !previous.motionBlur) this.afterimageWarmup = 1;
-    this.afterimage.enabled = s.motionBlur && this.halfFloat; this.afterimage.damp = s.motionBlurStrength;
+    if (s.motionBlur && (initial || !previous.motionBlur)) this.motionVectors.resetHistory();
+    const motionBlurEnabled = s.motionBlur && this.halfFloat;
+    this.motionVectors.enabled = motionBlurEnabled;
+    this.motionBlurPass.enabled = motionBlurEnabled;
+    this.motionBlurPass.uniforms['uTrailStrength'].value = s.motionBlurStrength;
     if (initial || previous.particles !== s.particles) { this.fx.density = s.particles; this.smoke.density = s.particles; }
     if (initial || previous.debris !== s.debris) this.debris.density = s.debris;
     if (initial || previous.fog !== s.fog || previous.drawDistance !== s.drawDistance) (this.scene.fog as THREE.FogExp2).density = s.fog ? 0.0009 * (25000 / s.drawDistance) : 0;
     if (initial || previous.exposure !== s.exposure) this.renderer.toneMappingExposure = s.exposure;
     if (initial || previous.drawDistance !== s.drawDistance) { this.camera.far = s.drawDistance; this.camera.updateProjectionMatrix(); }
+    this.motionBlurPass.uniforms['uNear'].value = this.camera.near;
+    this.motionBlurPass.uniforms['uFar'].value = this.camera.far;
     if (initial || previous.resolution !== s.resolution) this.resize();
   }
   resize = () => {
     const w = this.container.clientWidth, h = this.container.clientHeight;
-    this.renderer.setSize(w, h); this.composer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     const pr = this.renderer.getPixelRatio();
+    this.renderer.setSize(w, h); this.composer.setPixelRatio(pr); this.composer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.fxaa.material.uniforms['resolution'].value.set(1 / (w * pr), 1 / (h * pr));
+    this.motionBlurPass.uniforms['uResolution'].value.set(w * pr, h * pr);
     const sc = (h * pr) / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
     const gl = this.renderer.getContext(); const maxPt = (gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE) as Float32Array)[1] || 512;
     for (const p of [this.fx, this.smoke]) { p.mat.uniforms.uScale.value = sc; p.mat.uniforms.uMaxSize.value = maxPt; }
@@ -322,7 +339,8 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
   zoomBy(d: number) { this.cam.targetDist = THREE.MathUtils.clamp(this.cam.targetDist + d, MIN_ZOOM, MAX_ZOOM); }
   setZoom(m: number) { this.cam.targetDist = THREE.MathUtils.clamp(m, MIN_ZOOM, MAX_ZOOM); }
   onKeyDown = (e: KeyboardEvent) => {
-    if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'SELECT') return;
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (target?.tagName === 'INPUT' || target?.tagName === 'SELECT' || target?.closest('[data-panel="inventory-row"]')) return;
     this.audio.unlock();
     const k = e.key.toLowerCase();
     if (this.keys.has(k)) return; this.keys.add(k);
@@ -662,12 +680,40 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
     this.camera.position.copy(pose.camera.position); this.camera.quaternion.copy(pose.camera.rotation);
   }
 
+  /** Lower internal pixel density after sustained low frame rates; recover slowly when headroom returns. */
+  private updateAdaptiveResolution(frameDelta: number) {
+    if (!this.settingsApplied || document.visibilityState === 'hidden' || frameDelta > 0.25) {
+      if (frameDelta > 0.25) this.dynamicResolutionClock = 0;
+      return;
+    }
+    this.dynamicResolutionClock += frameDelta;
+    if (this.dynamicResolutionClock < 1.25) return;
+    this.dynamicResolutionClock = 0;
+
+    let nextScale = this.dynamicResolutionScale;
+    if (this.fps < 45) nextScale = Math.max(0.55, nextScale - 0.08);
+    else if (this.fps > 58) nextScale = Math.min(1, nextScale + 0.04);
+    if (nextScale === this.dynamicResolutionScale) return;
+
+    this.dynamicResolutionScale = nextScale;
+    const ratio = Math.min(2.5, window.devicePixelRatio * this.settings.resolution * nextScale);
+    if (Math.abs(ratio - this.renderer.getPixelRatio()) > 0.01) {
+      this.renderer.setPixelRatio(ratio);
+      this.resize();
+    }
+  }
+
   // ---------------------------------------------------------------- loop
   loop = () => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const now = performance.now(); const frameDelta = Math.max(0, (now - this.last) / 1000); const dt = Math.min(0.05, frameDelta); this.last = now;
-    this.fpsAcc += dt; this.fpsN++; if (this.fpsAcc > 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
+    if (frameDelta > 0.25) this.motionVectors.resetHistory();
+    if (frameDelta < 0.25) {
+      this.fpsAcc += Math.max(0.001, frameDelta); this.fpsN++;
+      if (this.fpsAcc > 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
+    }
+    this.updateAdaptiveResolution(frameDelta);
     let blended = false;
     try {
       if (this.settings.frameInterpolation && this.interpolationPrevious && this.interpolationCurrent) {
@@ -690,16 +736,9 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
         }
       }
       if ((this.settings.bloom || this.settings.antialiasFxaa || this.settings.motionBlur) && this.halfFloat) {
-        if (this.afterimageWarmup > 0 && this.settings.motionBlur) {
-          // Seed the history buffer with the current image when enabled; otherwise the first
-          // blurred frame can pull stale pixels from an earlier use of the pass.
-          this.afterimage.damp = 0; this.composer.render(); this.afterimageWarmup--;
-        } else {
-          // The Afterimage pass retains a fraction per rendered frame. Scale that fraction
-          // to elapsed time so its trail length stays consistent at different frame rates.
-          this.afterimage.damp = Math.pow(this.settings.motionBlurStrength, Math.min(frameDelta, 0.25) * 60);
-          this.composer.render();
-        }
+        this.motionBlurPass.uniforms['tMotion'].value = this.motionVectors.target.texture;
+        this.motionBlurPass.uniforms['tDepth'].value = this.motionVectors.target.depthTexture;
+        this.composer.render(frameDelta);
       } else this.renderer.render(this.scene, this.camera);
       if (!this.bootFrameReported) {
         this.bootFrameReported = true;
@@ -740,7 +779,13 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
     if (P.lockMove > 0) P.lockMove -= dt;
     else if (ml > 0.05) { mv.divideScalar(Math.max(1, ml)); const sp = K.has('shift') || this.touchSprint ? 36 : 20; P.pos.addScaledVector(mv, sp * dt); P.facing.copy(mv).normalize(); }
     P.vel.y -= 32 * dt; P.pos.y += P.vel.y * dt; if (P.pos.y <= 0) { P.pos.y = 0; P.vel.y = 0; P.grounded = true; }
-    if (P.vel.x || P.vel.z) { P.pos.x += P.vel.x * dt; P.pos.z += P.vel.z * dt; }
+    if (P.vel.x || P.vel.z) {
+      P.pos.x += P.vel.x * dt; P.pos.z += P.vel.z * dt;
+      const drag = Math.exp(-(P.grounded ? 4 : 0.9) * dt);
+      P.vel.x *= drag; P.vel.z *= drag;
+      if (Math.abs(P.vel.x) < 0.005) P.vel.x = 0;
+      if (Math.abs(P.vel.z) < 0.005) P.vel.z = 0;
+    }
     const playerRadius = Math.hypot(P.pos.x, P.pos.z); if (playerRadius > 1320) { P.pos.x *= 1320 / playerRadius; P.pos.z *= 1320 / playerRadius; }
     P.mesh.position.copy(P.pos); P.mesh.rotation.y = Math.atan2(P.facing.x, P.facing.z);
     // anim

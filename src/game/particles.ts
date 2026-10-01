@@ -49,7 +49,7 @@ export class ParticleSystem {
   pos: Float32Array; vel: Float32Array; col: Float32Array; size: Float32Array; alpha: Float32Array;
   life: Float32Array; maxLife: Float32Array; baseAlpha: Float32Array; grav: Float32Array; drag: Float32Array;
   grow: Float32Array; turb: Float32Array; ox: Float32Array; oz: Float32Array; spread: Float32Array; baseSize: Float32Array;
-  windX: Float32Array; windZ: Float32Array; windResponse: Float32Array; windDynamic: Uint8Array; windClock: Float32Array; groundDrag: Float32Array; outflowStarted: Uint8Array; windSampler?: (x:number,y:number,z:number) => THREE.Vector3; active: number[] = []; activeAt: Int32Array;
+  windX: Float32Array; windZ: Float32Array; windResponse: Float32Array; windDynamic: Uint8Array; windClock: Float32Array; turbClock: Float32Array; groundDrag: Float32Array; outflowStarted: Uint8Array; windSampler?: (x:number,y:number,z:number) => THREE.Vector3; active: number[] = []; activeAt: Int32Array;
   geo: THREE.BufferGeometry; points: THREE.Points; mat: THREE.ShaderMaterial;
   density = 1;
   constructor(cap: number, additive: boolean) {
@@ -59,7 +59,7 @@ export class ParticleSystem {
     this.maxLife = new Float32Array(cap); this.baseAlpha = new Float32Array(cap); this.grav = new Float32Array(cap);
     this.drag = new Float32Array(cap); this.grow = new Float32Array(cap); this.turb = new Float32Array(cap); this.groundDrag = new Float32Array(cap); this.outflowStarted = new Uint8Array(cap);
     this.ox = new Float32Array(cap); this.oz = new Float32Array(cap); this.spread = new Float32Array(cap); this.baseSize = new Float32Array(cap);
-    this.windX = new Float32Array(cap); this.windZ = new Float32Array(cap); this.windResponse = new Float32Array(cap); this.windDynamic = new Uint8Array(cap); this.windClock = new Float32Array(cap); this.activeAt = new Int32Array(cap); this.activeAt.fill(-1);
+    this.windX = new Float32Array(cap); this.windZ = new Float32Array(cap); this.windResponse = new Float32Array(cap); this.windDynamic = new Uint8Array(cap); this.windClock = new Float32Array(cap); this.turbClock = new Float32Array(cap); this.activeAt = new Int32Array(cap); this.activeAt.fill(-1);
     this.geo = new THREE.BufferGeometry();
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aColor', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
@@ -87,7 +87,7 @@ export class ParticleSystem {
     this.baseAlpha[i] = o.alpha ?? 1; this.alpha[i] = this.baseAlpha[i];
     this.grav[i] = o.grav ?? 0; this.drag[i] = o.drag ?? 0; this.grow[i] = o.grow ?? 0; this.turb[i] = o.turb ?? 0;
     this.ox[i] = o.ox ?? x; this.oz[i] = o.oz ?? z; this.spread[i] = o.spread ?? 0; this.groundDrag[i] = o.groundDrag ?? 0; this.outflowStarted[i] = 0;
-    this.windX[i] = o.windX ?? 0; this.windZ[i] = o.windZ ?? 0; this.windResponse[i] = o.windResponse ?? 0; this.windDynamic[i] = o.windDynamic ? 1 : 0; this.windClock[i] = Math.random() * 0.3;
+    this.windX[i] = o.windX ?? 0; this.windZ[i] = o.windZ ?? 0; this.windResponse[i] = o.windResponse ?? 0; this.windDynamic[i] = o.windDynamic ? 1 : 0; this.windClock[i] = Math.random() * 0.3; this.turbClock[i] = Math.random() * 0.075;
     if (this.activeAt[i] < 0) { this.activeAt[i] = this.active.length; this.active.push(i); }
     (this.geo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
   }
@@ -106,11 +106,17 @@ export class ParticleSystem {
       }
       const tb = this.turb[i];
       if (tb > 0) {
-        // Cheap divergence-free-ish curl field for fluid-like billowing.
-        const x = p[i3] * 0.02, y = p[i3 + 1] * 0.02, z = p[i3 + 2] * 0.02;
-        v[i3] += (Math.sin(y * 3.1 + t * 1.3) - Math.cos(z * 2.7 - t)) * tb * dt;
-        v[i3 + 1] += (Math.sin(z * 2.3 + t * 0.9) - Math.cos(x * 3.3)) * tb * 0.4 * dt;
-        v[i3 + 2] += (Math.sin(x * 2.9 - t * 1.1) - Math.cos(y * 2.1 + t)) * tb * dt;
+        // Curl turbulence changes more slowly than the render rate; staggered 12–15 Hz
+        // samples preserve billowing while avoiding six trig calls for every live particle
+        // on every frame.
+        this.turbClock[i] -= dt;
+        if (this.turbClock[i] <= 0) {
+          this.turbClock[i] = 0.075 + Math.random() * 0.025;
+          const x = p[i3] * 0.02, y = p[i3 + 1] * 0.02, z = p[i3 + 2] * 0.02, impulse = 0.08;
+          v[i3] += (Math.sin(y * 3.1 + t * 1.3) - Math.cos(z * 2.7 - t)) * tb * impulse;
+          v[i3 + 1] += (Math.sin(z * 2.3 + t * 0.9) - Math.cos(x * 3.3)) * tb * 0.4 * impulse;
+          v[i3 + 2] += (Math.sin(x * 2.9 - t * 1.1) - Math.cos(y * 2.1 + t)) * tb * impulse;
+        }
       }
       const wind = this.windResponse[i];
       if (wind > 0) {
@@ -136,8 +142,9 @@ export class ParticleSystem {
           v[i3] += dx * vy * sp; v[i3 + 2] += dz * vy * sp;
           if (this.groundDrag[i] > 0) {
             if (!this.outflowStarted[i]) {
-              this.outflowStarted[i] = 1; this.drag[i] = this.groundDrag[i];
-              this.windResponse[i] = 0; this.windDynamic[i] = 0; this.turb[i] = 0;
+              this.outflowStarted[i] = 1; this.drag[i] = this.groundDrag[i]; this.turb[i] = 0;
+              // Keep sampling the live surface flow after impact so dust is advected by the
+              // same simulated gust front as the player and enemies.
             }
             v[i3 + 1] = 0;
           } else v[i3 + 1] = vy * 0.05;
@@ -172,7 +179,8 @@ export class DebrisSystem {
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0.05, flatShading: true });
     this.mesh = new THREE.InstancedMesh(geo, mat, cap);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.castShadow = true; this.mesh.frustumCulled = false;
+    // A high-count dynamic instanced cloud doesn't need per-fragment shadow-map draws.
+    this.mesh.castShadow = false; this.mesh.frustumCulled = false;
     this.p = new Float32Array(cap * 3); this.v = new Float32Array(cap * 3); this.r = new Float32Array(cap * 3); this.rv = new Float32Array(cap * 3); this.activeAt = new Int32Array(cap); this.activeAt.fill(-1);
     this.s = new Float32Array(cap); this.life = new Float32Array(cap); this.ml = new Float32Array(cap);
     _m.makeScale(0, 0, 0);
@@ -248,7 +256,7 @@ export class HailSystem {
     vertices.needsUpdate = true; geometry.computeVertexNormals();
     const material = new THREE.MeshPhysicalMaterial({ color:0xeaf6fb, roughness:0.18, metalness:0.02, clearcoat:0.9, clearcoatRoughness:0.12, vertexColors:true });
     this.mesh = new THREE.InstancedMesh(geometry, material, this.cap);
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.mesh.frustumCulled = false; this.mesh.castShadow = true;
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.mesh.frustumCulled = false; this.mesh.castShadow = false;
     _m.makeScale(0,0,0);
     for (let i=0;i<this.cap;i++) { this.mesh.setMatrixAt(i,_m); this.mesh.setColorAt(i,this.color.setHex(0xdceef5)); }
     this.mesh.instanceMatrix.needsUpdate=true; if(this.mesh.instanceColor)this.mesh.instanceColor.needsUpdate=true;

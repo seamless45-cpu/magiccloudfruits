@@ -7,7 +7,36 @@ export function Inventory({ game, equipped }: { game: Game; equipped: number }) 
   const keyLabel = (i: number) => (i < 9 ? String(i + 1) : i === 9 ? '0' : '-');
   return (
     <div data-panel="inventory" className="inventory-dock absolute bottom-2 left-0 right-0 px-2 flex justify-center pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
-      <div data-panel="inventory-row" className="inventory-row flex gap-1 items-end justify-center" style={{ maxWidth: 'var(--inv-max)' }}>
+      <div
+        data-panel="inventory-row"
+        className="inventory-row flex gap-1 items-end justify-start"
+        style={{ width: 'max-content', maxWidth: 'var(--inv-max)' }}
+        role="region"
+        aria-label="Inventory slots. Use the mouse wheel or left and right arrow keys to scroll."
+        aria-keyshortcuts="ArrowLeft ArrowRight Home End PageUp PageDown"
+        tabIndex={0}
+        onWheel={e => {
+          const row = e.currentTarget;
+          if (row.scrollWidth <= row.clientWidth + 1) return;
+          const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+          if (delta === 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          row.scrollLeft += delta;
+        }}
+        onKeyDown={e => {
+          const row = e.currentTarget;
+          const page = Math.max(80, row.clientWidth * 0.78);
+          let next: number | null = null;
+          if (e.key === 'ArrowLeft') next = row.scrollLeft - 64;
+          else if (e.key === 'ArrowRight') next = row.scrollLeft + 64;
+          else if (e.key === 'PageUp') next = row.scrollLeft - page;
+          else if (e.key === 'PageDown') next = row.scrollLeft + page;
+          else if (e.key === 'Home') next = 0;
+          else if (e.key === 'End') next = row.scrollWidth;
+          if (next !== null) { e.preventDefault(); row.scrollTo({ left: next, behavior: 'smooth' }); }
+        }}
+      >
         {game.items.map((it, i) => (
           <button key={it.id} className={`slot ${equipped === i ? 'eq' : ''}`} style={{ animationDelay:`${Math.min(i,8)*28}ms` }} onClick={() => game.toggleEquip(i)} title={`${it.name} (${it.type})`} aria-label={`Equip ${it.name}`} aria-pressed={equipped === i} data-ui-sound="none">
             <span className="slot-key font-orb">{keyLabel(i)}</span>
@@ -70,6 +99,7 @@ export function Settings({ settings, closing, onChange, onClose, onExited, isFul
         <p className="text-[10px] text-cyan-200/45 py-1">Unlimited health · incoming damage disabled · all skill cooldowns reset to zero.</p>
         <div className="settings-section mt-3 mb-1 font-orb text-[10px] tracking-[.18em] text-cyan-200/70">GRAPHICS</div>
         <Row label="Render Resolution">{num('resolution', 0.4, 1.5, 0.05, v => `${Math.round(v * 100)}%`)}</Row>
+        <p className="text-[10px] text-cyan-200/45 py-1">Resolution is the ceiling; automatic scaling lowers pixel load below 45 FPS and recovers gradually above 58 FPS.</p>
         <Row label="Shadows">{tog('shadows')}</Row>
         <Row label="Shadow Resolution"><select value={settings.shadowRes} onChange={e => set('shadowRes', +e.target.value)} className="text-[11px] px-1" data-ui-sound="none">{[512, 1024, 2048, 4096].map(v => <option key={v} value={v}>{v}</option>)}</select></Row>
         <Row label="Bloom / Glow">{tog('bloom')}</Row>
@@ -86,9 +116,9 @@ export function Settings({ settings, closing, onChange, onClose, onExited, isFul
           </button>
         </div>}
         <p className="text-[10px] text-cyan-200/45 py-1">Both methods use a fixed 60 Hz simulation for player, enemies, and camera. Linear mode adds a one-tick presentation delay; no AI or optical-flow generation is claimed.</p>
-        <Row label="Jelly Motion Blur">{tog('motionBlur')}</Row>
-        <Row label="Trail Retention">{num('motionBlurStrength', 0.4, 0.86, 0.02, v => `${Math.round(v * 100)}%`)}</Row>
-        <p className="text-[10px] text-cyan-200/45 py-1">Soft after-image, time-scaled for consistent trails across frame rates. Lower retention reduces ghosting during quick turns.</p>
+        <Row label="Motion-Vector Trail Blur">{tog('motionBlur')}</Row>
+        <Row label="Shutter / Trail Length">{num('motionBlurStrength', 0.4, 0.86, 0.02, v => `${Math.round(v * 100)}%`)}</Row>
+        <p className="text-[10px] text-cyan-200/45 py-1">Per-frame camera and mesh-transform vectors reproject each pixel along a depth-tested trail. No accumulated after-image; adds an optional scene-vector pass.</p>
         <Row label="Advanced Lightning"><button className="sf-btn px-2 text-[9px] font-orb" onClick={() => setLightningSettingsOpen(v => !v)} aria-expanded={lightningSettingsOpen} aria-controls="advanced-lightning-settings" data-ui-sound="toggle">{lightningSettingsOpen ? 'CLOSE −' : 'TUNE +'}</button></Row>
         {lightningSettingsOpen && <div id="advanced-lightning-settings" className="lightning-settings-drawer ui-scroll" role="group" aria-label="Advanced lightning settings">
           <Row label="Segments / detail">{num('lightningSegments', 6, 36, 2, v => `${v}`)}</Row>

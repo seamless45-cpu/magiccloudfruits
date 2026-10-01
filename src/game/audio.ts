@@ -2,6 +2,11 @@ export type UiSoundKind = 'click' | 'open' | 'close' | 'toggle' | 'slider' | 'tr
 
 export interface WeatherSoundMix { wind: number; rain: number; hail: number }
 
+// Output gain is deliberately doubled from the original master/UI routing: the requested
+// 200% boost applies to game SFX, ambience, music, and direct-to-output interface cues.
+const MASTER_OUTPUT_GAIN = 0.72 * 2;
+const UI_OUTPUT_GAIN = 0.82 * 2;
+
 type ToneOptions = {
   from: number;
   to: number;
@@ -63,10 +68,10 @@ export class GameAudio {
     const ctx = this.ctx, master = this.master;
     if (ctx && master) {
       master.gain.cancelScheduledValues(ctx.currentTime);
-      master.gain.setTargetAtTime(enabled ? 0.72 : 0.0001, ctx.currentTime, enabled ? 0.055 : 0.12);
+      master.gain.setTargetAtTime(enabled ? MASTER_OUTPUT_GAIN : 0.0001, ctx.currentTime, enabled ? 0.055 : 0.12);
       if (this.uiGain) {
         this.uiGain.gain.cancelScheduledValues(ctx.currentTime);
-        this.uiGain.gain.setTargetAtTime(enabled ? 0.82 : 0.0001, ctx.currentTime, enabled ? 0.025 : 0.08);
+        this.uiGain.gain.setTargetAtTime(enabled ? UI_OUTPUT_GAIN : 0.0001, ctx.currentTime, enabled ? 0.025 : 0.08);
       }
       if (this.arenaDroneGain) {
         this.arenaDroneGain.gain.cancelScheduledValues(ctx.currentTime);
@@ -86,7 +91,7 @@ export class GameAudio {
         // Arm the master once (or when waking a suspended context), rather than restarting a slow fade on every click.
         if (this.master && (waking || !this.masterArmed)) {
           this.master.gain.cancelScheduledValues(this.ctx.currentTime);
-          this.master.gain.setTargetAtTime(0.72, this.ctx.currentTime, 0.035);
+          this.master.gain.setTargetAtTime(MASTER_OUTPUT_GAIN, this.ctx.currentTime, 0.035);
           this.masterArmed = true;
         }
       }
@@ -99,7 +104,7 @@ export class GameAudio {
     const ctx = new AudioCtor() as AudioContext; this.ctx = ctx;
     this.master = ctx.createGain(); this.master.gain.value = 0.0001; this.master.connect(ctx.destination);
     // UI feedback gets its own direct bus so ambience fades can never bury a brief click/transition cue.
-    this.uiGain = ctx.createGain(); this.uiGain.gain.value = this.enabled ? 0.82 : 0.0001; this.uiGain.connect(ctx.destination);
+    this.uiGain = ctx.createGain(); this.uiGain.gain.value = this.enabled ? UI_OUTPUT_GAIN : 0.0001; this.uiGain.connect(ctx.destination);
     const frames = Math.ceil(ctx.sampleRate * 4);
     this.noiseBuffer = ctx.createBuffer(1, frames, ctx.sampleRate);
     const data = this.noiseBuffer.getChannelData(0);

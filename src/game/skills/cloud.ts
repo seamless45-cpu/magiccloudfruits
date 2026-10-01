@@ -60,7 +60,7 @@ export const CLOUD_FRUIT: ItemDef = {
       g.add(new Timed(g, new THREE.Group(), 1, (k) => { const h = g.handPos(); for (let i = 0; i < 4; i++) { const a = Math.random() * 6.28, r = 3 * (1 - k) + 0.3; g.smoke.spawn(h.x + Math.cos(a) * r, h.y, h.z + Math.sin(a) * r, -Math.sin(a) * 8, 1, Math.cos(a) * 8, 0xf0f4fa, 0.6, 0.4, { alpha: 0.7 }); } }));
       g.after(1, () => { g.add(new Hurricane(g, P.pos.clone(), P.facing.clone(), 300, 5000)); g.toast('HURRICANE — CATEGORY 5 · 165 MPH', '#9fd0ff'); });
     } },
-    { name: 'Microburst Bomb', cd: 5, info: 'Cells merge → 145mph downburst gust · 10s', cast: (g) => { g.add(new Microburst(g, g.aim.clone(), 150, 4500)); g.toast('MICROBURST', '#e0ecff'); } },
+    { name: 'Microburst Bomb', cd: 5, info: 'Cells merge → up to 130mph downburst gust · 10s', cast: (g) => { g.add(new Microburst(g, g.aim.clone(), 150, 4500)); g.toast('MICROBURST', '#e0ecff'); } },
     { name: 'Nimbostratus Flooding', cd: 5, info: 'Nimbostratus 250m · rising floodwater', cast: (g) => {
       const c = g.aim.clone(); for (let i = 0; i < 5; i++) { const p = i === 0 ? c.clone() : around(c, 170); g.add(new StormCloud(g, { pos: p, kind: 'nimbo', size: 250, life: 32, grow: 2, rain: 1, rainDmg: 120, shade: 0.9, rainColor: 0xcdd3db })); }
       g.add(new Flood(g, c, 320, 32, 7, 3000)); g.toast('FLOOD WARNING', '#6fb0e0');
