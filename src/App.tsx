@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type AnimationEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type AnimationEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { Game, PRESETS, defaultSettings } from './game/Game';
 import type { GraphicsSettings } from './game/types';
 import type { UiSoundKind } from './game/audio';
@@ -102,7 +102,8 @@ export default function App() {
   const helpOpenRef = useRef(help); helpOpenRef.current = help;
   const helpClosingRef = useRef(helpClosing); helpClosingRef.current = helpClosing;
   const [showTelemetry, setShowTelemetry] = useState(true);
-  const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
+  const [closingTelemetry, setClosingTelemetry] = useState(false);
+  const [toasts, setToasts] = useState<{ id: number; m: string; c: string; leaving: boolean }[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(() => !!document.fullscreenElement || !!(document as any).webkitFullscreenElement);
@@ -206,6 +207,31 @@ export default function App() {
   const toggleHelp = () => { if (help && !helpClosing) setHelpClosing(true); else { setHelpClosing(false); setHelp(true); } };
   const toggleGui = () => { if (showGui) { setGuiClosing(true); if (showSettings) closeSettings(); } else { setShowGui(true); setGuiClosing(false); } };
   const onGuiCloseAnimationEnd = (e: AnimationEvent<HTMLDivElement>) => { if (e.target === e.currentTarget && guiClosing) { setShowGui(false); setGuiClosing(false); } };
+  const toggleTelemetry = () => {
+    if (showTelemetry) setClosingTelemetry(value => !value);
+    else { setClosingTelemetry(false); setShowTelemetry(true); }
+  };
+  const onTelemetryAnimationEnd = (e: AnimationEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && closingTelemetry && e.animationName === 'ui-panel-retract') {
+      setShowTelemetry(false); setClosingTelemetry(false);
+    }
+  };
+  const moveMenuCard = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const x = Math.max(-0.5, Math.min(0.5, (e.clientX - box.left) / box.width - 0.5));
+    const y = Math.max(-0.5, Math.min(0.5, (e.clientY - box.top) / box.height - 0.5));
+    e.currentTarget.style.setProperty('--menu-tilt-x', `${(x * 3.2).toFixed(2)}deg`);
+    e.currentTarget.style.setProperty('--menu-tilt-y', `${(-y * 3.2).toFixed(2)}deg`);
+    e.currentTarget.style.setProperty('--menu-glow-x', `${((x + 0.5) * 100).toFixed(1)}%`);
+    e.currentTarget.style.setProperty('--menu-glow-y', `${((y + 0.5) * 100).toFixed(1)}%`);
+  };
+  const resetMenuCard = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.currentTarget.style.setProperty('--menu-tilt-x', '0deg');
+    e.currentTarget.style.setProperty('--menu-tilt-y', '0deg');
+    e.currentTarget.style.setProperty('--menu-glow-x', '50%');
+    e.currentTarget.style.setProperty('--menu-glow-y', '50%');
+  };
 
   useEffect(() => {
     // Keep the HTML safety loader in place until Game reports its first successful render.
@@ -252,7 +278,12 @@ export default function App() {
     reportBoot(78, 'WORLD BUILT', 'Arena systems assembled · waiting for first frame');
     setGame(g); (window as any).game = g;
     let tid = 0;
-    g.onToast = (m, c) => { const id = ++tid; setToasts(t => [...t.slice(-4), { id, m, c }]); setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2200); };
+    g.onToast = (m, c) => {
+      const id = ++tid;
+      setToasts(t => [...t.slice(-4), { id, m, c, leaving: false }]);
+      setTimeout(() => setToasts(t => t.map(x => x.id === id ? { ...x, leaving: true } : x)), 1850);
+      setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2150);
+    };
     const iv = setInterval(() => setSnap(g.snapshot()), 100);
     let raf = 0; const ov = () => { raf = requestAnimationFrame(ov); if (overlay.current) { overlay.current.style.background = g.overlay.color; overlay.current.style.opacity = String(Math.min(0.85, g.overlay.a)); } }; ov();
     const kd = (e: KeyboardEvent) => {
@@ -299,7 +330,7 @@ export default function App() {
           </div>
           {/* Left rail: vitals and controls stack in one column, so they cannot overlap */}
           <div className="absolute left-2 top-2 hud-rail-left w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
-          <div data-panel="vitals" className="sf-panel p-2.5 w-full shrink-0 pointer-events-auto">
+          <div data-panel="vitals" className={`sf-panel p-2.5 w-full shrink-0 pointer-events-auto ${snap.hp / snap.maxHp <= 0.25 ? 'hp-critical' : ''}`}>
             <div className="flex justify-between items-baseline"><span className="font-orb text-[11px] sf-glow text-cyan-200">MAGIC CLOUD // OPERATOR</span>{settings.sandbox && <span className="text-[9px] font-orb text-emerald-200 sandbox-tag">SANDBOX</span>}{snap.invincible && <span className="text-[9px] font-orb text-yellow-200">INVULN</span>}</div>
             <div className="hex-bar mt-1.5"><div className="h-full" style={{ width: `${(snap.hp / snap.maxHp) * 100}%`, background: 'linear-gradient(90deg,#16ffb0,#33e0ff)', boxShadow: '0 0 10px #33e0ff' }} /></div>
             <div className="flex justify-between text-[10px] mt-0.5 font-orb text-cyan-100/80"><span>HP {fmt(snap.hp)} / {fmt(snap.maxHp)}</span><span>{((snap.hp / snap.maxHp) * 100).toFixed(0)}%</span></div>
@@ -325,8 +356,8 @@ export default function App() {
           </div>
           {/* Right rail: telemetry, skills and zoom stack in one column, so they cannot overlap */}
           <div className="absolute right-2 top-2 hud-rail-right w-[236px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
-          <button className="telemetry-toggle sf-btn self-end pointer-events-auto font-orb" onClick={() => setShowTelemetry(v => !v)} aria-expanded={showTelemetry} aria-label={showTelemetry ? 'Hide range telemetry' : 'Show range telemetry'}>{showTelemetry ? 'RANGE ▾' : 'RANGE ▸'}</button>
-          {showTelemetry && <div data-panel="telemetry" className="sf-panel telemetry-panel p-2 w-full text-[9px] shrink-0 pointer-events-auto">
+          <button className="telemetry-toggle sf-btn self-end pointer-events-auto font-orb" onClick={toggleTelemetry} aria-expanded={showTelemetry && !closingTelemetry} aria-label={showTelemetry && !closingTelemetry ? 'Hide range telemetry' : 'Show range telemetry'}>{showTelemetry && !closingTelemetry ? 'RANGE ▾' : 'RANGE ▸'}</button>
+          {showTelemetry && <div data-panel="telemetry" className={`sf-panel telemetry-panel p-2 w-full text-[9px] shrink-0 pointer-events-auto ${closingTelemetry ? 'ui-panel-closing' : ''}`} onAnimationEnd={onTelemetryAnimationEnd}>
             <div className="telemetry-head"><span className="font-orb text-[10px] sf-glow text-cyan-200">FIELD TELEMETRY</span>{settings.showFps && <span className="font-orb telemetry-fps" style={{ color:snap.fps>45?'#a8d8a4':snap.fps>25?'#e5d49f':'#d99183' }}>{snap.fps} FPS · {snap.bolts}B · {snap.effects}FX</span>}</div>
             <div className="telemetry-grid">
               <div className="telemetry-cell"><span>AIM GND</span><b>{snap.aimDist.toFixed(1)}m</b></div>
@@ -345,7 +376,7 @@ export default function App() {
           </div>}
           {/* Toasts */}
           <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1">
-            {toasts.map(t => <div key={t.id} className="toast-in sf-panel px-4 py-1 font-orb text-[11px] tracking-widest" style={{ color: t.c, textShadow: `0 0 10px ${t.c}` }}>{t.m}</div>)}
+            {toasts.map(t => <div key={t.id} className={`toast-in sf-panel px-4 py-1 font-orb text-[11px] tracking-widest ${t.leaving ? 'toast-out' : ''}`} style={{ color: t.c, textShadow: `0 0 10px ${t.c}` }}>{t.m}</div>)}
           </div>
           <SkillBar game={game} equipped={snap.equipped} touch={touch} />
           <ZoomControl game={game} zoom={snap.zoomTarget} />
@@ -359,8 +390,8 @@ export default function App() {
         </div>
       )}
       {showTitle && !fatal && (
-        <div className={`title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto ${leavingTitle ? 'title-screen-exit' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && leavingTitle) setShowTitle(false); }}>
-          <div className="title-card main-menu-card sf-panel w-full max-w-[780px] p-5 sm:p-8">
+        <div className={`title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto ${leavingTitle ? 'title-screen-exit' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && e.animationName === 'ui-title-shutdown' && leavingTitle) setShowTitle(false); }}>
+          <div className="title-card main-menu-card sf-panel w-full max-w-[780px] p-5 sm:p-8" onPointerMove={moveMenuCard} onPointerLeave={resetMenuCard}>
             <header className="menu-header flex items-center justify-between gap-4">
               <div className="flex items-center gap-3"><div className="title-mark"><span>MC</span><i /></div><div><p className="font-orb text-[9px] tracking-[.3em] text-cyan-100/60">OPEN FIELD // OPERATIONS</p><p className="mt-1 text-[10px] text-cyan-100/40">COMBAT SIMULATION · EST. 2026</p></div></div>
               <div className="menu-release font-orb text-[9px]">BUILD 1.5.0 <span>●</span></div>
