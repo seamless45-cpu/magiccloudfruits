@@ -1289,3 +1289,88 @@ input[type=range] { accent-color:#69f2ff; }
 .menu-fullscreen-note { margin:-1px 1px 3px; padding:5px 7px; color:#ffe0a8; background:rgba(74,48,20,.38); border-left:2px solid rgba(255,194,99,.72); font:600 8px/1.45 'IBM Plex Sans',sans-serif; }
 @media (max-width:390px) { .settings-tabs { gap:4px; } .settings-tab { min-height:34px; padding-inline:2px; font-size:7px; letter-spacing:.08em; } }
 @media (prefers-reduced-motion:reduce) { .settings-tab,.settings-tab-content { animation:none !important; transition:none !important; } }
+
+/* PERFORMANCE // keep the neon HUD, but avoid per-panel blur and perpetual decorative repaint. */
+.sf-panel {
+  -webkit-backdrop-filter:none !important;
+  backdrop-filter:none !important;
+  background-image:linear-gradient(145deg,rgba(10,27,53,.97),rgba(4,9,24,.98) 72%) !important;
+  box-shadow:0 6px 18px rgba(0,0,0,.48),inset 0 0 0 1px rgba(133,219,255,.035) !important;
+}
+.sf-panel::before,.sf-panel::after { box-shadow:none !important; }
+.sf-glow { text-shadow:0 0 5px rgba(105,226,255,.36) !important; }
+.gui-toggle {
+  -webkit-backdrop-filter:none !important;
+  backdrop-filter:none !important;
+}
+.title-screen {
+  -webkit-backdrop-filter:none !important;
+  backdrop-filter:none !important;
+}
+
+/* Short compositor-friendly arrivals replace the full-screen clip-path/3-D scan wipes. */
+@keyframes ui-title-shutdown {
+  from { opacity:1; transform:translateY(0); }
+  to { opacity:0; transform:translateY(-12px); }
+}
+@keyframes ui-card-eject {
+  from { opacity:1; transform:translateY(0) scale(1); }
+  to { opacity:0; transform:translateY(8px) scale(.985); }
+}
+@keyframes ui-performance-fade-up {
+  from { opacity:0; transform:translateY(7px); }
+  to { opacity:1; transform:translateY(0); }
+}
+@keyframes ui-performance-title {
+  from { opacity:.4; transform:translateY(12px); }
+  to { opacity:1; transform:translateY(0); }
+}
+.title-screen:not(.title-screen-exit) {
+  animation:ui-performance-title .2s ease-out both !important;
+}
+.title-screen:not(.title-screen-exit) .title-card {
+  animation:ui-performance-fade-up .2s ease-out both !important;
+}
+.title-card > * { animation:none !important; }
+.sf-panel:not(.ui-panel-closing) {
+  animation:ui-performance-fade-up .16s ease-out both !important;
+}
+.inventory-dock { animation:ui-performance-fade-up .16s ease-out both !important; }
+.slot,.slot.eq {
+  animation:ui-performance-fade-up .14s ease-out both !important;
+  animation-delay:0ms !important;
+}
+.skill-row {
+  animation:ui-performance-fade-up .14s ease-out both !important;
+  animation-delay:0ms !important;
+}
+.skill-row::after { animation:none !important; opacity:0 !important; }
+.skill-row.ready::after { animation:none !important; }
+.toast-in { animation:ui-performance-fade-up .12s ease-out both !important; }
+.damage-indicator { will-change:auto; }
+
+/* Decorative motion is replaced by static status lighting; danger states remain high-contrast. */
+.title-screen::before,.title-screen::after,
+.main-menu-card::before,.main-menu-card::after,
+.title-mark i,.sandbox-tag,.menu-title-second,
+.menu-release span,.menu-threat-lamp,.menu-live-orb::after,
+.menu-install.is-ready,.menu-utility i.menu-new-badge,
+.hp-critical::before {
+  animation:none !important;
+}
+.menu-title-second { background-position:50% 50% !important; }
+.menu-release span,.menu-threat-lamp { filter:none !important; }
+.menu-install.is-ready { border-color:rgba(105,242,255,.76); background:linear-gradient(110deg,rgba(43,159,219,.24),rgba(151,81,233,.24)); box-shadow:inset 0 1px rgba(255,255,255,.08),0 0 10px rgba(114,142,255,.14); }
+.hp-critical::before { opacity:1 !important; box-shadow:0 0 5px rgba(255,74,78,.35) !important; }
+.main-menu-card.sf-panel {
+  background:
+    radial-gradient(ellipse at 50% 0%,rgba(75,171,255,.13),transparent 48%),
+    linear-gradient(135deg,rgba(8,25,56,.985),rgba(4,9,29,.99) 56%,rgba(28,13,52,.985)) !important;
+  box-shadow:0 18px 52px rgba(0,0,0,.62),inset 0 1px rgba(219,245,255,.09) !important;
+  -webkit-backdrop-filter:none !important;
+  backdrop-filter:none !important;
+}
+
+/* No live pointer-following gradients: menu tilt stays compositor-only. Keep exits brief and preserve their animation-end hooks. */
+.title-screen-exit { animation:ui-title-shutdown .2s ease-in both !important; }
+.title-screen-exit .title-card { animation:ui-card-eject .2s ease-in both !important; }

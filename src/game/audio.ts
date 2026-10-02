@@ -520,6 +520,23 @@ export class GameAudio {
     this.noiseSweep(340, 58, 2.15, 0.085 * attenuation, delay + 0.055, master, 0, 0.08);
   }
 
+  /** A downburst arrival: pressure-front thump followed by broadband, low turbulent roar. */
+  microburstFront(distance = 0, intensity = 1) {
+    if (!this.enabled) return;
+    this.unlock();
+    const master = this.master;
+    if (!this.ctx || !master || !this.noiseBuffer) return;
+    const meters = Math.max(0, distance);
+    const level = Math.max(0.08, 1 / (1 + meters / 850)) * Math.max(0.35, Math.min(1.4, intensity));
+    const delay = Math.min(2, meters / 343);
+    // Keep the filters nearly stationary: the wind is a noisy pressure front, not a pitched
+    // sci-fi sweep. The short air-edge leads the broad gust and its low-frequency body.
+    this.noiseSweep(1250, 1050, 0.14, 0.035 * level, delay, master, 0, 0.015);
+    this.noiseSweep(520, 380, 1.05, 0.075 * level, delay + 0.025, master, 0, 0.025);
+    this.noiseSweep(150, 105, 2.4, 0.085 * level, delay + 0.075, master, 0, 0.035);
+    this.noiseSweep(860, 620, 2.8, 0.04 * level, delay + 0.12, master, 0, 0.035);
+  }
+
   private noiseSweep(from: number, to: number, duration: number, volume: number, delay = 0, output?: AudioNode, pan = 0, space = 0) {
     const ctx = this.ctx, sink = output ?? this.master, buffer = this.noiseBuffer;
     if (!ctx || !sink || !buffer) return;

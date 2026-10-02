@@ -1,9 +1,9 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Game } from '../game/Game';
 import { PRESETS, MAX_ZOOM, MIN_ZOOM } from '../game/Game';
 import type { GraphicsSettings } from '../game/types';
 
-export function Inventory({ game, equipped }: { game: Game; equipped: number }) {
+export const Inventory = memo(function Inventory({ game, equipped }: { game: Game; equipped: number }) {
   const keyLabel = (i: number) => (i < 9 ? String(i + 1) : i === 9 ? '0' : '-');
   return (
     <div data-panel="inventory" className="inventory-dock absolute bottom-2 left-0 right-0 px-2 flex justify-center pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
@@ -38,7 +38,7 @@ export function Inventory({ game, equipped }: { game: Game; equipped: number }) 
         }}
       >
         {game.items.map((it, i) => (
-          <button key={it.id} className={`slot ${equipped === i ? 'eq' : ''}`} style={{ animationDelay:`${Math.min(i,8)*28}ms` }} onClick={() => game.toggleEquip(i)} title={`${it.name} (${it.type})`} aria-label={`Equip ${it.name}`} aria-pressed={equipped === i} data-ui-sound="none">
+          <button key={it.id} className={`slot ${equipped === i ? 'eq' : ''}`} onClick={() => game.toggleEquip(i)} title={`${it.name} (${it.type})`} aria-label={`Equip ${it.name}`} aria-pressed={equipped === i} data-ui-sound="none">
             <span className="slot-key font-orb">{keyLabel(i)}</span>
             <span className="slot-type font-orb" style={{ color: it.type === 'fruit' ? '#b4d0a4' : '#d7bd86' }}>{it.type === 'fruit' ? 'FRUIT' : 'SWORD'}</span>
             <span className="slot-icon" style={{ color: it.color, textShadow: `0 0 12px ${it.color}` }}>{it.glyph}</span>
@@ -49,8 +49,7 @@ export function Inventory({ game, equipped }: { game: Game; equipped: number }) 
       </div>
     </div>
   );
-}
-
+});
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return <div className="settings-row flex items-center justify-between gap-3 py-1 border-b border-cyan-300/10 text-[12px]"><span className="text-cyan-100/80">{label}</span><span className="flex items-center gap-2">{children}</span></div>;
 }
@@ -205,7 +204,7 @@ export function Settings({ settings, closing, onChange, onClose, onExited, isFul
   );
 }
 
-export function MobileControls({ game }: { game: Game }) {
+export const MobileControls = memo(function MobileControls({ game }: { game: Game }) {
   const base = useRef<HTMLDivElement>(null); const [knob, setKnob] = useState({ x: 0, y: 0 }); const id = useRef<number | null>(null);
   const move = (cx: number, cy: number) => { const r = base.current!.getBoundingClientRect(); let x = (cx - (r.left + r.width / 2)) / (r.width / 2), y = (cy - (r.top + r.height / 2)) / (r.height / 2); const l = Math.hypot(x, y); game.touchSprint = l > 1.05; if (l > 1) { x /= l; y /= l; } game.joy.x = x; game.joy.y = y; setKnob({ x, y }); };
   const end = () => { id.current = null; game.joystickActive = false; game.touchSprint = false; game.joy.x = 0; game.joy.y = 0; setKnob({ x: 0, y: 0 }); };
@@ -222,10 +221,9 @@ export function MobileControls({ game }: { game: Game }) {
       </button>
     </>
   );
-}
-
+});
 /** Zoom control usable on PC, laptop (touchpad), mobile, console & TV remotes (focusable buttons + slider). */
-export function ZoomControl({ game, zoom }: { game: Game; zoom: number }) {
+export const ZoomControl = memo(function ZoomControl({ game, zoom }: { game: Game; zoom: number }) {
   return (
     <div data-panel="zoom" className="sf-panel w-full shrink-0 mt-auto p-1.5 flex items-center gap-1 justify-between pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
       <button className="sf-btn w-7 h-7 font-orb text-sm" onClick={() => game.zoomBy(-10)} aria-label="Zoom in">+</button>
@@ -234,4 +232,4 @@ export function ZoomControl({ game, zoom }: { game: Game; zoom: number }) {
       <span className="font-orb text-[9px] w-11 text-right text-cyan-100 shrink-0">{zoom.toFixed(0)}m</span>
     </div>
   );
-}
+});

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
 import { SKILL_KEYS } from '../game/Game';
 import { SUPERCELL_TYPES } from '../game/skills/cloud';
 
-export function SkillBar({ game, equipped, touch }: { game: Game; equipped: number; touch: boolean }) {
+export const SkillBar = memo(function SkillBar({ game, equipped, touch }: { game: Game; equipped: number; touch: boolean }) {
   const [open, setOpen] = useState(true);
   const [closing, setClosing] = useState(false);
   const [, force] = useState(0);
@@ -13,25 +13,27 @@ export function SkillBar({ game, equipped, touch }: { game: Game; equipped: numb
   const item = equipped >= 0 ? game.items[equipped] : null;
 
   useEffect(() => {
+    if (!item || !open) return;
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
-      if (!item) return;
       item.skills.forEach((s, i) => {
         const st = game.cds[item.id][i]; const f = fills.current[i], t = texts.current[i], r = rows.current[i];
         if (!st || !f || !t || !r) return;
         const k = st.total > 0 ? st.rem / st.total : 0;
-        f.style.transform = `scaleX(${k})`;
+        const fillTransform = `scaleX(${k})`;
+        if (f.style.transform !== fillTransform) f.style.transform = fillTransform;
         let txt = st.rem > 0 ? `${st.rem.toFixed(st.rem < 10 ? 1 : 0)}s` : st.holding ? 'HOLD' : 'READY';
         if (s.charges) txt = `${st.charges}/${s.charges.max}` + (st.rem > 0 ? ` · ${st.rem.toFixed(1)}s` : '');
         if (st.holding && (game as any).ui_charge) txt = `${(game as any).ui_charge}%`;
         if (t.textContent !== txt) t.textContent = txt;
-        r.classList.toggle('ready', st.rem <= 0 && (!s.charges || st.charges > 0));
+        const ready = st.rem <= 0 && (!s.charges || st.charges > 0);
+        if (r.classList.contains('ready') !== ready) r.classList.toggle('ready', ready);
       });
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [item, game]);
+  }, [item, game, open]);
 
   if (!item) return null;
   if (!open) return (
@@ -70,4 +72,4 @@ export function SkillBar({ game, equipped, touch }: { game: Game; equipped: numb
       </div>
     </div>
   );
-}
+});

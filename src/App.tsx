@@ -334,14 +334,10 @@ export default function App() {
     const y = Math.max(-0.5, Math.min(0.5, (e.clientY - box.top) / box.height - 0.5));
     e.currentTarget.style.setProperty('--menu-tilt-x', `${(x * 3.2).toFixed(2)}deg`);
     e.currentTarget.style.setProperty('--menu-tilt-y', `${(-y * 3.2).toFixed(2)}deg`);
-    e.currentTarget.style.setProperty('--menu-glow-x', `${((x + 0.5) * 100).toFixed(1)}%`);
-    e.currentTarget.style.setProperty('--menu-glow-y', `${((y + 0.5) * 100).toFixed(1)}%`);
   };
   const resetMenuCard = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.currentTarget.style.setProperty('--menu-tilt-x', '0deg');
     e.currentTarget.style.setProperty('--menu-tilt-y', '0deg');
-    e.currentTarget.style.setProperty('--menu-glow-x', '50%');
-    e.currentTarget.style.setProperty('--menu-glow-y', '50%');
   };
 
   useEffect(() => {
@@ -396,7 +392,16 @@ export default function App() {
       setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2150);
     };
     const iv = setInterval(() => setSnap(g.snapshot()), 100);
-    let raf = 0; const ov = () => { raf = requestAnimationFrame(ov); if (overlay.current) { overlay.current.style.background = g.overlay.color; overlay.current.style.opacity = String(Math.min(0.85, g.overlay.a)); } }; ov();
+    let raf = 0, lastOverlayColor = '', lastOverlayOpacity = -1;
+    const ov = () => {
+      raf = requestAnimationFrame(ov);
+      const el = overlay.current;
+      if (!el) return;
+      if (g.overlay.color !== lastOverlayColor) { el.style.background = g.overlay.color; lastOverlayColor = g.overlay.color; }
+      const opacity = Math.min(0.85, g.overlay.a);
+      if (Math.abs(opacity - lastOverlayOpacity) > 0.002) { el.style.opacity = String(opacity); lastOverlayOpacity = opacity; }
+    };
+    ov();
     const kd = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === 'o' || e.key === 'O') {
         if (settingsOpenRef.current && !settingsClosingRef.current) { g.audio.uiSound('close'); setClosingSettings(true); }
