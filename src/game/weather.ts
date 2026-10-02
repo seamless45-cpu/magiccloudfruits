@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Effect } from './types';
 import { rnd, V, addMat, explosion } from './effects';
 import { ParticleSystem } from './particles';
+import { MicroburstFlow } from './fluids';
 
 const PUFF_GEO = new THREE.SphereGeometry(1, 12, 8);
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color();
@@ -33,7 +34,9 @@ export class StormCloud implements Effect {
     this.build();
     this.mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, transparent: true, opacity: 0.96, emissive: 0x1a1d24, depthWrite: true });
     this.mesh = new THREE.InstancedMesh(PUFF_GEO, this.mat, this.puffs.length);
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.mesh.frustumCulled = false; this.mesh.castShadow = g.settings.shadows && o.size < 700;
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.mesh.frustumCulled = false;
+    // Transparent puff volumes add substantial shadow-map overdraw without a useful hard shadow.
+    this.mesh.castShadow = false; this.mesh.receiveShadow = false;
     this.puffs.forEach((p, i) => { const s = p.shade * (o.shade ?? 1); this.mesh.setColorAt(i, _c.setRGB(s, s, s * 1.03)); });
     this.mesh.position.copy(o.pos); this.mesh.position.y = 0;
     g.scene.add(this.mesh);
@@ -435,11 +438,16 @@ export class Flood implements Effect {
   dispose() { this.g.scene.remove(this.mesh); this.mesh.geometry.dispose(); (this.mesh.material as THREE.Material).dispose(); }
 }
 
-/** Microburst: scattered cells form, merge, then a 145 mph downburst gust with an expanding rain wall. */
+/** Microburst: scattered cells merge into a downdraft-fed cold pool whose pressure field drives surface outflow. */
 export class Microburst implements Effect {
   t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; dmgT = 0; gustSounded = false; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
+  private readonly flow: MicroburstFlow;
+  private readonly windSample = V();
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {
     const cloudSize = size * 0.7; // keep the source cloud compact; the outflow can travel well beyond its edge.
+    // Keep the low-resolution grid focused on the physically relevant 0.9 km outflow domain;
+    // spreading the same 64 cells over several kilometres under-resolves the cold-pool gradient.
+    this.flow = new MicroburstFlow(size * 6, size);
     for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * cloudSize * 0.78, 0, Math.sin(a) * cloudSize * 0.78); this.offs.push(off);
       const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: cloudSize * 1.05, life: 16, grow: 2.2, densityScale: 2.5, rain: 0, shade: 0.85 }); this.cells.push(c); g.add(c); }
     // A slow-growing central tower fills the join as the six cells merge, so the burst
@@ -450,14 +458,7 @@ export class Microburst implements Effect {
   audioMix() { const k=this.t>5&&this.t<15?Math.min(1,(this.t-5)/.5)*Math.min(1,(15-this.t)/1):0; return {wind:.8*k,rain:.22*k,hail:0}; }
   windAt(at: THREE.Vector3) {
     if (this.t < 5 || this.t > 15) return null;
-    const dx = at.x - this.pos.x, dz = at.z - this.pos.z, dist = Math.hypot(dx, dz), radius = this.size * 1.8 * 8;
-    if (dist >= radius || dist < 1) return null;
-    // Radial downburst outflow with a broad, outward-moving gust-front pulse.
-    const front = Math.min(radius, (22 + (this.t - 5) * 34) * 8), width = Math.max(144, this.size * 2.24);
-    const shell = Math.exp(-Math.pow((dist - front) / width, 2));
-    const falloff = Math.pow(Math.max(0, 1 - dist / radius), 0.45);
-    const speed = 145 * 0.44704 * falloff * (0.62 + 0.38 * shell);
-    return V(dx / dist * speed, 0, dz / dist * speed);
+    return this.flow.sample(at.x - this.pos.x, at.z - this.pos.z, at.y, this.windSample) ? this.windSample : null;
   }
   update(dt: number) {
     const g = this.g; this.t += dt;
@@ -465,27 +466,52 @@ export class Microburst implements Effect {
     const merge = mergeRaw * mergeRaw * (3 - 2 * mergeRaw);
     this.cells.forEach((c, i) => { c.mesh.position.set(this.pos.x + this.offs[i].x * (1 - merge), 0, this.pos.z + this.offs[i].z * (1 - merge)); });
     if (this.t > 5 && this.t < 15) {
+      this.flow.update(dt, this.t - 5);
       if (!this.gustSounded) { this.gustSounded = true; g.audio.gustFront(this.pos.distanceTo(g.player.pos), 1.15); }
       const k = Math.min(1, (this.t - 5) / 0.5), source = this.cells[this.cells.length - 1], emitter = source.mesh.position;
-      // Seed soft smoke throughout the full cloud-to-ground volume, not from one point that makes a cone.
+      // Seed soft smoke throughout the cloud-to-ground volume; the simulated boundary-layer
+      // field takes over as particles descend and skim outward across the surface.
       const topY = source.base + source.R * 0.5, emissionR = source.R * 1.05;
-      // Use a stratified, deterministic spray: scale the rate once for graphics density,
-      // then bypass per-particle random thinning so the curtain doesn't develop holes.
       const density = Math.max(0, Math.min(1, g.settings.particles));
-      this.particleAcc += dt * 4500 * density;
+      this.particleAcc += dt * 1850 * density;
       const count = Math.floor(this.particleAcc); this.particleAcc -= count;
       for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1,w=(seq*.5698402909980532+this.dustSeed*.63)%1;
-        const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,dx=Math.cos(a)*r,dz=Math.sin(a)*r,x=emitter.x+dx,z=emitter.z+dz,y=topY*(.08+.92*w),len=Math.hypot(dx,dz)||1,localWind=g.windAt(V(x,y,z)),out=rnd(4,12);
-        g.smoke.spawn(x,y,z,localWind.x+dx/len*out+rnd(-3,3),-rnd(42,78),localWind.z+dz/len*out+rnd(-3,3),0xe1e6eb,rnd(20,36),2,{alpha:0.32*k,spread:1.84,drag:0.06,groundDrag:0.36,grow:1.7,turb:4,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:1.1,windDynamic:true,densityManaged:true}); }
+        const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,x=emitter.x+Math.cos(a)*r,z=emitter.z+Math.sin(a)*r,y=topY*(.08+.92*w),localWind=g.windAt(V(x,y,z));
+        // Give the source a vertical downdraft; horizontal spread is produced by the evolving
+        // cold-pool pressure field instead of baking an expanding radial kick into each mote.
+        g.smoke.spawn(x,y,z,localWind.x+rnd(-2,2),-rnd(20,36),localWind.z+rnd(-2,2),0xe1e6eb,rnd(20,36),2,{alpha:0.32*k,grav:9.8,spread:0,drag:0.06,groundDrag:1.05,grow:1.7,turb:3,ox:emitter.x,oz:emitter.z,windX:localWind.x,windZ:localWind.z,windResponse:2.3,windDynamic:true,densityManaged:true}); }
       const dp = Math.hypot(g.player.pos.x - this.pos.x, g.player.pos.z - this.pos.z); if (dp < this.size * 1.5) g.shakeRaw(4 * (1 - dp / (this.size * 1.5)) + 0.5, 0.1);
+      const playerWind = this.windAt(g.player.pos);
+      if (playerWind) {
+        // Wind load scales with the sampled air speed; stronger ground friction restrains the
+        // player, while the shared velocity field can still push them several metres per second.
+        const relativeX = playerWind.x - g.player.vel.x, relativeZ = playerWind.z - g.player.vel.z;
+        const relativeSpeed = Math.hypot(relativeX, relativeZ);
+        const coupling = Math.min(1.4, relativeSpeed * 0.05) * (g.player.grounded ? 1 : 0.25);
+        g.player.vel.x += relativeX * dt * coupling;
+        g.player.vel.z += relativeZ * dt * coupling;
+        const horizontalSpeedSq = g.player.vel.x * g.player.vel.x + g.player.vel.z * g.player.vel.z;
+        if (horizontalSpeedSq > 12 * 12) { const scale = 12 / Math.sqrt(horizontalSpeedSq); g.player.vel.x *= scale; g.player.vel.z *= scale; }
+      }
       this.dmgT += dt; const tick = this.dmgT > 0.2; if (tick) this.dmgT = 0;
       for (const e of g.enemies) {
         if (e.dead) continue;
         const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z, d = Math.hypot(dx, dz);
-        if (d >= 1 && d < this.size * 1.8 * 8) {
-          // Apply the surface wind as real outward displacement, not only as a visual particle force.
+        if (d >= 1 && d < this.size * 6) {
+          // Wind loads horizontal velocity; enemy mass and the ground-contact drag in Enemy.update
+          // determine how far the gust can actually carry each body.
           const gust = this.windAt(e.pos);
-          if (gust) e.pos.addScaledVector(gust, dt * 0.82);
+          if (gust) {
+            const mass = e.kind === 'boss' ? 4.2 : e.kind === 'brute' ? 3 : e.kind === 'elite' ? 1.7 : e.kind === 'runner' ? 0.8 : 1;
+            const relativeX = gust.x - e.vel.x, relativeZ = gust.z - e.vel.z;
+            const relativeSpeed = Math.hypot(relativeX, relativeZ);
+            const dragResponse = Math.min(1.5, relativeSpeed * 0.075) / mass;
+            e.vel.x += relativeX * dt * dragResponse;
+            e.vel.z += relativeZ * dt * dragResponse;
+            const maxSpeed = e.kind === 'boss' ? 10 : e.kind === 'brute' ? 13 : 20;
+            const speedSq = e.vel.x * e.vel.x + e.vel.z * e.vel.z;
+            if (speedSq > maxSpeed * maxSpeed) { const scale = maxSpeed / Math.sqrt(speedSq); e.vel.x *= scale; e.vel.z *= scale; }
+          }
           if (d < this.size && tick) g.damage(e, this.dmg, { noCharge: true, stun: 0.3 });
         }
       }

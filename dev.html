@@ -4,6 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>MagicCloud — Open Field Combat Arena</title>
+    <meta name="description" content="Master the storm. Choose your power and survive the open-field combat arena." />
+    <meta name="theme-color" content="#071026" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="%BASE_URL%icons/magiccloud-192.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%icons/magiccloud-192.png" />
+    <script>
+      // Capture Chrome's install event before the game bundle starts; React consumes it on mount.
+      window.__magicCloudInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (event) {
+        event.preventDefault();
+        window.__magicCloudInstallPrompt = event;
+      });
+      window.addEventListener('appinstalled', function () { window.__magicCloudInstallPrompt = null; });
+    </script>
     <!-- Inline so the page is never a white screen, even if every external request fails. -->
     <style>
       html, body { margin:0; height:100%; background:#202923; color:#f0ecdf; font-family:'IBM Plex Sans',system-ui,sans-serif; }
@@ -63,9 +80,93 @@
       #boot .actions { justify-content:flex-start; }
       @media (max-width:560px) { #boot .box { grid-template-columns:1fr; gap:19px; text-align:center; } #boot .boot-brand { align-items:center; padding:0 0 15px; border-right:0; border-bottom:1px solid rgba(239,232,214,.18); } #boot .boot-mark { margin:0 0 13px; } #boot .boot-code { display:none; } #boot .boot-topline { font-size:7px; } #boot .boot-modules { gap:5px; } #boot .boot-module { padding:8px 5px; } #boot .boot-module span { font-size:7px; } #boot .boot-status,#boot .actions { justify-content:center; } #boot .boot-footer { font-size:6px; } }
       @media (prefers-reduced-motion:reduce) { #boot *,#boot:before,#boot:after { animation-duration:.01ms !important; animation-iteration-count:1 !important; } #boot { transition:none; } }
+      /* Storm-console loader: the real milestone bar is the dominant progress signal. */
+      html,body { background:#050817; color:#e7f7ff; }
+      #boot {
+        background:
+          radial-gradient(ellipse at 52% 38%,rgba(39,125,255,.24),transparent 43%),
+          radial-gradient(ellipse at 82% 18%,rgba(184,81,255,.14),transparent 31%),
+          linear-gradient(145deg,#07142d,#060918 58%,#100a29);
+      }
+      #boot:before,#boot:after { border-color:rgba(110,218,255,.13); border-radius:26%; }
+      #boot:after { border-color:rgba(188,124,255,.09); }
+      #boot .box {
+        grid-template-columns:minmax(145px,.63fr) minmax(0,1.37fr);
+        gap:clamp(18px,3.7vw,36px);
+        width:min(100%,760px);
+        max-height:calc(100dvh - 24px);
+        padding:clamp(18px,3.8vw,32px);
+        border:1px solid rgba(105,216,255,.34);
+        border-radius:15px;
+        background:linear-gradient(135deg,rgba(9,27,58,.97),rgba(4,9,29,.99) 58%,rgba(24,13,48,.98));
+        box-shadow:0 30px 100px rgba(0,0,0,.65),0 0 34px rgba(71,154,255,.13),inset 0 1px rgba(222,246,255,.1),inset 0 0 44px rgba(75,106,255,.07);
+      }
+      #boot .boot-brand { border-right-color:rgba(112,200,255,.2); }
+      #boot .boot-mark { border-color:rgba(105,242,255,.74); color:#e8fbff; box-shadow:0 0 28px rgba(74,202,255,.23),inset 0 0 18px rgba(105,242,255,.12); }
+      #boot .boot-mark:before { border-color:rgba(186,137,255,.4); }
+      #boot .kicker { color:rgba(173,219,255,.64); }
+      #boot .title { color:#f1fbff; text-shadow:0 0 25px rgba(104,215,255,.28); }
+      #boot .subtitle { color:#c69aff; }
+      #boot .boot-code { color:rgba(168,200,235,.47); }
+      #boot .boot-topline { border-bottom-color:rgba(107,208,255,.2); color:rgba(177,210,245,.64); }
+      #boot .boot-phase { padding:4px 7px; border:1px solid rgba(116,153,255,.28); border-radius:4px; background:rgba(66,91,191,.14); color:#9ceeff; }
+      #boot .boot-status { gap:10px; margin-top:15px; }
+      #boot .status-dot { background:#6deaff; box-shadow:0 0 13px rgba(77,221,255,.85); }
+      #boot .msg { color:#e3f6ff; font-size:13px; }
+      #boot .boot-progress-caption { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:16px; color:rgba(168,208,244,.58); font:700 8px 'Space Grotesk','IBM Plex Sans',sans-serif; letter-spacing:.16em; }
+      #boot .boot-percent { min-width:48px; color:#85f0ff; text-align:right; font-size:15px; letter-spacing:.04em; text-shadow:0 0 12px rgba(76,225,255,.4); }
+      #boot .boot-progress-row { display:block; margin-top:6px; }
+      #boot .boot-progress {
+        position:relative;
+        width:100%;
+        height:18px;
+        margin:0;
+        overflow:hidden;
+        border:1px solid rgba(101,216,255,.38);
+        border-radius:5px;
+        background:repeating-linear-gradient(90deg,transparent 0 23px,rgba(132,197,255,.13) 23px 24px),linear-gradient(180deg,rgba(21,39,76,.95),rgba(7,13,35,.98));
+        box-shadow:inset 0 2px 7px rgba(0,0,0,.52),0 0 15px rgba(55,139,255,.12);
+      }
+      #boot .boot-progress::before { content:''; position:absolute; z-index:2; inset:0; pointer-events:none; background:repeating-linear-gradient(90deg,transparent 0 23px,rgba(1,8,27,.34) 23px 25px); }
+      #boot .boot-progress i { z-index:1; width:var(--boot-progress,0%); border-radius:2px; background:linear-gradient(90deg,#28d7ff 0%,#65aaff 52%,#c583ff 100%); box-shadow:0 0 14px rgba(71,203,255,.65),inset 0 1px rgba(255,255,255,.62); transition:width .44s cubic-bezier(.2,.7,.2,1); }
+      #boot .boot-progress i::after { content:''; position:absolute; top:0; bottom:0; left:-38%; width:38%; background:linear-gradient(90deg,transparent,rgba(255,255,255,.67),transparent); animation:boot-progress-glint 1.7s ease-in-out infinite; }
+      @keyframes boot-progress-glint { to { transform:translateX(370%); } }
+      #boot .boot-modules { gap:7px; margin-top:16px; }
+      #boot .boot-module { padding:8px; border-color:rgba(111,194,255,.2); border-radius:4px; background:linear-gradient(145deg,rgba(36,67,119,.2),rgba(5,12,31,.6)); }
+      #boot .boot-module b { color:rgba(149,196,239,.58); }
+      #boot .boot-module span { color:#dcedff; }
+      #boot .boot-module[data-state='active'] { border-color:rgba(105,228,255,.7); background:linear-gradient(145deg,rgba(47,145,218,.22),rgba(28,39,91,.42)); box-shadow:0 0 13px rgba(55,159,255,.12),inset 0 0 12px rgba(54,181,255,.08); }
+      #boot .boot-module[data-state='ready'] { border-color:rgba(126,244,204,.42); }
+      #boot .boot-module[data-state='ready'] span { color:#a5f4d9; }
+      #boot .hint { color:#aac3e0; }
+      #boot code { background:rgba(107,174,255,.13); color:#aeeeff; }
+      #boot .btn { border-color:rgba(112,206,255,.4); border-radius:5px; background:rgba(57,123,207,.18); color:#e2f6ff; }
+      #boot .btn:hover { background:rgba(69,156,226,.3); }
+      #boot .boot-footer { border-top-color:rgba(105,202,255,.18); color:rgba(158,197,235,.45); }
+      @media (max-width:560px) {
+        #boot .box { gap:14px; padding:16px; }
+        #boot .boot-brand { padding-bottom:12px; border-bottom-color:rgba(112,200,255,.2); }
+        #boot .boot-mark { margin-bottom:12px; }
+        #boot .boot-topline { font-size:7px; }
+        #boot .boot-progress-caption { margin-top:13px; }
+        #boot .boot-progress { height:17px; }
+        #boot .boot-modules { margin-top:12px; }
+        #boot .boot-module { padding:7px 4px; }
+        #boot .boot-module b { font-size:6px; }
+        #boot .boot-module span { font-size:6px; letter-spacing:.03em; }
+        #boot .boot-footer { font-size:6px; }
+      }
+      @media (max-height:470px) and (min-width:561px) {
+        #boot .box { padding:13px 19px; }
+        #boot .boot-code { display:none; }
+        #boot .boot-mark { width:46px; height:46px; margin-bottom:14px; }
+        #boot .boot-modules { margin-top:10px; }
+        #boot .boot-module { padding:6px; }
+        #boot .boot-progress-caption { margin-top:10px; }
+      }
+      @media (prefers-reduced-motion:reduce) { #boot .boot-progress i::after { animation:none !important; } }
     </style>
-    <!-- No external requests at all: the page loads nothing but the document itself, so a
-         blocked or 404-ing CDN can never show up as a console error or delay first paint. -->
+    <!-- No external CDNs: PWA metadata and icons are local, optional resources and never block first paint. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22bg%22%20cx%3D%2250%25%22%20cy%3D%2242%25%22%3E%3Cstop%20stop-color%3D%22%237733b8%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2317103d%22%2F%3E%3C%2FradialGradient%3E%3ClinearGradient%20id%3D%22hat%22%20x2%3D%22.8%22%20y2%3D%221%22%3E%3Cstop%20stop-color%3D%22%23dc6aff%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%236325cb%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22cloud%22%20x2%3D%22.5%22%20y2%3D%221%22%3E%3Cstop%20stop-color%3D%22%23fff%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23bdeaff%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2215%22%20fill%3D%22url%28%23bg%29%22%2F%3E%3Cpath%20d%3D%22M20%2034%2025%209q.7-4%204-1l20%2023q-13-5-29%203Z%22%20fill%3D%22url%28%23hat%29%22%20stroke%3D%22%2317103d%22%20stroke-width%3D%223%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22m23%2023%2019%204-3%206-18-4Z%22%20fill%3D%22%23ffae43%22%20stroke%3D%22%2317103d%22%20stroke-width%3D%222%22%2F%3E%3Cpath%20d%3D%22m10%2046%209%2014%22%20stroke%3D%22%23f4bd59%22%20stroke-width%3D%223.5%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22m8%2042%201.4-4%201.4%204%204%201.4-4%201.4-1.4%204L8%2044.8%204%2043.4Z%22%20fill%3D%22%23ffe779%22%20stroke%3D%22%23fff3c1%22%20stroke-width%3D%22.8%22%2F%3E%3Cpath%20d%3D%22M15%2048c-2-5%201-9%205-9%200-7%208-10%2013-5%205-3%2011%200%2012%205%206-1%2010%203%209%208%205%204%202%2010-4%2010H20c-6%200-9-5-5-9Z%22%20fill%3D%22url%28%23cloud%29%22%20stroke%3D%22%23191442%22%20stroke-width%3D%223%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M26%2049q1-5%204%200m8%200q1-5%204%200%22%20fill%3D%22none%22%20stroke%3D%22%23211447%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M32%2053q3%205%207%200%22%20fill%3D%22none%22%20stroke%3D%22%23e45d9d%22%20stroke-width%3D%222.7%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22m50%2017%201.7-4%201.7%204%204%201.7-4%201.7-1.7%204-1.7-4-4-1.7Z%22%20fill%3D%22%23fff0a1%22%2F%3E%3Ccircle%20cx%3D%2213%22%20cy%3D%2227%22%20r%3D%221.5%22%20fill%3D%22%23ff8a9f%22%2F%3E%3Ccircle%20cx%3D%2254%22%20cy%3D%2237%22%20r%3D%221.4%22%20fill%3D%22%237af4ec%22%2F%3E%3C%2Fsvg%3E" />
   </head>
   <body>
@@ -82,7 +183,8 @@
         <div class="boot-main">
           <div class="boot-topline"><span>ARENA SYSTEMS INITIALIZATION</span><span class="boot-phase" id="boot-phase">DOCUMENT</span></div>
           <div class="boot-status"><span class="status-dot" aria-hidden="true"></span><div class="msg" id="boot-msg">Loading the application module<span class="dots"></span></div></div>
-          <div class="boot-progress-row"><div class="boot-progress" id="boot-progress" role="progressbar" aria-label="Game initialization" aria-valuemin="0" aria-valuemax="100" aria-valuenow="6"><i></i></div><span class="boot-percent" id="boot-percent">06%</span></div>
+          <div class="boot-progress-caption"><span>INITIALIZATION PROGRESS</span><span class="boot-percent" id="boot-percent">00%</span></div>
+          <div class="boot-progress-row"><div class="boot-progress" id="boot-progress" role="progressbar" aria-label="Game initialization" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div></div>
           <div class="boot-modules" aria-hidden="true">
             <div class="boot-module" data-boot-stage="engine" data-state="pending"><b>01 / ENGINE</b><span>LOAD APP MODULE</span></div>
             <div class="boot-module" data-boot-stage="world" data-state="pending"><b>02 / WORLD</b><span>AWAITING GPU</span></div>
@@ -116,6 +218,8 @@
         window.go = function (path) { location.href = path; };
         var updateBoot = function (progress, phaseName, message) {
           progress = Math.max(0, Math.min(100, Math.round(progress)));
+          var previousProgress = Number(window.__arenaBootProgress);
+          if (Number.isFinite(previousProgress)) progress = Math.max(previousProgress, progress);
           window.__arenaBootProgress = progress;
           var boot = document.getElementById('boot');
           if (!boot) return;
@@ -130,7 +234,7 @@
           if (msg && message) msg.textContent = message;
           var footer = document.getElementById('boot-footer-phase');
           if (footer) footer.textContent = window.__arenaBootReady ? 'INITIALIZED' : phaseName;
-          var targets = { engine: 52, world: 78, systems: 100 };
+          var targets = { engine: 42, world: 76, systems: 100 };
           var labels = {
             engine: ['LOAD APP MODULE', 'CHECKING WEBGL2', 'WEBGL2 AVAILABLE'],
             world: ['AWAITING GPU', 'BUILDING ARENA', 'ARENA ASSEMBLED'],
@@ -147,7 +251,7 @@
           });
         };
         window.__arenaBootUpdate = updateBoot;
-        updateBoot(6, 'DOCUMENT', 'Loading the application module');
+        updateBoot(0, 'DOCUMENT', 'Loading the application module');
         var setMsg = function (html) {
           var m = document.getElementById('boot-msg');
           if (m && !window.__arenaBootReady) m.innerHTML = html;
@@ -155,7 +259,7 @@
 
         // These watchdog messages describe a genuine wait; they never advance the progress bar.
         window.__bootTimer = setTimeout(function () {
-          if (!started()) { updateBoot(6, 'NETWORK WAIT', 'Still waiting for the application module'); }
+          if (!started()) { updateBoot(window.__arenaBootProgress || 0, 'NETWORK WAIT', 'Still waiting for the application module'); }
         }, 1200);
         window.__bootSlowTimer = setTimeout(function () {
           if (started() && !window.__arenaBootReady) { setMsg('WebGL setup is taking longer than expected'); }

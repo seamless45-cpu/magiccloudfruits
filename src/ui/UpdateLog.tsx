@@ -1,6 +1,9 @@
 import type { AnimationEvent, CSSProperties } from 'react';
 
 const PATCHES = [
+  { tag: 'PWA + INSTALLATION', title: 'Install MagicCloud as a Chrome app', detail: 'Added a standalone web-app manifest, 192px and 512px launcher icons (including a maskable icon), Chrome’s native install action, and an offline app-shell cache. PWA assets publish correctly from both the repository root and /docs.' },
+  { tag: 'MAIN MENU', title: 'Compact storm-console deployment deck', detail: 'Replaced the oversized menu card with a tighter field briefing, live arena readouts, a clear deployment action, and quick settings, controls, update-log, and sound buttons. The install action and new-release indicator are visible up front.' },
+  { tag: 'BOOT + ACCESSIBILITY', title: 'Large, honest loading progress', detail: 'Expanded the thin meter into a high-contrast progress bar with a clear percentage and accessible progress semantics. It advances only at real startup milestones—app module, WebGL, arena construction, and first rendered frame—and stays put during stalls.' },
   { tag: 'MEDIA + BRANDING', title: 'MP4 music, precise trims, and MagicCloud favicon', detail: 'Load local audio or video files, including MP4 and WebM. Set looping start/end points in 0.1-second steps; playback pitch follows speed. Added a compact favicon rendition of the cloud wizard logo.' },
   { tag: 'SCI-FI INTERFACE + AUDIO', title: 'Fullscreen, local music deck, and console feedback', detail: 'Added fullscreen controls and a local music player with always-on looping, independent volume, and pitch-following playback speed in 0.01 steps. Switches, sliders, and UI cues now use custom sci-fi styling and layered synthesized sounds.' },
   { tag: 'COMBAT FEEDBACK', title: 'Floating damage indicators', detail: 'Damage numbers pop above hit targets, critical hits stand out, and rapid repeat hits aggregate to keep the display readable.' },
@@ -14,7 +17,7 @@ const PATCHES = [
   { tag: 'MAIN MENU', title: 'Operations console redesign', detail: 'A split field briefing and operation selector adds live status readouts, threat intelligence, and clearer navigation.' },
   { tag: 'AUDIO + TRANSITIONS', title: 'Dedicated feedback bus', detail: 'UI clicks and arena transitions bypass ambience fades; added a distinct Storm Caster shot cue and sharper menu transitions.' },
   { tag: 'PERFORMANCE', title: 'Lighter interface motion', detail: 'Removed painted masks, filters and continuous skill-row shimmer while keeping the larger panel and HUD transitions.' },
-  { tag: 'WEATHER SYSTEMS', title: 'Outflow and gust-front overhaul', detail: 'Microburst outflow reaches eight times its former range. Derecho and squall-line gust fronts have a 3.72× wider footprint.' },
+  { tag: 'WEATHER SYSTEMS', title: 'Pressure-driven microburst outflow', detail: 'The surface jet now emerges from an advected cold-pool pressure field rather than a preset expanding ring. Derecho and squall-line gust fronts keep their wider footprint.' },
   { tag: 'COMBAT', title: 'Storm force affects the arena', detail: 'Downburst winds push enemies outward instead of only damaging them. Microburst source clouds are 30% more compact.' },
   { tag: 'MOBILE CONTROLS', title: 'Independent joystick and camera', detail: 'Dragging the movement stick while orbiting the camera no longer triggers pinch zoom.' },
   { tag: 'INTERFACE + AUDIO', title: 'Combat-console presentation', detail: 'HUD panels deploy and retract with mechanical shutters. Added menu, button, skill, equipment, storm-gust and arena-transition cues.' },
@@ -28,9 +31,9 @@ export function UpdateLog({ closing, onClose, onExited }: { closing: boolean; on
       <section data-panel="updates" className={`update-log-panel sf-panel relative z-[1] w-full max-w-[620px] max-h-[88vh] overflow-hidden p-5 sm:p-7 ${closing ? 'ui-panel-closing' : ''}`} aria-labelledby="update-log-title" aria-modal="true" role="dialog">
         <header className="flex items-start justify-between gap-4 border-b border-emerald-200/20 pb-4">
           <div>
-            <div className="font-orb text-[9px] tracking-[.28em] text-emerald-200/75">FIELD BULLETIN // 30 SEP 2026</div>
+            <div className="font-orb text-[9px] tracking-[.28em] text-emerald-200/75">FIELD BULLETIN // 02 OCT 2026</div>
             <h2 id="update-log-title" className="mt-1 font-orb text-xl sm:text-2xl tracking-[.12em] text-white">UPDATE LOG</h2>
-            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.6</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
+            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.7</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
           </div>
           <button className="sf-btn px-3 py-2 font-orb text-xs" onClick={onClose} data-ui-sound="close" aria-label="Close update log">CLOSE ×</button>
         </header>

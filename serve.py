@@ -9,7 +9,9 @@ Routes:
     /                 the game
     /index.html       the game (a distinct URL, so it dodges a stale cached "/")
     /safe, /arena     the game in low-graphics ("safe") mode
-    /src/...          404 -> returns a tiny script that forwards to the game
+    /manifest.webmanifest, /sw.js, /icons/...   PWA install/offline resources
+    /docs/...         generated GitHub Pages copies and their PWA resources
+    /src/...          returns a tiny script that forwards to the game
     anything else     the game (single-page fallback)
 
 Why the /src/* redirect exists: a browser that still holds a page from an earlier
@@ -49,6 +51,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
 
+    def guess_type(self, path):
+        if path.endswith(".webmanifest"):
+            return "application/manifest+json"
+        return super().guess_type(path)
+
     def _send_bytes(self, body: bytes, ctype: str) -> None:
         self.send_response(200)
         self.send_header("Content-Type", ctype)
@@ -67,8 +74,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/favicon.ico":
             return self._send_bytes(FAVICON, "image/svg+xml")
 
-        # Every other path serves the game, so /index.html and /safe always work.
-        self.path = "/index.html"
+        # Serve the PWA's actual resources (and generated docs builds) rather than returning
+        # the game HTML for the manifest/service worker, which would make installability fail.
+        allowed_static = (
+            path in {"/index.html", "/manifest.webmanifest", "/sw.js"}
+            or path.startswith(("/icons/", "/docs/", "/manifest-", "/magiccloud-"))
+        )
+        if allowed_static:
+            decoded = urllib.parse.unquote(path)
+            candidate = os.path.realpath(os.path.join(ROOT, decoded.lstrip("/")))
+            inside_root = os.path.commonpath((ROOT, candidate)) == ROOT
+            hidden_path = any(part.startswith(".") for part in decoded.split("/"))
+            if inside_root and not hidden_path and os.path.isfile(candidate):
+                self.path = decoded
+                return super().send_head()
+
+        # Every other path serves the game, so /safe and unknown client routes still work.
+        query = urllib.parse.urlsplit(self.path).query
+        self.path = "/index.html" + ("?" + query if query else "")
         return super().send_head()
 
     def end_headers(self):

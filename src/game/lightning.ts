@@ -25,7 +25,7 @@ void main(){
 
 export interface BoltOpts {
   color?: number; core?: number; width?: number; life?: number; segs?: number; jag?: number;
-  branches?: number; jitter?: number; flat?: boolean; opacity?: number; follow?: () => [THREE.Vector3, THREE.Vector3] | null;
+  branches?: number; jitter?: number; flat?: boolean; opacity?: number; realignInterval?: number; follow?: () => [THREE.Vector3, THREE.Vector3] | null;
 }
 
 let active = 0;
@@ -35,17 +35,17 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3
 
 /**
  * Jagged ribbon lightning. Low-lag approach: one static index buffer + one shared geometry for
- * core & glow; ribbon expansion is done on the GPU; CPU only rewrites the centerline points
- * every 0.01s (segment re-rotation) into a preallocated Float32Array.
+ * core & glow; ribbon expansion is done on the GPU; CPU only rewrites centerline points at
+ * a configurable interval into preallocated Float32Arrays.
  */
 export class Bolt implements Effect {
   geo: THREE.BufferGeometry; core: THREE.Mesh; glow: THREE.Mesh; group = new THREE.Group();
   a: THREE.Vector3; b: THREE.Vector3; o: Required<Omit<BoltOpts, 'follow'>> & { follow?: BoltOpts['follow'] };
-  pts: Float32Array; dirs: Float32Array; strips: number[] = []; t = 0; acc = 1; life: number; bsegs: number;
+  pts: Float32Array; dirs: Float32Array; strips: number[] = []; t = 0; acc = 1; life: number; bsegs: number; flicker = 1;
   constructor(scene: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, opts: BoltOpts = {}) {
     active++;
     this.a = a.clone(); this.b = b.clone();
-    this.o = { color: 0x88aaff, core: 0xffffff, width: 0.6, life: 0.35, segs: 18, jag: 0.07, branches: 2, jitter: 1, flat: false, opacity: 1, ...opts } as any;
+    this.o = { color: 0x88aaff, core: 0xffffff, width: 0.6, life: 0.35, segs: 18, jag: 0.07, branches: 2, jitter: 1, flat: false, opacity: 1, realignInterval: 0.01, ...opts } as any;
     this.life = this.o.life;
     const segs = this.o.segs; this.bsegs = Math.max(3, Math.floor(segs / 2.5));
     const nPts = segs + 1 + this.o.branches * (this.bsegs + 1);
@@ -127,13 +127,16 @@ export class Bolt implements Effect {
   }
   update(dt: number) {
     this.t += dt; this.acc += dt;
-    if (this.acc >= 0.01) { this.acc = 0; this.regen(); // re-rotate every 0.01s
-      const f = 0.65 + Math.random() * 0.35;
-      const k = Math.max(0, 1 - this.t / this.life);
-      const fade = Math.min(1, k * 3);
-      (this.core.material as THREE.ShaderMaterial).uniforms.uOpacity.value = this.o.opacity * f * fade;
-      (this.glow.material as THREE.ShaderMaterial).uniforms.uOpacity.value = 0.45 * this.o.opacity * f * fade;
+    const interval = THREE.MathUtils.clamp(this.o.realignInterval, 0.005, 0.1);
+    if (this.acc >= interval) {
+      this.acc %= interval;
+      this.regen();
+      this.flicker = 0.65 + Math.random() * 0.35;
     }
+    const k = Math.max(0, 1 - this.t / this.life);
+    const fade = Math.min(1, k * 3);
+    (this.core.material as THREE.ShaderMaterial).uniforms.uOpacity.value = this.o.opacity * this.flicker * fade;
+    (this.glow.material as THREE.ShaderMaterial).uniforms.uOpacity.value = 0.45 * this.o.opacity * this.flicker * fade;
     return this.t < this.life;
   }
   dispose() {

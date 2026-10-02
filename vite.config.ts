@@ -32,6 +32,8 @@ const devIndexRedirect = (): Plugin => ({
 });
 
 export default defineConfig({
+  // The build is published both at the repo root and below /docs, so PWA assets use relative URLs.
+  base: "./",
   plugins: [react(), tailwindcss(), viteSingleFile(), devIndexRedirect()],
   resolve: {
     alias: {

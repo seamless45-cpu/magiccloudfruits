@@ -2,19 +2,53 @@ export type UiSoundKind = 'click' | 'open' | 'close' | 'toggle' | 'slider' | 'tr
 
 export interface WeatherSoundMix { wind: number; rain: number; hail: number }
 
-/** Filtered procedural weather ambience and distant thunder; no synthesized arcade bleeps. */
+// Preserve the original game/UI mix at 100%; the user-facing master fader scales the
+// complete output from silence to 200%, with a final limiter protecting peaks.
+const GAME_BUS_GAIN = 0.72;
+const UI_BUS_GAIN = 0.82;
+const DEFAULT_MASTER_VOLUME = 1;
+
+type ToneOptions = {
+  from: number;
+  to: number;
+  duration: number;
+  volume: number;
+  wave?: OscillatorType;
+  delay?: number;
+  pan?: number;
+  space?: number;
+  filterType?: BiquadFilterType;
+  filterFrom?: number;
+  filterTo?: number;
+  q?: number;
+  attack?: number;
+};
+
+/** Diegetic procedural combat feedback, reactor ambience, weather beds, and local music routing. */
 export class GameAudio {
   enabled = true;
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private outputGain: GainNode | null = null;
+  private outputLimiter: DynamicsCompressorNode | null = null;
   private uiGain: GainNode | null = null;
+  private masterVolume = DEFAULT_MASTER_VOLUME;
   private windGain: GainNode | null = null;
+  private windLowGain: GainNode | null = null;
+  private windAirGain: GainNode | null = null;
   private rainGain: GainNode | null = null;
   private hailGain: GainNode | null = null;
   private windFilter: BiquadFilterNode | null = null;
+  private windLowFilter: BiquadFilterNode | null = null;
+  private windAirFilter: BiquadFilterNode | null = null;
   private rainFilter: BiquadFilterNode | null = null;
   private reverb: ConvolverNode | null = null;
   private reverbGain: GainNode | null = null;
+  private arenaDroneGain: GainNode | null = null;
+  private arenaMode = false;
+  private lastPlayerHitAt = -Infinity;
+  private lastPlayerAttackAt = -Infinity;
+  private lastEnemyDownAt = -Infinity;
   private lastThunder = -10;
   private applied: WeatherSoundMix = { wind: -1, rain: -1, hail: -1 };
   private noiseBuffer: AudioBuffer | null = null;
@@ -39,14 +73,24 @@ export class GameAudio {
   setEnabled(enabled: boolean) {
     this.enabled = enabled;
     if (enabled) this.unlock();
-    const ctx = this.ctx, master = this.master;
-    if (ctx && master) {
-      master.gain.cancelScheduledValues(ctx.currentTime);
-      master.gain.setTargetAtTime(enabled ? 0.72 : 0.0001, ctx.currentTime, enabled ? 0.055 : 0.12);
-      if (this.uiGain) {
-        this.uiGain.gain.cancelScheduledValues(ctx.currentTime);
-        this.uiGain.gain.setTargetAtTime(enabled ? 0.82 : 0.0001, ctx.currentTime, enabled ? 0.025 : 0.08);
+    const ctx = this.ctx, output = this.outputGain;
+    if (ctx && output) {
+      output.gain.cancelScheduledValues(ctx.currentTime);
+      output.gain.setTargetAtTime(enabled ? this.masterVolume : 0.0001, ctx.currentTime, enabled ? 0.055 : 0.12);
+      if (this.arenaDroneGain) {
+        this.arenaDroneGain.gain.cancelScheduledValues(ctx.currentTime);
+        this.arenaDroneGain.gain.setTargetAtTime(enabled && this.arenaMode ? 0.022 : 0.0001, ctx.currentTime, enabled ? 0.8 : 0.25);
       }
+    }
+  }
+
+  /** Global post-mix level: 1 is the original mix, 2 is 200%, and 0 is silent. */
+  setMasterVolume(value: number) {
+    this.masterVolume = Math.max(0, Math.min(2, Number.isFinite(value) ? value : DEFAULT_MASTER_VOLUME));
+    const ctx = this.ctx, output = this.outputGain;
+    if (ctx && output && this.enabled) {
+      output.gain.cancelScheduledValues(ctx.currentTime);
+      output.gain.setTargetAtTime(Math.max(0.0001, this.masterVolume), ctx.currentTime, 0.035);
     }
   }
 
@@ -58,10 +102,10 @@ export class GameAudio {
       if (this.ctx) {
         const waking = this.ctx.state !== 'running';
         if (waking) void this.ctx.resume().catch(() => {});
-        // Arm the master once (or when waking a suspended context), rather than restarting a slow fade on every click.
-        if (this.master && (waking || !this.masterArmed)) {
-          this.master.gain.cancelScheduledValues(this.ctx.currentTime);
-          this.master.gain.setTargetAtTime(0.72, this.ctx.currentTime, 0.035);
+        // Arm the output once (or when waking a suspended context), rather than restarting a fade on every click.
+        if (this.outputGain && (waking || !this.masterArmed)) {
+          this.outputGain.gain.cancelScheduledValues(this.ctx.currentTime);
+          this.outputGain.gain.setTargetAtTime(Math.max(0.0001, this.masterVolume), this.ctx.currentTime, 0.035);
           this.masterArmed = true;
         }
       }
@@ -72,9 +116,15 @@ export class GameAudio {
     const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtor) return;
     const ctx = new AudioCtor() as AudioContext; this.ctx = ctx;
-    this.master = ctx.createGain(); this.master.gain.value = 0.0001; this.master.connect(ctx.destination);
-    // UI feedback gets its own direct bus so ambience fades can never bury a brief click/transition cue.
-    this.uiGain = ctx.createGain(); this.uiGain.gain.value = this.enabled ? 0.82 : 0.0001; this.uiGain.connect(ctx.destination);
+    this.master = ctx.createGain(); this.master.gain.value = GAME_BUS_GAIN;
+    this.outputGain = ctx.createGain(); this.outputGain.gain.value = 0.0001;
+    this.outputLimiter = ctx.createDynamicsCompressor();
+    this.outputLimiter.threshold.value = -2.5; this.outputLimiter.knee.value = 4; this.outputLimiter.ratio.value = 8;
+    this.outputLimiter.attack.value = 0.004; this.outputLimiter.release.value = 0.16;
+    this.master.connect(this.outputGain); this.outputGain.connect(this.outputLimiter); this.outputLimiter.connect(ctx.destination);
+    // UI has a separate pre-fader bus so it remains distinct in the mix, while the visible
+    // master control still raises, lowers, and mutes every sound at the common output stage.
+    this.uiGain = ctx.createGain(); this.uiGain.gain.value = UI_BUS_GAIN; this.uiGain.connect(this.outputGain);
     const frames = Math.ceil(ctx.sampleRate * 4);
     this.noiseBuffer = ctx.createBuffer(1, frames, ctx.sampleRate);
     const data = this.noiseBuffer.getChannelData(0);
@@ -94,31 +144,65 @@ export class GameAudio {
       else filter.connect(gain);
       gain.connect(this.master!); source.start(); return filter;
     };
-    this.windGain = ctx.createGain(); this.windGain.gain.value = 0.018;
+    this.windGain = ctx.createGain(); this.windGain.gain.value = 0.004;
+    this.windLowGain = ctx.createGain(); this.windLowGain.gain.value = 0.001;
+    this.windAirGain = ctx.createGain(); this.windAirGain.gain.value = 0.0001;
     this.rainGain = ctx.createGain(); this.rainGain.gain.value = 0.0001;
     this.hailGain = ctx.createGain(); this.hailGain.gain.value = 0.0001;
-    this.windFilter = loop('lowpass', 35, 420, this.windGain);
+    this.windFilter = loop('lowpass', 70, 420, this.windGain);
+    this.windLowFilter = loop('lowpass', 18, 145, this.windLowGain);
+    this.windAirFilter = loop('lowpass', 500, 2100, this.windAirGain);
     this.rainFilter = loop('lowpass', 750, 8500, this.rainGain);
     loop('bandpass', 1800, 5200, this.hailGain);
 
-    // Slow, shallow gust modulation gives the wind bed movement without a synthesized tone.
+    // Independent, slow envelopes create layered gusts instead of a steady filtered hiss.
     const lfo = ctx.createOscillator(), lfoDepth = ctx.createGain();
-    lfo.frequency.value = 0.075; lfoDepth.gain.value = 0.012; lfo.connect(lfoDepth); lfoDepth.connect(this.windGain.gain); lfo.start();
+    lfo.frequency.value = 0.075; lfoDepth.gain.value = 0.0025; lfo.connect(lfoDepth); lfoDepth.connect(this.windGain.gain); lfo.start();
+    const lowGust = ctx.createOscillator(), lowGustDepth = ctx.createGain();
+    lowGust.frequency.value = 0.043; lowGustDepth.gain.value = 0.0015; lowGust.connect(lowGustDepth); lowGustDepth.connect(this.windLowGain.gain); lowGust.start();
 
-    const impulseSeconds = 2.2, impulseFrames = Math.floor(ctx.sampleRate * impulseSeconds);
+    const impulseSeconds = 1.35, impulseFrames = Math.floor(ctx.sampleRate * impulseSeconds);
     const impulse = ctx.createBuffer(2, impulseFrames, ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) { const samples = impulse.getChannelData(ch); for (let i = 0; i < impulseFrames; i++) samples[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseFrames, 2.8) * 0.22; }
+    for (let ch = 0; ch < 2; ch++) {
+      const samples = impulse.getChannelData(ch);
+      for (let i = 0; i < impulseFrames; i++) samples[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseFrames, 3.2) * 0.16;
+      // Short, diffuse early reflections suggest an open hard-surface arena without a long indoor tail.
+      for (const [seconds, level] of [[0.034, 0.035], [0.072, 0.023], [0.126, 0.014], [0.218, 0.008]] as const) {
+        const start = Math.floor(seconds * ctx.sampleRate), width = Math.floor(ctx.sampleRate * 0.006);
+        for (let k = 0; k < width && start + k < impulseFrames; k++) {
+          const envelope = Math.exp(-k / Math.max(1, width * 0.28));
+          samples[start + k] += (Math.random() * 2 - 1) * level * envelope;
+        }
+      }
+    }
     this.reverb = ctx.createConvolver(); this.reverb.buffer = impulse;
     this.reverbGain = ctx.createGain(); this.reverbGain.gain.value = 0.2; this.reverb.connect(this.reverbGain); this.reverbGain.connect(this.master);
+    // A low, evolving carrier makes the arena feel powered-on, not like a menu beep loop.
+    // It is faded in only after deployment and remains well below the weather mix.
+    this.arenaDroneGain = ctx.createGain(); this.arenaDroneGain.gain.value = 0.0001;
+    const droneFilter = ctx.createBiquadFilter(); droneFilter.type = 'lowpass'; droneFilter.frequency.value = 420; droneFilter.Q.value = 0.8;
+    const droneA = ctx.createOscillator(), droneB = ctx.createOscillator();
+    droneA.type = 'sine'; droneA.frequency.value = 49;
+    droneB.type = 'triangle'; droneB.frequency.value = 73.42; droneB.detune.value = -5;
+    droneA.connect(droneFilter); droneB.connect(droneFilter); droneFilter.connect(this.arenaDroneGain); this.arenaDroneGain.connect(this.master);
+    const droneLfo = ctx.createOscillator(), droneDepth = ctx.createGain();
+    droneLfo.frequency.value = 0.065; droneDepth.gain.value = 150; droneLfo.connect(droneDepth); droneDepth.connect(droneFilter.frequency);
+    droneA.start(); droneB.start(); droneLfo.start();
+    if (this.arenaMode && this.enabled) this.arenaDroneGain.gain.setTargetAtTime(0.022, ctx.currentTime, 0.7);
   }
 
   setWeatherMix(mix: WeatherSoundMix) {
-    if (!this.enabled || !this.ctx || !this.windGain || !this.rainGain || !this.hailGain) return;
+    if (!this.enabled || !this.ctx || !this.windGain || !this.windLowGain || !this.windAirGain || !this.rainGain || !this.hailGain) return;
     const ctx = this.ctx, t = ctx.currentTime;
     const next = { wind: Math.max(0, Math.min(1, mix.wind)), rain: Math.max(0, Math.min(1, mix.rain)), hail: Math.max(0, Math.min(1, mix.hail)) };
     if (Math.abs(next.wind - this.applied.wind) > 0.025) {
-      this.applied.wind = next.wind; this.windGain.gain.setTargetAtTime(0.018 + next.wind * 0.115, t, 0.8);
+      this.applied.wind = next.wind;
+      this.windGain.gain.setTargetAtTime(0.004 + next.wind * 0.075, t, 0.8);
+      this.windLowGain.gain.setTargetAtTime(0.001 + next.wind * 0.055, t, 1.05);
+      this.windAirGain.gain.setTargetAtTime(0.0001 + next.wind * 0.02, t, 0.72);
       this.windFilter!.frequency.setTargetAtTime(280 + next.wind * 460, t, 1.1);
+      this.windLowFilter!.frequency.setTargetAtTime(90 + next.wind * 150, t, 1.3);
+      this.windAirFilter!.frequency.setTargetAtTime(1400 + next.wind * 2300, t, 0.9);
     }
     if (Math.abs(next.rain - this.applied.rain) > 0.025) {
       this.applied.rain = next.rain; this.rainGain.gain.setTargetAtTime(next.rain * 0.11, t, 0.55);
@@ -243,87 +327,265 @@ export class GameAudio {
     this.musicElement.pause(); return false;
   }
 
-  /** Procedural console feedback with distinct synthesized chirps and filtered tactical sweeps. */
-  uiSound(kind: UiSoundKind = 'click') {
+  /** Crossfade the restrained reactor bed only after the player deploys into the field. */
+  setArenaMode(active: boolean) {
+    this.arenaMode = active;
+    if (active && this.enabled && !this.ctx) this.unlock();
+    if (!this.ctx || !this.arenaDroneGain) return;
+    const t = this.ctx.currentTime;
+    this.arenaDroneGain.gain.cancelScheduledValues(t);
+    this.arenaDroneGain.gain.setTargetAtTime(active && this.enabled ? 0.022 : 0.0001, t, active ? 0.8 : 0.28);
+  }
+
+  private tone(options: ToneOptions) {
+    const ctx = this.ctx, output = this.uiGain;
+    if (!ctx || !output) return;
+    const duration = Math.max(0.018, options.duration);
+    const start = ctx.currentTime + Math.max(0, options.delay ?? 0);
+    const osc = ctx.createOscillator(), filter = ctx.createBiquadFilter(), envelope = ctx.createGain();
+    osc.type = options.wave ?? 'sine';
+    osc.frequency.setValueAtTime(Math.max(20, options.from), start);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20, options.to), start + duration);
+    filter.type = options.filterType ?? 'lowpass';
+    filter.Q.value = Math.max(0.0001, options.q ?? 0.8);
+    filter.frequency.setValueAtTime(Math.max(40, options.filterFrom ?? 12000), start);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(40, options.filterTo ?? options.filterFrom ?? 12000), start + duration);
+    const peak = Math.max(0.0002, options.volume);
+    const attack = Math.min(duration * 0.42, Math.max(0.003, options.attack ?? 0.008));
+    envelope.gain.setValueAtTime(0.0001, start);
+    envelope.gain.exponentialRampToValueAtTime(peak, start + attack);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(filter); filter.connect(envelope);
+    const pan = Math.max(-1, Math.min(1, options.pan ?? 0));
+    if (typeof ctx.createStereoPanner === 'function') {
+      const panner = ctx.createStereoPanner(); panner.pan.setValueAtTime(pan, start);
+      envelope.connect(panner); panner.connect(output);
+      if ((options.space ?? 0) > 0 && this.reverb) {
+        const send = ctx.createGain(); send.gain.value = Math.max(0, Math.min(0.65, options.space ?? 0));
+        panner.connect(send); send.connect(this.reverb);
+      }
+    } else {
+      envelope.connect(output);
+      if ((options.space ?? 0) > 0 && this.reverb) {
+        const send = ctx.createGain(); send.gain.value = Math.max(0, Math.min(0.65, options.space ?? 0));
+        envelope.connect(send); send.connect(this.reverb);
+      }
+    }
+    osc.start(start); osc.stop(start + duration + 0.025);
+  }
+
+  /** A tiny layered sound vocabulary: relay ticks, hologram shutters, weapon charge and deployment. */
+  uiSound(kind: UiSoundKind = 'click', variation = 0) {
     if (!this.enabled) return;
     this.unlock();
-    const ctx=this.ctx, output=this.uiGain; if(!ctx||!output)return;
-    const profile: Record<UiSoundKind,{from:number;to:number;duration:number;volume:number;type:OscillatorType}> = {
-      click:{from:680,to:390,duration:.075,volume:.12,type:'triangle'},
-      open:{from:300,to:760,duration:.2,volume:.13,type:'triangle'},
-      close:{from:620,to:150,duration:.22,volume:.13,type:'triangle'},
-      toggle:{from:920,to:520,duration:.085,volume:.085,type:'triangle'},
-      slider:{from:1450,to:920,duration:.045,volume:.045,type:'sine'},
-      transition:{from:190,to:48,duration:.72,volume:.18,type:'sawtooth'},
-      skill:{from:360,to:920,duration:.14,volume:.12,type:'triangle'},
-      equip:{from:230,to:520,duration:.12,volume:.1,type:'square'},
-    };
-    const p=profile[kind], now=ctx.currentTime, osc=ctx.createOscillator(), filter=ctx.createBiquadFilter(), gain=ctx.createGain();
-    osc.type=p.type; osc.frequency.setValueAtTime(p.from,now); osc.frequency.exponentialRampToValueAtTime(p.to,now+p.duration);
-    filter.type='lowpass'; filter.Q.value=kind==='slider'?2.4:3.6; filter.frequency.setValueAtTime(kind==='transition'?900:kind==='slider'?5200:3200,now); filter.frequency.exponentialRampToValueAtTime(kind==='transition'?180:kind==='slider'?2600:700,now+p.duration);
-    gain.gain.setValueAtTime(.0001,now); gain.gain.linearRampToValueAtTime(p.volume,now+Math.min(.018,p.duration*.2)); gain.gain.exponentialRampToValueAtTime(.0001,now+p.duration);
-    osc.connect(filter); filter.connect(gain); gain.connect(output); osc.start(now); osc.stop(now+p.duration+.02);
-    // A quiet inharmonic overtone adds the glassy, instrument-panel edge without a loud arcade beep.
-    const overtone=ctx.createOscillator(), overtoneGain=ctx.createGain();
-    overtone.type='sine'; overtone.frequency.setValueAtTime(p.from*1.51,now); overtone.frequency.exponentialRampToValueAtTime(p.to*1.37,now+p.duration*.72);
-    overtoneGain.gain.setValueAtTime(.0001,now); overtoneGain.gain.linearRampToValueAtTime(p.volume*.19,now+Math.min(.012,p.duration*.18)); overtoneGain.gain.exponentialRampToValueAtTime(.0001,now+p.duration*.72);
-    overtone.connect(overtoneGain); overtoneGain.connect(output); overtone.start(now); overtone.stop(now+p.duration*.75);
-    if(kind==='open'||kind==='close'||kind==='transition') this.noiseSweep(kind==='transition'?2200:1500,kind==='transition'?120:420,kind==='transition'?.62:.2,kind==='transition'?.14:.085,0,output);
-    else if(kind==='slider') this.noiseSweep(5200,2600,.045,.012,0,output);
-    else if(kind==='toggle') this.noiseSweep(3600,1800,.065,.02,0,output);
+    const ctx = this.ctx, output = this.uiGain; if (!ctx || !output) return;
+    const pan = (Math.random() - 0.5) * 0.16;
+    switch (kind) {
+      case 'click':
+        this.noiseSweep(5200, 1450, 0.038, 0.026, 0, output, pan, 0.04);
+        this.tone({ from: 760, to: 360, duration: 0.067, volume: 0.048, wave: 'square', filterFrom: 3600, filterTo: 1050, q: 2.8, space: 0.05, pan });
+        this.tone({ from: 1520, to: 880, duration: 0.045, volume: 0.012, delay: 0.006, filterFrom: 6400, space: 0.12, pan: -pan });
+        break;
+      case 'open':
+        this.noiseSweep(420, 6200, 0.32, 0.06, 0, output, 0, 0.2);
+        this.tone({ from: 164.8, to: 329.6, duration: 0.27, volume: 0.047, wave: 'triangle', filterFrom: 1000, filterTo: 3400, space: 0.22 });
+        this.tone({ from: 247, to: 494, duration: 0.24, volume: 0.03, delay: 0.045, wave: 'sine', filterFrom: 4200, space: 0.3 });
+        this.tone({ from: 494, to: 988, duration: 0.18, volume: 0.018, delay: 0.095, wave: 'sine', filterFrom: 5600, space: 0.32 });
+        this.noiseSweep(2200, 520, 0.12, 0.043, 0.18, output, 0, 0.12);
+        break;
+      case 'close':
+        this.noiseSweep(6500, 260, 0.28, 0.052, 0, output, 0, 0.2);
+        this.tone({ from: 523, to: 196, duration: 0.24, volume: 0.05, wave: 'triangle', filterFrom: 3200, filterTo: 500, space: 0.23 });
+        this.tone({ from: 130.8, to: 65.4, duration: 0.31, volume: 0.036, wave: 'sine', filterFrom: 500, filterTo: 170, space: 0.25 });
+        this.noiseSweep(900, 3400, 0.075, 0.028, 0.17, output, 0, 0.08);
+        break;
+      case 'toggle':
+        this.noiseSweep(4600, 1800, 0.045, 0.022, 0, output, pan, 0.04);
+        this.tone({ from: 1046, to: 740, duration: 0.062, volume: 0.033, wave: 'square', filterFrom: 5200, filterTo: 2200, q: 3.2, pan });
+        this.tone({ from: 1568, to: 1174, duration: 0.055, volume: 0.016, delay: 0.016, filterFrom: 6500, space: 0.12, pan: -pan });
+        break;
+      case 'slider':
+        this.noiseSweep(7200, 3600, 0.032, 0.014, 0, output, pan, 0.02);
+        this.tone({ from: 1760, to: 1320, duration: 0.034, volume: 0.018, wave: 'sine', filterFrom: 8000, filterTo: 4200, pan });
+        break;
+      case 'transition':
+        // A pressure-building warp coil, sub drop, then a wide, glassy gate opening.
+        this.noiseSweep(180, 7600, 0.48, 0.07, 0, output, 0, 0.22);
+        this.noiseSweep(7200, 170, 0.66, 0.065, 0.27, output, 0, 0.28);
+        this.tone({ from: 55, to: 32, duration: 0.82, volume: 0.115, wave: 'sine', filterFrom: 180, filterTo: 68, space: 0.24 });
+        this.tone({ from: 110, to: 41, duration: 0.69, volume: 0.052, delay: 0.035, wave: 'sawtooth', filterFrom: 260, filterTo: 92, q: 1.2, space: 0.16 });
+        this.tone({ from: 174.6, to: 698.5, duration: 0.4, volume: 0.032, delay: 0.12, wave: 'triangle', filterFrom: 1800, filterTo: 5200, space: 0.34 });
+        this.tone({ from: 261.6, to: 1046.5, duration: 0.34, volume: 0.018, delay: 0.2, filterFrom: 6000, space: 0.38 });
+        break;
+      case 'skill': {
+        const scale = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24, 27];
+        const root = 293.66 * Math.pow(2, scale[Math.abs(Math.trunc(variation)) % scale.length] / 12);
+        this.noiseSweep(620, 5400, 0.16, 0.052, 0, output, pan, 0.18);
+        this.noiseSweep(3600, 180, 0.13, 0.045, 0.042, output, -pan, 0.2);
+        this.tone({ from: root, to: root * 2.1, duration: 0.2, volume: 0.064, wave: 'sawtooth', filterFrom: 1800, filterTo: 5200, q: 1.5, space: 0.2, pan });
+        this.tone({ from: root * 1.5, to: root * 2.5, duration: 0.17, volume: 0.026, delay: 0.035, wave: 'sine', filterFrom: 6400, space: 0.34, pan: -pan });
+        this.tone({ from: 73.4, to: 46.2, duration: 0.17, volume: 0.038, wave: 'sine', filterFrom: 220, filterTo: 115, space: 0.12 });
+        break;
+      }
+      case 'equip':
+        this.noiseSweep(5700, 840, 0.095, 0.05, 0, output, pan, 0.14);
+        this.tone({ from: 146.8, to: 293.7, duration: 0.18, volume: 0.048, wave: 'square', filterFrom: 950, filterTo: 3100, q: 2.3, space: 0.2 });
+        this.tone({ from: 369.99, to: 739.99, duration: 0.15, volume: 0.026, delay: 0.045, wave: 'triangle', filterFrom: 4200, space: 0.32, pan: -pan });
+        this.tone({ from: 55, to: 42, duration: 0.21, volume: 0.053, wave: 'sine', filterFrom: 180, filterTo: 110, space: 0.2 });
+        this.noiseSweep(2100, 540, 0.075, 0.035, 0.11, output, 0, 0.11);
+        break;
+    }
   }
 
-  enemyShot(distance=0) {
-    if(!this.enabled)return; this.unlock(); const ctx=this.ctx,output=this.uiGain; if(!ctx||!output)return;
-    const attenuation=Math.max(.2,1/(1+Math.max(0,distance)/45)),now=ctx.currentTime;
-    this.noiseSweep(1550,260,.23,.105*attenuation,0,output);
-    const osc=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
-    osc.type='sawtooth';osc.frequency.setValueAtTime(280,now);osc.frequency.exponentialRampToValueAtTime(82,now+.2);
-    filter.type='lowpass';filter.frequency.value=1100;gain.gain.setValueAtTime(.0001,now);
-    gain.gain.exponentialRampToValueAtTime(.12*attenuation,now+.025);gain.gain.exponentialRampToValueAtTime(.0001,now+.24);
-    osc.connect(filter);filter.connect(gain);gain.connect(output);osc.start(now);osc.stop(now+.26);
+  enemyShot(distance = 0, pan = 0) {
+    if (!this.enabled) return;
+    this.unlock();
+    const ctx = this.ctx, output = this.uiGain;
+    if (!ctx || !output) return;
+    const meters = Math.max(0, distance);
+    const attenuation = Math.max(0.12, 1 / (1 + meters / 95));
+    const side = Math.max(-1, Math.min(1, pan));
+    const airMuffle = Math.max(0.38, 1 / (1 + meters / 180));
+    this.noiseSweep(6200 * airMuffle, 1850 * airMuffle, 0.055, 0.065 * attenuation, 0, output, side, 0.08);
+    this.noiseSweep(1450 * airMuffle, 260 * airMuffle, 0.2, 0.09 * attenuation, 0.012, output, side, 0.13);
+    this.noiseSweep(390 * airMuffle, 82, 0.24, 0.043 * attenuation, 0.024, output, side * 0.85, 0.11);
   }
 
-  gustFront(distance=0,intensity=1) {
-    if(!this.enabled)return; this.unlock(); const ctx=this.ctx,master=this.master; if(!ctx||!master)return;
-    const attenuation=Math.max(.12,1/(1+Math.max(0,distance)/1000))*Math.max(.35,Math.min(1.5,intensity));
-    const delay=Math.min(2,Math.max(0,distance)/343); this.noiseSweep(1700,130,1.35,.09*attenuation,delay);
-    const now=ctx.currentTime+delay,osc=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
-    osc.type='sine';osc.frequency.setValueAtTime(74,now);osc.frequency.exponentialRampToValueAtTime(34,now+1.2);filter.type='lowpass';filter.frequency.value=150;
-    gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.07*attenuation,now+.1);gain.gain.exponentialRampToValueAtTime(.0001,now+1.5);
-    osc.connect(filter);filter.connect(gain);gain.connect(master);osc.start(now);osc.stop(now+1.55);
+  weaponAttack(projectile = false, combo = 1, color = 0x67efff) {
+    if (!this.enabled) return;
+    this.unlock();
+    if (!this.ctx || !this.uiGain) return;
+    const now = this.ctx.currentTime;
+    const minGap = projectile ? 0.045 : 0.065;
+    if (now - this.lastPlayerAttackAt < minGap) return;
+    this.lastPlayerAttackAt = now;
+    const hue = ((color >>> 8) & 0xff) / 255;
+    const tint = 0.9 + hue * 0.25 + (combo > 1 ? 0.08 : 0);
+    if (projectile) {
+      // Fast pressure crack, low muzzle/body thump, then a short filtered air tail.
+      this.noiseSweep(7100 * tint, 2400 * tint, 0.047, 0.073, 0, this.uiGain, 0, 0.07);
+      this.noiseSweep(1800 * tint, 310, 0.16, 0.071, 0.009, this.uiGain, 0, 0.12);
+      this.noiseSweep(420, 88, 0.21, 0.038, 0.022, this.uiGain, 0, 0.1);
+    } else {
+      // A blade/arm pass is an airy broadband whoosh with a restrained low contact cue,
+      // not a pitch-gliding oscillator that sounds like an electronic menu effect.
+      this.noiseSweep((combo > 1 ? 4700 : 3600) * tint, 540, 0.16, 0.074, 0, this.uiGain, 0, 0.1);
+      this.noiseSweep(620 * tint, 105, 0.12, 0.048, 0.018, this.uiGain, 0, 0.1);
+      if (combo > 1) {
+        this.noiseSweep(6500 * tint, 1800, 0.052, 0.038, 0.027, this.uiGain, 0, 0.08);
+        this.noiseSweep(980, 250, 0.09, 0.035, 0.04, this.uiGain, 0, 0.1);
+      }
+    }
   }
 
-  private noiseSweep(from:number,to:number,duration:number,volume:number,delay=0,output?:AudioNode) {
-    const ctx=this.ctx,sink=output??this.master,buffer=this.noiseBuffer;if(!ctx||!sink||!buffer)return;
-    const now=ctx.currentTime+delay,source=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
-    source.buffer=buffer;filter.type='bandpass';filter.Q.value=.65;filter.frequency.setValueAtTime(from,now);filter.frequency.exponentialRampToValueAtTime(to,now+duration);
-    gain.gain.setValueAtTime(.0001,now);gain.gain.linearRampToValueAtTime(volume,now+.06);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);
-    source.connect(filter);filter.connect(gain);gain.connect(sink);source.start(now,0,duration);source.stop(now+duration+.02);
+  playerHit(intensity = 1, pan = 0) {
+    if (!this.enabled || !this.ctx || !this.uiGain) return;
+    const now = this.ctx.currentTime;
+    if (now - this.lastPlayerHitAt < 0.11) return;
+    this.lastPlayerHitAt = now;
+    const power = Math.max(0.55, Math.min(1.45, intensity));
+    const side = Math.max(-1, Math.min(1, pan));
+    this.noiseSweep(5100, 1250, 0.075, 0.09 * power, 0, this.uiGain, side, 0.1);
+    this.noiseSweep(1500, 260, 0.18, 0.105 * power, 0.006, this.uiGain, side, 0.14);
+    this.noiseSweep(340, 62, 0.3, 0.074 * power, 0.012, this.uiGain, side * 0.8, 0.12);
   }
 
-  /** Delayed filtered thunder roll, with distance-based propagation and attenuation. */
+  enemyDown(scale = 1, boss = false) {
+    if (!this.enabled || !this.ctx || !this.uiGain) return;
+    const now = this.ctx.currentTime;
+    if (!boss && now - this.lastEnemyDownAt < 0.14) return;
+    this.lastEnemyDownAt = now;
+    const size = Math.max(0.7, Math.min(2.5, scale));
+    const body = Math.min(1.3, size);
+    this.noiseSweep(boss ? 4300 : 5200, boss ? 520 : 820, boss ? 0.34 : 0.15, (boss ? 0.105 : 0.048) * body, 0, this.uiGain, 0, boss ? 0.25 : 0.11);
+    this.noiseSweep(boss ? 420 : 720, boss ? 78 : 155, boss ? 0.48 : 0.18, (boss ? 0.12 : 0.052) * body, 0.012, this.uiGain, 0, boss ? 0.22 : 0.1);
+    if (boss) {
+      this.noiseSweep(260, 48, 0.95, 0.105, 0.075, this.uiGain, 0, 0.22);
+      this.noiseSweep(6800, 1900, 0.09, 0.042, 0.035, this.uiGain, 0, 0.12);
+    }
+  }
+
+  gustFront(distance = 0, intensity = 1) {
+    if (!this.enabled) return;
+    this.unlock();
+    const master = this.master;
+    if (!this.ctx || !master) return;
+    const meters = Math.max(0, distance);
+    const attenuation = Math.max(0.12, 1 / (1 + meters / 1000)) * Math.max(0.35, Math.min(1.5, intensity));
+    const delay = Math.min(2, meters / 343);
+    // Broad, filtered noise bands make a moving air-mass pass: the high hiss arrives first,
+    // with a lower turbulent body and a slower sub-bass swell. No descending sine-wave cue.
+    this.noiseSweep(3600, 780, 0.58, 0.042 * attenuation, delay, master, 0, 0.06);
+    this.noiseSweep(1350, 190, 1.45, 0.095 * attenuation, delay + 0.018, master, 0, 0.11);
+    this.noiseSweep(340, 58, 2.15, 0.085 * attenuation, delay + 0.055, master, 0, 0.08);
+  }
+
+  private noiseSweep(from: number, to: number, duration: number, volume: number, delay = 0, output?: AudioNode, pan = 0, space = 0) {
+    const ctx = this.ctx, sink = output ?? this.master, buffer = this.noiseBuffer;
+    if (!ctx || !sink || !buffer) return;
+    const length = Math.max(0.018, duration), start = ctx.currentTime + Math.max(0, delay);
+    const source = ctx.createBufferSource(), filter = ctx.createBiquadFilter(), envelope = ctx.createGain();
+    source.buffer = buffer;
+    filter.type = 'bandpass'; filter.Q.value = 0.72;
+    filter.frequency.setValueAtTime(Math.max(40, from), start);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(40, to), start + length);
+    const peak = Math.max(0.0002, volume), attack = Math.min(length * 0.45, Math.max(0.003, Math.min(0.025, length * 0.2)));
+    envelope.gain.setValueAtTime(0.0001, start);
+    envelope.gain.exponentialRampToValueAtTime(peak, start + attack);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, start + length);
+    source.connect(filter); filter.connect(envelope);
+    const side = Math.max(-1, Math.min(1, pan));
+    if (typeof ctx.createStereoPanner === 'function') {
+      const panner = ctx.createStereoPanner(); panner.pan.setValueAtTime(side, start);
+      envelope.connect(panner); panner.connect(sink);
+      if (space > 0 && this.reverb) { const send = ctx.createGain(); send.gain.value = Math.max(0, Math.min(0.65, space)); panner.connect(send); send.connect(this.reverb); }
+    } else {
+      envelope.connect(sink);
+      if (space > 0 && this.reverb) { const send = ctx.createGain(); send.gain.value = Math.max(0, Math.min(0.65, space)); envelope.connect(send); send.connect(this.reverb); }
+    }
+    const offset = Math.random() * Math.max(0, buffer.duration - length);
+    source.start(start, offset, length); source.stop(start + length + 0.025);
+  }
+
+  /** Distance-delayed lightning crack, irregular mid-frequency clap, and rolling low rumble. */
   thunder(distance = 800, intensity = 1) {
     if (!this.enabled || !this.ctx || !this.master || !this.noiseBuffer) return;
     const ctx = this.ctx, now = ctx.currentTime;
     if (now - this.lastThunder < 0.18) return;
     this.lastThunder = now;
-    const delay = Math.min(7, Math.max(0, distance) / 343), start = now + delay;
-    const attenuation = Math.max(0.12, 1 / (1 + distance / 1300)) * Math.max(0.25, Math.min(1.4, intensity));
-    const makeLayer = (type: BiquadFilterType, frequency: number, q: number, peak: number, attack: number, duration: number, reverb = false) => {
+    const meters = Math.max(0, distance);
+    const propagation = Math.min(7, meters / 343);
+    const start = now + propagation;
+    const power = Math.max(0.25, Math.min(1.4, intensity));
+    const commonLoss = 1 / (1 + meters / 1300);
+    const crackLoss = commonLoss / (1 + meters / 850); // air absorbs the high crack first
+    const rumbleLoss = commonLoss / (1 + meters / 2800);
+
+    const makeLayer = (frequency: number, q: number, peak: number, attack: number, duration: number, offset: number, loss: number, space: number) => {
       const source = ctx.createBufferSource(); source.buffer = this.noiseBuffer; source.loop = true;
-      const filter = ctx.createBiquadFilter(); filter.type = type; filter.frequency.value = frequency; filter.Q.value = q;
-      const gain = ctx.createGain(); gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * attenuation), start + attack);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-      source.connect(filter); filter.connect(gain);
-      if (reverb && this.reverb) { gain.connect(this.master!); gain.connect(this.reverb); }
-      else gain.connect(this.master!);
-      source.start(start); source.stop(start + duration + 0.04);
+      const filter = ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = frequency; filter.Q.value = q;
+      const envelope = ctx.createGain(), layerStart = start + offset, level = Math.max(0.0002, peak * power * loss);
+      envelope.gain.setValueAtTime(0.0001, layerStart);
+      envelope.gain.exponentialRampToValueAtTime(level, layerStart + attack);
+      // Uneven roll-off avoids a perfectly smooth synthesized swell; each clap has a different decay.
+      const stride = duration > 1 ? 0.14 : 0.045;
+      for (let elapsed = attack + stride; elapsed < duration; elapsed += stride) {
+        const tail = Math.pow(Math.max(0.015, 1 - elapsed / duration), duration > 1 ? 1.45 : 2.2);
+        const ripple = 0.42 + Math.random() * 0.7;
+        envelope.gain.setTargetAtTime(Math.max(0.0002, level * tail * ripple), layerStart + elapsed, stride * 0.22);
+      }
+      envelope.gain.setTargetAtTime(0.0001, layerStart + duration, Math.max(0.018, stride * 0.45));
+      source.connect(filter); filter.connect(envelope); envelope.connect(this.master!);
+      if (space > 0 && this.reverb) { const send = ctx.createGain(); send.gain.value = space; envelope.connect(send); send.connect(this.reverb); }
+      source.start(layerStart, Math.random() * this.noiseBuffer!.duration);
+      source.stop(layerStart + duration + 0.05);
     };
-    // A brief distant crack sits over a much longer low-frequency rumble.
-    makeLayer('bandpass', 1450, 0.45, 0.14, 0.012, 0.22, true);
-    makeLayer('lowpass', 185, 0.7, 0.23, 0.07, 2.8 + Math.random() * 1.8, true);
+
+    // The sharper wavefront is followed by a broader clap and a much longer, irregular roll.
+    makeLayer(2850, 0.55, 0.13, 0.002, 0.16, 0, crackLoss, 0.12);
+    makeLayer(760, 0.42, 0.15, 0.014, 0.62, 0.018, commonLoss, 0.15);
+    makeLayer(155, 0.62, 0.18, 0.09, 3.2 + Math.random() * 2.3, 0.055, rumbleLoss, 0.1);
+    makeLayer(330, 0.5, 0.055, 0.12, 2.8 + Math.random() * 2.2, 0.18, rumbleLoss, 0.07);
   }
 
   private lastHail = -10;

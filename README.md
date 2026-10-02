@@ -1,14 +1,15 @@
 # MagicCloud — Open Field Combat Arena
 
 A Three.js + React arena brawler: 11 equipable fruits/swords, procedural terrain,
-weather supercells, and a GPU-driven lightning system. Everything is generated in
-code — **there are no image, model, or audio assets to load**, so a blank screen is
-always a code/runtime/server problem, never a missing file.
+weather supercells, and a GPU-driven lightning system. The arena is generated in code—
+there are no external models or audio tracks to load. The small PNG icons are only for
+the installable PWA launcher, not game content.
 
 ## Run it
 
-Just want to play? No toolchain needed — `index.html` in the repository root **is** the
-finished game (one self-contained file, no assets to fetch).
+Just want to play? No toolchain needed — `index.html` in the repository root contains the
+finished, self-contained game. The neighboring manifest, service worker and icons are only
+needed for installation and offline-launch support.
 
 ```bash
 python3 serve.py                 # serve the game on http://localhost:5173
@@ -20,30 +21,36 @@ npm run build                    # rebuild and publish (see below)
 ```
 
 `dev.html` is the development entry (it loads `src/main.tsx` through Vite). `npm run build`
-compiles it into a single self-contained page and `scripts/publish.mjs` copies the result to
-`index.html`, `docs/index.html` and a versioned `docs/arena-<version>.html`:
+compiles the game into one self-contained HTML page; `scripts/publish.mjs` publishes it as
+`index.html`, `docs/index.html` and a versioned `docs/arena-<version>.html`, alongside the PWA
+manifest, service worker and install icons in both hosting locations:
 
 | Path | Purpose |
 | --- | --- |
 | `index.html` | the built game — this is what GitHub Pages serves at the branch root |
 | `docs/index.html` | the same build, for Pages setups pointed at `/docs` |
 | `docs/arena-<version>.html` | a versioned filename, useful when the main URL is cached |
+| `manifest.webmanifest`, `sw.js`, `icons/` | install metadata, offline app shell and Chrome app icons (published at the root and under `docs/`) |
 
 Never point GitHub Pages at the repository root *as a dev tree*: the game must be the built
 `index.html`, because browsers cannot execute the TypeScript that `dev.html` loads.
 
-`serve.py` sends `Cache-Control: no-store`, so a browser can never end up holding a
-cached page while the server is down — the situation where a page sits on its boot
-screen forever waiting for a script that no longer exists.
+`serve.py` sends `Cache-Control: no-store` to prevent stale HTTP-cached builds after a
+rebuild. The service worker maintains its own versioned app-shell cache for offline launch.
 
 Routes it serves: `/` and `/index.html` (the game), `/safe` (game in low-graphics safe
-mode), and any other path. Requests for old dev-server paths such as `/src/main.tsx`
-are answered with a small script that forwards the page to the current build instead of
-a 404, which rescues a browser still holding a page from an earlier dev session.
+mode), the PWA resources (`/manifest.webmanifest`, `/sw.js`, `/icons/*`), and generated
+`/docs/*` builds. Requests for old dev-server paths such as `/src/main.tsx` are answered
+with a small script that forwards the page to the current build instead of a 404, which
+rescues a browser still holding a page from an earlier dev session.
 
-The built page loads **nothing** from the network except the document itself: no
-scripts, styles, fonts or icons are fetched separately, so a blocked or 404-ing asset
-can never blank the screen or delay the first frame.
+The game itself bundles its scripts, styles and fonts into the HTML; only the small
+PWA manifest, service worker and app icons are fetched separately. After the first online
+visit, the service worker keeps the game shell available for offline launches.
+
+On HTTPS hosting (including GitHub Pages) or localhost, Chrome can install the game from
+its PWA manifest. Use **INSTALL APP** in the main menu to open Chrome's native prompt; if
+the browser does not expose a prompt yet, the button shows the browser-menu instructions.
 
 The dev server binds to all interfaces (`server.host: true`) and accepts any
 `Host` header (`server.allowedHosts: true`) so it also works behind sandbox /
