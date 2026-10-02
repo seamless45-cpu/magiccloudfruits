@@ -50,6 +50,7 @@ export class ParticleSystem {
   life: Float32Array; maxLife: Float32Array; baseAlpha: Float32Array; grav: Float32Array; drag: Float32Array;
   grow: Float32Array; turb: Float32Array; ox: Float32Array; oz: Float32Array; spread: Float32Array; baseSize: Float32Array;
   windX: Float32Array; windZ: Float32Array; windResponse: Float32Array; windDynamic: Uint8Array; windClock: Float32Array; turbClock: Float32Array; groundDrag: Float32Array; outflowStarted: Uint8Array; windSampler?: (x:number,y:number,z:number) => THREE.Vector3; active: number[] = []; activeAt: Int32Array;
+  drawIndices: Uint32Array; drawIndexAttribute: THREE.BufferAttribute; private indexDirty = false; private colorDirty = false;
   geo: THREE.BufferGeometry; points: THREE.Points; mat: THREE.ShaderMaterial;
   density = 1;
   constructor(cap: number, additive: boolean) {
@@ -61,6 +62,10 @@ export class ParticleSystem {
     this.ox = new Float32Array(cap); this.oz = new Float32Array(cap); this.spread = new Float32Array(cap); this.baseSize = new Float32Array(cap);
     this.windX = new Float32Array(cap); this.windZ = new Float32Array(cap); this.windResponse = new Float32Array(cap); this.windDynamic = new Uint8Array(cap); this.windClock = new Float32Array(cap); this.turbClock = new Float32Array(cap); this.activeAt = new Int32Array(cap); this.activeAt.fill(-1);
     this.geo = new THREE.BufferGeometry();
+    this.drawIndices = new Uint32Array(cap);
+    this.drawIndexAttribute = new THREE.BufferAttribute(this.drawIndices, 1).setUsage(THREE.DynamicDrawUsage);
+    this.geo.setIndex(this.drawIndexAttribute);
+    this.geo.setDrawRange(0, 0);
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aColor', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aSize', new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
@@ -98,9 +103,36 @@ export class ParticleSystem {
     this.grav[i] = o.grav ?? 0; this.drag[i] = o.drag ?? 0; this.grow[i] = o.grow ?? 0; this.turb[i] = o.turb ?? 0;
     this.ox[i] = o.ox ?? x; this.oz[i] = o.oz ?? z; this.spread[i] = o.spread ?? 0; this.groundDrag[i] = o.groundDrag ?? 0; this.outflowStarted[i] = 0;
     this.windX[i] = o.windX ?? 0; this.windZ[i] = o.windZ ?? 0; this.windResponse[i] = o.windResponse ?? 0; this.windDynamic[i] = o.windDynamic ? 1 : 0; this.windClock[i] = Math.random() * 0.3; this.turbClock[i] = Math.random() * 0.075;
-    if (this.activeAt[i] < 0) { this.activeAt[i] = this.active.length; this.active.push(i); }
-    (this.geo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
+    if (this.activeAt[i] < 0) {
+      this.activeAt[i] = this.active.length;
+      this.drawIndices[this.active.length] = i;
+      this.active.push(i);
+      this.indexDirty = true;
+      this.geo.setDrawRange(0, this.active.length);
+    }
+    this.colorDirty = true;
   }
+
+  /** Include manually animated point slots (used by tornado funnels) in indexed draws. */
+  setStaticActiveCount(count: number) {
+    const activeCount = Math.max(0, Math.min(this.cap, Math.floor(count)));
+    this.active.length = 0;
+    this.activeAt.fill(-1);
+    for (let i = 0; i < activeCount; i++) {
+      this.active.push(i);
+      this.activeAt[i] = i;
+      this.drawIndices[i] = i;
+    }
+    this.geo.setDrawRange(0, activeCount);
+    this.drawIndexAttribute.needsUpdate = true;
+    (this.geo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.aSize.needsUpdate = true;
+    this.geo.attributes.aAlpha.needsUpdate = true;
+    this.indexDirty = false;
+    this.colorDirty = false;
+  }
+
   update(dt: number, t: number) {
     const p = this.pos, v = this.vel; let dirty = false;
     for (let n = this.active.length - 1; n >= 0; n--) {
@@ -110,7 +142,12 @@ export class ParticleSystem {
       if (this.life[i] <= 0) {
         this.life[i] = 0; this.alpha[i] = 0; this.size[i] = 0;
         const last = this.active.pop()!;
-        if (n < this.active.length) { this.active[n] = last; this.activeAt[last] = n; }
+        if (n < this.active.length) {
+          this.active[n] = last;
+          this.activeAt[last] = n;
+          this.drawIndices[n] = last;
+          this.indexDirty = true;
+        }
         this.activeAt[i] = -1;
         continue;
       }
@@ -171,6 +208,15 @@ export class ParticleSystem {
       (this.geo.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;
       (this.geo.attributes.aAlpha as THREE.BufferAttribute).needsUpdate = true;
     }
+    if (this.indexDirty) {
+      this.drawIndexAttribute.needsUpdate = true;
+      this.indexDirty = false;
+    }
+    if (this.colorDirty) {
+      (this.geo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
+      this.colorDirty = false;
+    }
+    this.geo.setDrawRange(0, this.active.length);
   }
 }
 const _c = new THREE.Color();

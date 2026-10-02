@@ -1,7 +1,7 @@
 import type { AnimationEvent, CSSProperties } from 'react';
 
 const PATCHES = [
-  { tag: 'WEATHER // MICROBURST', title: '10× stronger surface outflow', detail: 'Amplified the sampled pressure-driven cold-pool jet tenfold while keeping the stable bounded solver, downburst footprint, and wind direction intact. The faster outflow also reaches dust, hail, enemies, and the player.' },
+  { tag: 'WEATHER // MICROBURST', title: 'Wider cloud and 50× stronger outflow', detail: 'Doubled the cloud and cold-pool footprint and boosted sampled wind fivefold beyond the previous 10× scale. Live-particle indexed draws, lower cloud-update cadence, and rate-limited storm mist help heavy weather run lighter.' },
   { tag: 'LIGHTNING', title: 'Explosive ground-strike impacts', detail: 'Lightning impacts now bloom into a bright flash, expanding ground ring, and radial sparks for storm strikes and direct bolts. Impact bursts can be switched off or resized in Settings without changing damage.' },
   { tag: 'SETTINGS + DISPLAY', title: 'Tabbed controls and fullscreen deployment', detail: 'Reorganized the long settings sheet into Core, Visuals, Lightning, and Audio sections. Entering the arena requests fullscreen from the deployment click; if the browser declines, play continues windowed.' },
   { tag: 'PWA + INSTALLATION', title: 'Install MagicCloud as a Chrome app', detail: 'Added a standalone web-app manifest, 192px and 512px launcher icons (including a maskable icon), Chrome’s native install action, and an offline app-shell cache. PWA assets publish correctly from both the repository root and /docs.' },

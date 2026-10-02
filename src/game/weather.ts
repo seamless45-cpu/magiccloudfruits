@@ -179,9 +179,9 @@ export class StormCloud implements Effect {
     }
     const fadeK = Math.min(1, (o.life - this.t) / 3);
     this.mat.opacity = 0.96 * Math.max(0, fadeK);
-    // Cloud silhouettes do not need per-frame matrix uploads; 24 Hz keeps growth fluid and cheaper.
+    // Cloud silhouettes stay fluid at 18 Hz while avoiding redundant per-frame matrix uploads.
     this.layoutT += dt;
-    if (this.layoutT >= 1 / 24) { this.layoutT %= 1 / 24; this.layout(); }
+    if (this.layoutT >= 1 / 18) { this.layoutT %= 1 / 18; this.layout(); }
     const rainOn = o.kind === 'cumulus' ? (this.growth > 0.55 ? (this.growth - 0.5) * 2 * o.rain + (this.growth > 0.55 ? 0.25 : 0) : 0) : o.rain * Math.min(1, this.growth * 1.5);
     const dens = g.settings.particles;
     if (rainOn > 0 && fadeK > 0) {
@@ -290,15 +290,16 @@ export class StormCloud implements Effect {
 
 /** Tornado: dense helical condensation funnel, turbulent dust, and realistic suction. */
 export class Tornado implements Effect {
-  t = 0; ps: ParticleSystem; cone: THREE.Mesh; cloudPuffs: THREE.InstancedMesh; pos = V(); wander = V(); ang: Float32Array; hgt: Float32Array; spd: Float32Array; N: number; puffN: number; puffH: Float32Array; puffPhase: Float32Array; puffSize: Float32Array; dmgT = 0; dustAcc = 0; dustSeq = 0;
+  t = 0; ps: ParticleSystem; cone: THREE.Mesh; cloudPuffs: THREE.InstancedMesh; pos = V(); wander = V(); ang: Float32Array; hgt: Float32Array; spd: Float32Array; N: number; puffN: number; puffH: Float32Array; puffPhase: Float32Array; puffSize: Float32Array; dmgT = 0; dustAcc = 0; dustSeq = 0; puffT = 1 / 24;
   constructor(public g: any, public cloud: StormCloud | null, public baseR: number, public mph: number, public life: number, fixed?: THREE.Vector3, public dmg = 2500) {
-    this.N = Math.round(540 * g.settings.particles) + 100;
+    this.N = Math.round(420 * g.settings.particles) + 80;
     this.ps = new ParticleSystem(this.N, false); g.scene.add(this.ps.points);
     this.ps.mat.uniforms.uScale.value = g.smoke.mat.uniforms.uScale.value;
     this.ang = new Float32Array(this.N); this.hgt = new Float32Array(this.N); this.spd = new Float32Array(this.N);
     for (let i = 0; i < this.N; i++) { this.ang[i] = Math.random() * 6.28; this.hgt[i] = Math.random(); this.spd[i] = rnd(0.6, 1.2);
       const c = rnd(0.45, 0.75); this.ps.col[i * 3] = c; this.ps.col[i * 3 + 1] = c * 0.97; this.ps.col[i * 3 + 2] = c * 0.93; this.ps.life[i] = 1e9; this.ps.maxLife[i] = 1e9; }
-    this.puffN=Math.max(96,Math.round(150*g.settings.clouds)); this.puffH=new Float32Array(this.puffN);this.puffPhase=new Float32Array(this.puffN);this.puffSize=new Float32Array(this.puffN);
+    this.ps.setStaticActiveCount(this.N);
+    this.puffN=Math.max(72,Math.round(115*g.settings.clouds)); this.puffH=new Float32Array(this.puffN);this.puffPhase=new Float32Array(this.puffN);this.puffSize=new Float32Array(this.puffN);
     const puffMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,transparent:true,opacity:.3,depthWrite:false,emissive:0x111315});
     this.cloudPuffs=new THREE.InstancedMesh(PUFF_GEO,puffMat,this.puffN);this.cloudPuffs.frustumCulled=false;this.cloudPuffs.castShadow=false;
     for(let i=0;i<this.puffN;i++){const strand=i%4,step=Math.floor(i/4),steps=Math.ceil(this.puffN/4);
@@ -318,11 +319,15 @@ export class Tornado implements Effect {
     const k = Math.min(1, this.t / 1.5) * Math.min(1, (this.life - this.t) / 1.5);
     const topR = this.baseR * 4.5, w = this.mph * 0.447; // tangential m/s
     this.cloudPuffs.position.copy(this.pos);(this.cloudPuffs.material as THREE.MeshStandardMaterial).opacity=.32*k;
-    for(let i=0;i<this.puffN;i++){const h=this.puffH[i],r=this.baseR*(.58+3.85*h*h)*(1+.035*Math.sin(this.t*2+i));
-      const a=this.puffPhase[i]+h*Math.PI*10+this.t*(4.5-h*2.6),size=this.puffSize[i]*(.82+.25*h);
-      _p.set(Math.cos(a)*r,Math.max(size*.82,h*H),Math.sin(a)*r);_s.set(size*(1+.12*Math.sin(i*3.1)),size*.9,size*(1+.12*Math.cos(i*2.7)));
-      _m.compose(_p,_q.identity(),_s);this.cloudPuffs.setMatrixAt(i,_m);}
-    this.cloudPuffs.instanceMatrix.needsUpdate=true;
+    this.puffT += dt;
+    if (this.puffT >= 1 / 24) {
+      this.puffT %= 1 / 24;
+      for(let i=0;i<this.puffN;i++){const h=this.puffH[i],r=this.baseR*(.58+3.85*h*h)*(1+.035*Math.sin(this.t*2+i));
+        const a=this.puffPhase[i]+h*Math.PI*10+this.t*(4.5-h*2.6),size=this.puffSize[i]*(.82+.25*h);
+        _p.set(Math.cos(a)*r,Math.max(size*.82,h*H),Math.sin(a)*r);_s.set(size*(1+.12*Math.sin(i*3.1)),size*.9,size*(1+.12*Math.cos(i*2.7)));
+        _m.compose(_p,_q.identity(),_s);this.cloudPuffs.setMatrixAt(i,_m);}
+      this.cloudPuffs.instanceMatrix.needsUpdate=true;
+    }
     for (let i = 0; i < this.N; i++) {
       const h = this.hgt[i]; const r = (this.baseR + (topR - this.baseR) * h * h) * (0.8 + 0.4 * Math.sin(i));
       this.ang[i] += (w / Math.max(3, r)) * this.spd[i] * dt;
@@ -382,7 +387,7 @@ function spiralTexture() {
 
 /** 25 km hurricane with a calm eye, towering eyewall, spiral bands, rain-wall mist & outward wind. */
 export class Hurricane implements Effect {
-  t = 0; grp = new THREE.Group(); disk: THREE.Mesh; disk2: THREE.Mesh; wall: THREE.InstancedMesh; tex: THREE.Texture; pos: THREE.Vector3; dir: THREE.Vector3; dmgT = 0; mistSeq=0; localSeq=0; mistSeed=Math.random();
+  t = 0; grp = new THREE.Group(); disk: THREE.Mesh; disk2: THREE.Mesh; wall: THREE.InstancedMesh; tex: THREE.Texture; pos: THREE.Vector3; dir: THREE.Vector3; dmgT = 0; mistSeq=0; localSeq=0; mistSeed=Math.random(); mistAcc=0; localAcc=0;
   eye = 320; wallR = 2600; R = 12500;
   constructor(public g: any, at: THREE.Vector3, dir: THREE.Vector3, public life = 300, public dmg = 4000) {
     this.pos = at.clone().setY(0); this.dir = dir.clone().setY(0).normalize();
@@ -412,15 +417,20 @@ export class Hurricane implements Effect {
     this.disk.rotation.y -= dt * 0.03; this.disk2.rotation.y -= dt * 0.05; this.wall.rotation.y -= dt * 0.12;
     (this.disk.material as THREE.MeshBasicMaterial).opacity = 0.95 * k; (this.disk2.material as THREE.MeshBasicMaterial).opacity = 0.6 * k; (this.wall.material as THREE.MeshStandardMaterial).opacity = 0.9 * k;
     const dens = g.settings.particles;
+    // Rates are particles per second (the old per-frame counts saturated the smoke pool).
+    this.mistAcc = Math.min(12, this.mistAcc + dt * 600 * dens);
+    const mistCount = Math.min(12, Math.floor(this.mistAcc)); this.mistAcc -= mistCount;
     // Eyewall rain mist samples the local swirl so particle advection changes around the vortex.
-    for (let i = 0; i < 60 * dens; i++) { const seq=++this.mistSeq,u=(seq*.6180339887498949+this.mistSeed)%1,v=(seq*.7548776662466927+this.mistSeed*.37)%1;
+    for (let i = 0; i < mistCount; i++) { const seq=++this.mistSeq,u=(seq*.6180339887498949+this.mistSeed)%1,v=(seq*.7548776662466927+this.mistSeed*.37)%1;
       const a=u*6.28318530718,r=Math.sqrt(this.eye*this.eye+v*(this.wallR*this.wallR-this.eye*this.eye));
       const x=this.pos.x+Math.cos(a)*r, y=8+((seq*.38196601125+this.mistSeed*.13)%1)*172, z=this.pos.z+Math.sin(a)*r, localWind=g.windAt(V(x,y,z));
       g.smoke.spawn(x, y, z, localWind.x+rnd(-8,8), rnd(-24,-7), localWind.z+rnd(-8,8), 0xe6e9ee, rnd(28,68), rnd(2,3.2), { alpha:0.32*k, grow:1.2, turb:10, spread:0.3, windX:localWind.x, windZ:localWind.z, windResponse:2.2, windDynamic:true }); }
     // mist around player if inside rain bands
     const pp = g.player.pos; const pd = Math.hypot(pp.x - this.pos.x, pp.z - this.pos.z);
     if (pd > this.eye && pd < this.R) { const inten = pd < this.wallR ? 1 : Math.max(0.15, 1 - (pd - this.wallR) / 4000);
-      for (let i = 0; i < 36 * dens * inten; i++) { const seq=++this.localSeq,u=(seq*.6180339887498949+this.mistSeed*.53)%1,v=(seq*.7548776662466927+this.mistSeed*.19)%1;
+      this.localAcc = Math.min(8, this.localAcc + dt * 240 * dens * inten);
+      const localCount = Math.min(8, Math.floor(this.localAcc)); this.localAcc -= localCount;
+      for (let i = 0; i < localCount; i++) { const seq=++this.localSeq,u=(seq*.6180339887498949+this.mistSeed*.53)%1,v=(seq*.7548776662466927+this.mistSeed*.19)%1;
         const x=pp.x+(u-.5)*200,y=3+((seq*.38196601125+this.mistSeed*.41)%1)*62,z=pp.z+(v-.5)*200,localWind=g.windAt(V(x,y,z));
         g.smoke.spawn(x,y,z,localWind.x+rnd(-4,4),-18,localWind.z+rnd(-4,4),0xdfe3ea,rnd(10,28),2,{alpha:0.24,grow:1,turb:8,windX:localWind.x,windZ:localWind.z,windResponse:1.8,windDynamic:true}); }
       g.shakeRaw(inten * 3 * k, 0.1); }
@@ -462,16 +472,15 @@ export class Microburst implements Effect {
   private readonly flow: MicroburstFlow;
   private readonly windSample = V();
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {
-    const cloudSize = size * 0.7; // the cold-pool footprint is compact beneath the tall convective tower.
+    const cloudSize = size * 1.4; // double the horizontal footprint while keeping the tall tower's height.
     const cloudBase = Math.max(180, size * 1.6); // raised cloud base leaves room for a deep downdraft shaft.
-    // Keep the low-resolution grid focused on the physically relevant 0.9 km outflow domain;
-    // spreading the same 64 cells over several kilometres under-resolves the cold-pool gradient.
-    this.flow = new MicroburstFlow(size * 6, size);
+    // Double the cold-pool radius without increasing grid work; the source spread scales with it.
+    this.flow = new MicroburstFlow(size * 12, size * 2);
     for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.28 + rnd(-0.3, 0.3); const off = V(Math.cos(a) * cloudSize * 0.78, 0, Math.sin(a) * cloudSize * 0.78); this.offs.push(off);
-      const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: cloudSize * 1.05, life: 16, grow: 2.2, densityScale: 2.5, rain: 0, shade: 0.85, baseHeight: cloudBase, verticalScale: 3 }); this.cells.push(c); g.add(c); }
+      const c = new StormCloud(g, { pos: pos.clone().add(off), kind: 'cell', size: cloudSize * 1.05, life: 16, grow: 2.2, densityScale: 2.5, rain: 0, shade: 0.85, baseHeight: cloudBase, verticalScale: 1.5 }); this.cells.push(c); g.add(c); }
     // A slow-growing central tower fills the join as the six cells merge, so the burst
     // never leaves a hollow center for its falling mist to appear detached from.
-    const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: cloudSize * 1.8, life: 16, grow: 3, densityScale: 3, rain: 0, shade: 0.9, baseHeight: cloudBase, verticalScale: 4.6, anvil: true });
+    const core = new StormCloud(g, { pos: pos.clone(), kind: 'cell', size: cloudSize * 1.8, life: 16, grow: 3, densityScale: 3, rain: 0, shade: 0.9, baseHeight: cloudBase, verticalScale: 2.3, anvil: true });
     this.cells.push(core); this.offs.push(V()); g.add(core);
   }
   audioMix() {
@@ -528,7 +537,7 @@ export class Microburst implements Effect {
       for (const e of g.enemies) {
         if (e.dead) continue;
         const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z, d = Math.hypot(dx, dz);
-        if (d >= 1 && d < this.size * 6) {
+        if (d >= 1 && d < this.size * 12) {
           // Quadratic drag uses each body's approximate frontal area and mass; the body-size
           // speed cap remains a gameplay safeguard after the aerodynamic impulse is applied.
           const gust = this.windAt(e.pos);

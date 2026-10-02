@@ -4,7 +4,8 @@ const GRID_SIZE = 64;
 const FLOW_STEP = 1 / 30;
 const MAX_STEPS_PER_UPDATE = 3;
 const MAX_SURFACE_WIND = 42; // bounded physical-layer speed before game presentation scaling
-export const MICROBURST_OUTFLOW_MULTIPLIER = 10;
+// Five times the former 10× gameplay outflow, as requested.
+export const MICROBURST_OUTFLOW_MULTIPLIER = 50;
 export const MICROBURST_OUTFLOW_MAX = MAX_SURFACE_WIND * MICROBURST_OUTFLOW_MULTIPLIER;
 
 // Depth-averaged density-current parameters. Reduced gravity represents the buoyancy
@@ -41,8 +42,8 @@ export const microburstPulse = (elapsed: number) =>
  * instead of reflecting from a hard circular wall.
  *
  * This is not a full 3-D weather model. The stable physical-layer solution is sampled by all
- * actors and particles, then receives the explicit 10× presentation/gameplay scale requested
- * for this arena. The solver itself remains capped at 42 m/s before that scale is applied.
+ * actors and particles, then receives the requested 50× presentation/gameplay scale (5× the
+ * previous 10× level). The solver itself remains capped at 42 m/s before that scale is applied.
  */
 export class MicroburstFlow {
   private depth: Float32Array;
