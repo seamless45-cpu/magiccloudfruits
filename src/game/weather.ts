@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { Effect } from './types';
-import { rnd, V, addMat, explosion } from './effects';
+import { rnd, V, addMat, explosion, lightningImpact } from './effects';
 import { ParticleSystem } from './particles';
-import { MicroburstFlow } from './fluids';
+import { MicroburstFlow, MICROBURST_OUTFLOW_MAX } from './fluids';
 
 const PUFF_GEO = new THREE.SphereGeometry(1, 12, 8);
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color();
@@ -228,7 +228,10 @@ export class StormCloud implements Effect {
         const r = isSuper ? (mul >= 12 ? 22 : 12) : 6;
         g.damageRadius(rp, r, (o.boltDmg ?? 3000) * mul * (o.dmgMul ?? 1), { stun: 0.4, noCharge: true });
         if (isSuper) explosion(g, rp, r, { core: 0xffffff, mid: col, ring: col, smoke: 0x333344, debrisCount: 10 });
-        else g.flash(rp, 0xddeeff, 8);
+        else {
+          if (g.settings.lightningImpactEffects) lightningImpact(g, rp, col, r * g.settings.lightningImpactScale);
+          g.flash(rp, 0xddeeff, 8);
+        }
         if (isSuper && o.superName) g.toast(o.superName + '!', mul >= 12 ? '#ff66ff' : '#9fdcff');
       }
     }
@@ -441,6 +444,7 @@ export class Flood implements Effect {
 /** Microburst: scattered cells merge into a downdraft-fed cold pool whose pressure field drives surface outflow. */
 export class Microburst implements Effect {
   t = 0; cells: StormCloud[] = []; offs: THREE.Vector3[] = []; dmgT = 0; gustSounded = false; dustSeq=0; dustSeed=Math.random(); particleAcc=0;
+  readonly windCap = MICROBURST_OUTFLOW_MAX;
   private readonly flow: MicroburstFlow;
   private readonly windSample = V();
   constructor(public g: any, public pos: THREE.Vector3, public size = 150, public dmg = 3500) {

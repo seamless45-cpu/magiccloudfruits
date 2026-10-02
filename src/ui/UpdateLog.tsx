@@ -1,6 +1,9 @@
 import type { AnimationEvent, CSSProperties } from 'react';
 
 const PATCHES = [
+  { tag: 'WEATHER // MICROBURST', title: '10× stronger surface outflow', detail: 'Amplified the sampled pressure-driven cold-pool jet tenfold while keeping the stable bounded solver, downburst footprint, and wind direction intact. The faster outflow also reaches dust, hail, enemies, and the player.' },
+  { tag: 'LIGHTNING', title: 'Explosive ground-strike impacts', detail: 'Lightning impacts now bloom into a bright flash, expanding ground ring, and radial sparks for storm strikes and direct bolts. Impact bursts can be switched off or resized in Settings without changing damage.' },
+  { tag: 'SETTINGS + DISPLAY', title: 'Tabbed controls and fullscreen deployment', detail: 'Reorganized the long settings sheet into Core, Visuals, Lightning, and Audio sections. Entering the arena requests fullscreen from the deployment click; if the browser declines, play continues windowed.' },
   { tag: 'PWA + INSTALLATION', title: 'Install MagicCloud as a Chrome app', detail: 'Added a standalone web-app manifest, 192px and 512px launcher icons (including a maskable icon), Chrome’s native install action, and an offline app-shell cache. PWA assets publish correctly from both the repository root and /docs.' },
   { tag: 'MAIN MENU', title: 'Compact storm-console deployment deck', detail: 'Replaced the oversized menu card with a tighter field briefing, live arena readouts, a clear deployment action, and quick settings, controls, update-log, and sound buttons. The install action and new-release indicator are visible up front.' },
   { tag: 'BOOT + ACCESSIBILITY', title: 'Large, honest loading progress', detail: 'Expanded the thin meter into a high-contrast progress bar with a clear percentage and accessible progress semantics. It advances only at real startup milestones—app module, WebGL, arena construction, and first rendered frame—and stays put during stalls.' },
@@ -33,7 +36,7 @@ export function UpdateLog({ closing, onClose, onExited }: { closing: boolean; on
           <div>
             <div className="font-orb text-[9px] tracking-[.28em] text-emerald-200/75">FIELD BULLETIN // 02 OCT 2026</div>
             <h2 id="update-log-title" className="mt-1 font-orb text-xl sm:text-2xl tracking-[.12em] text-white">UPDATE LOG</h2>
-            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.7</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
+            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.8</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
           </div>
           <button className="sf-btn px-3 py-2 font-orb text-xs" onClick={onClose} data-ui-sound="close" aria-label="Close update log">CLOSE ×</button>
         </header>

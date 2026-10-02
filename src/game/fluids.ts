@@ -3,7 +3,9 @@ import * as THREE from 'three';
 const GRID_SIZE = 64;
 const FLOW_STEP = 1 / 30;
 const MAX_STEPS_PER_UPDATE = 3;
-const MAX_SURFACE_WIND = 42; // gameplay ceiling: severe but survivable surface outflow
+const MAX_SURFACE_WIND = 42; // solved surface-flow ceiling before the requested gameplay amplification
+export const MICROBURST_OUTFLOW_MULTIPLIER = 10;
+export const MICROBURST_OUTFLOW_MAX = MAX_SURFACE_WIND * MICROBURST_OUTFLOW_MULTIPLIER;
 const AIR_DENSITY = 1.2; // kg/m³
 const DOWNDRAFT_SPEED = 65; // m/s in the strongest source; sets the cold-pool pressure scale
 const SCALAR_DIFFUSIVITY = 650; // m²/s, sub-grid turbulent mixing
@@ -71,8 +73,10 @@ export class MicroburstFlow {
     // A surface cold pool has a shallower horizontal jet than its source downdraft.
     const altitudeScale = Math.max(90, this.stormScale * 1.1);
     const altitudeAttenuation = Math.exp(-Math.max(0, height) / altitudeScale);
-    const windX = u * altitudeAttenuation;
-    const windZ = v * altitudeAttenuation;
+    // Keep the stable pressure solver bounded, then amplify its sampled outflow as a whole:
+    // the cold-pool footprint and direction are unchanged, but surface gusts are 10× stronger.
+    const windX = u * altitudeAttenuation * MICROBURST_OUTFLOW_MULTIPLIER;
+    const windZ = v * altitudeAttenuation * MICROBURST_OUTFLOW_MULTIPLIER;
     if (windX * windX + windZ * windZ < 0.01) return false;
     out.set(windX, 0, windZ);
     return true;

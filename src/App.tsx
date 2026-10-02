@@ -58,6 +58,8 @@ const clampSettings = (raw: unknown): GraphicsSettings => {
     lightningJaggedness: num(s.lightningJaggedness, 0.1, 3, d.lightningJaggedness),
     lightningWidth: num(s.lightningWidth, 0.4, 2.5, d.lightningWidth),
     lightningHeight: num(s.lightningHeight, 0.5, 2.5, d.lightningHeight),
+    lightningImpactEffects: bool(s.lightningImpactEffects, d.lightningImpactEffects),
+    lightningImpactScale: num(s.lightningImpactScale, 0.5, 2.5, d.lightningImpactScale),
     drawDistance: num(s.drawDistance, 1000, 60000, d.drawDistance),
     clouds: num(s.clouds, 0.3, 1.5, d.clouds),
   };
@@ -77,7 +79,7 @@ const safeRequested = () => {
   return p.endsWith('/safe') || p.endsWith('/arena') || new URLSearchParams(location.search).has('safe');
 };
 
-const UPDATE_LOG_VERSION = '1.5.7';
+const UPDATE_LOG_VERSION = '1.5.8';
 const initialUpdateLogVisibility = () => {
   try { return localStorage.getItem('f1090seenUpdateLog') !== UPDATE_LOG_VERSION; }
   catch { return true; }
@@ -210,7 +212,9 @@ export default function App() {
       }
       setFullscreenError('');
     } catch (error) {
-      setFullscreenError(error instanceof Error ? error.message : 'Fullscreen could not be changed.');
+      const message = error instanceof Error ? error.message : 'Fullscreen could not be changed.';
+      setFullscreenError(message);
+      game?.toast('FULLSCREEN UNAVAILABLE — CONTINUING WINDOWED', '#ffd28b');
     }
   };
   const loadMusicFile = (file: File) => {
@@ -251,6 +255,9 @@ export default function App() {
   };
   const enterArena = () => {
     if (!game || leavingTitle) return;
+    // Fullscreen is user-gesture gated by browsers, so request it on the deployment click.
+    // A denial is non-fatal: continue into the arena in a normal window.
+    if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) void toggleFullscreen();
     game.audio.unlock(); game.audio.setArenaMode(true); game.paused = false; setLeavingTitle(true);
   };
   const installApp = async () => {
@@ -505,7 +512,7 @@ export default function App() {
                 </div>
               </div>
               <div className="menu-head-controls">
-                <div className="menu-release font-orb"><i aria-hidden="true" />BUILD 1.5.7 <span>LIVE</span></div>
+                <div className="menu-release font-orb"><i aria-hidden="true" />BUILD 1.5.8 <span>LIVE</span></div>
                 <button className={`menu-install font-orb ${installPromptReady ? 'is-ready' : ''}`} type="button" onClick={installApp} disabled={appInstalled} aria-label={appInstalled ? 'MagicCloud is already installed' : installPromptReady ? 'Install MagicCloud app' : 'Show instructions to install MagicCloud'} aria-describedby={installMessage ? 'menu-install-note' : undefined} data-ui-sound="open">
                   <span className="menu-install-icon" aria-hidden="true">{appInstalled ? '✓' : '↓'}</span>
                   <span>{appInstalled ? 'INSTALLED' : 'INSTALL APP'}</span>
@@ -537,10 +544,11 @@ export default function App() {
                   <small>BREACH THE CONTAINMENT FIELD</small>
                   <i aria-hidden="true">↗</i>
                 </button>
+                {fullscreenError && <p className="menu-fullscreen-note" role="status" aria-live="polite">Fullscreen unavailable; continuing windowed. {fullscreenError}</p>}
                 <div className="menu-utility-grid">
                   <button className="menu-utility sf-btn" type="button" onClick={openSettings} data-ui-sound="open"><b>02</b><span>SETTINGS</span><i aria-hidden="true">⚙</i></button>
                   <button className="menu-utility sf-btn" type="button" onClick={toggleMenuControls} aria-expanded={showMenuControls} data-ui-sound="toggle"><b>03</b><span>CONTROLS</span><i aria-hidden="true">⌘</i></button>
-                  <button className="menu-utility menu-update-utility sf-btn" type="button" onClick={openUpdates} aria-label={releaseNotesUnseen ? 'Open new update notes, version 1.5.7' : 'Open update log'} title={releaseNotesUnseen ? 'New release notes · v1.5.7' : 'Release notes · v1.5.7'} data-ui-sound="open"><b>04</b><span>UPDATE LOG</span><i className={releaseNotesUnseen ? 'menu-new-badge' : ''} aria-hidden="true">{releaseNotesUnseen ? 'NEW' : '✦'}</i></button>
+                  <button className="menu-utility menu-update-utility sf-btn" type="button" onClick={openUpdates} aria-label={releaseNotesUnseen ? 'Open new update notes, version 1.5.8' : 'Open update log'} title={releaseNotesUnseen ? 'New release notes · v1.5.8' : 'Release notes · v1.5.8'} data-ui-sound="open"><b>04</b><span>UPDATE LOG</span><i className={releaseNotesUnseen ? 'menu-new-badge' : ''} aria-hidden="true">{releaseNotesUnseen ? 'NEW' : '✦'}</i></button>
                   <button className={`menu-utility sf-btn ${soundEnabled ? 'on' : ''}`} type="button" onClick={toggleSound} disabled={!game} aria-pressed={soundEnabled} data-ui-sound="none"><b>05</b><span>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</span><i aria-hidden="true">{soundEnabled ? '♫' : '×'}</i></button>
                 </div>
               </nav>

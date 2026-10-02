@@ -12,7 +12,7 @@ import { Bolt, boltStats, type BoltOpts } from './lightning';
 import { Enemy } from './enemies';
 import type { Effect, HitOpts, GraphicsSettings, ItemDef } from './types';
 import { ITEMS } from './items';
-import { V, rnd, slashMesh, Timed, Projectile, GEO } from './effects';
+import { V, rnd, slashMesh, Timed, Projectile, GEO, lightningImpact } from './effects';
 
 export const SKILL_KEYS = ['z', 'x', 'c', 'v', 'b', 'f', 'g', 'n', 'm', 'l', 'k', 'j'];
 export const MAX_ZOOM = 900, MIN_ZOOM = 4;
@@ -23,7 +23,7 @@ export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSetting
   high: { resolution: 1, shadows: true, shadowRes: 2048, bloom: true, particles: 0.85, debris: 0.85, maxBolts: 200, clouds: 1, antialiasFxaa: true, drawDistance: 40000 },
   ultra: { resolution: 1.25, shadows: true, shadowRes: 4096, bloom: true, particles: 1, debris: 1, maxBolts: 320, clouds: 1.2, antialiasFxaa: true, drawDistance: 60000 },
 };
-export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, frameInterpolationMethod: 'linear', motionBlur: false, motionBlurStrength: 0.72, lightningSegments: 18, lightningRealignInterval: 0.01, lightningJitter: 1, lightningBranches: 2, lightningJaggedness: 1, lightningWidth: 1, lightningHeight: 1, drawDistance: 40000, clouds: 1 });
+export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, frameInterpolationMethod: 'linear', motionBlur: false, motionBlurStrength: 0.72, lightningSegments: 18, lightningRealignInterval: 0.01, lightningJitter: 1, lightningBranches: 2, lightningJaggedness: 1, lightningWidth: 1, lightningHeight: 1, lightningImpactEffects: true, lightningImpactScale: 1, drawDistance: 40000, clouds: 1 });
 
 interface CdState { rem: number; total: number; charges: number; interval: number; regenT: number; holding: boolean }
 type Pose = { position: THREE.Vector3; rotation: THREE.Quaternion };
@@ -503,11 +503,19 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
   }
   windAt(pos: THREE.Vector3) {
     const wind = V(1.3 + Math.sin(this.time * 0.08) * 0.7, 0, 0.7 + Math.cos(this.time * 0.065) * 0.8);
+    let windLimit = 78;
     for (const effect of this.effects) {
-      const sample = (effect as Effect & { windAt?: (at: THREE.Vector3) => THREE.Vector3 | null }).windAt;
-      if (sample) { const local = sample.call(effect, pos); if (local) wind.add(local); }
+      const sample = (effect as Effect & { windAt?: (at: THREE.Vector3) => THREE.Vector3 | null; windCap?: number }).windAt;
+      if (sample) {
+        const local = sample.call(effect, pos);
+        if (local) {
+          wind.add(local);
+          const cap = (effect as Effect & { windCap?: number }).windCap;
+          if (typeof cap === 'number' && Number.isFinite(cap)) windLimit = Math.max(windLimit, cap);
+        }
+      }
     }
-    return wind.clampLength(0, 78);
+    return wind.clampLength(0, windLimit);
   }
   bolt(a: THREE.Vector3, b: THREE.Vector3, o: BoltOpts = {}) {
     if (boltStats.active >= this.settings.maxBolts) return null;
@@ -521,9 +529,14 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
   strike(x: number, z: number, o: BoltOpts & { h?: number; n?: number; spread?: number } = {}) {
     const h = (o.h ?? rnd(175, 245)) * 6 * this.settings.lightningHeight; const n = o.n ?? 1;
     for (let i = 0; i < n; i++) { const s = o.spread ?? 0.6; this.bolt(V(x + rnd(-8, 8), h, z + rnd(-8, 8)), V(x + rnd(-s, s), 0.1, z + rnd(-s, s)), { segs: 18, jag: 0.035, branches: 2, width: 0.38, life: 0.32, ...o }); }
-    const c = new THREE.Color(o.color ?? 0x88aaff);
-    for (let i = 0; i < 14; i++) this.fx.spawn(x, 0.4, z, rnd(-12, 12), rnd(4, 16), rnd(-12, 12), c, 0.5, rnd(0.2, 0.5), { grav: 20 });
-    this.flash(V(x, 0, z), o.color ?? 0x88aaff, 12);
+    const color = o.color ?? 0x88aaff;
+    if (this.settings.lightningImpactEffects) {
+      lightningImpact(this, V(x, 0.1, z), color, 5.5 * this.settings.lightningImpactScale);
+    } else {
+      const c = new THREE.Color(color);
+      for (let i = 0; i < 14; i++) this.fx.spawn(x, 0.4, z, rnd(-12, 12), rnd(4, 16), rnd(-12, 12), c, 0.5, rnd(0.2, 0.5), { grav: 20 });
+    }
+    this.flash(V(x, 0, z), color, 12);
   }
   handPos(right = true) { const v = V(); (right ? this.player.rArm : this.player.lArm).localToWorld(v.set(0, -0.75, 0)); return v; }
   forward() { return this.player.facing.clone(); }

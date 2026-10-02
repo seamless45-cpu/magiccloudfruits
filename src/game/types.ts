@@ -41,5 +41,6 @@ export interface GraphicsSettings {
   shake: number; positionShake: boolean; rotationShake: boolean; showFps: boolean; antialiasFxaa: boolean;
   frameInterpolation: boolean; frameInterpolationMethod: 'linear' | 'frameHold'; motionBlur: boolean; motionBlurStrength: number;
   lightningSegments: number; lightningRealignInterval: number; lightningJitter: number; lightningBranches: number; lightningJaggedness: number; lightningWidth: number; lightningHeight: number;
+  lightningImpactEffects: boolean; lightningImpactScale: number;
   drawDistance: number; clouds: number;
 }
