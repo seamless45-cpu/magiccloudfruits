@@ -128,13 +128,13 @@ export function Settings({ settings, closing, onChange, onClose, onExited, isFul
           {interpolationMethodsOpen && <div id="interpolation-method-drawer" className="interpolation-method-drawer ui-scroll" role="group" aria-label="Frame interpolation method">
             <div className="font-orb text-[9px] tracking-[.14em] text-cyan-100/70 mb-1.5">SELECT RENDER METHOD</div>
             <button type="button" className={`interpolation-method ${settings.frameInterpolationMethod === 'linear' ? 'selected' : ''}`} onClick={() => set('frameInterpolationMethod', 'linear')} aria-pressed={settings.frameInterpolationMethod === 'linear'}>
-              <span className="font-orb text-[10px]">LINEAR MOTION BLEND</span><span>Blends previous and current 60 Hz poses for smoother display motion.</span>
+              <span className="font-orb text-[10px]">LINEAR MOTION BLEND</span><span>Blends actor roots, animated arms and legs, enemy limbs, and camera between fixed simulation ticks.</span>
             </button>
             <button type="button" className={`interpolation-method ${settings.frameInterpolationMethod === 'frameHold' ? 'selected' : ''}`} onClick={() => set('frameInterpolationMethod', 'frameHold')} aria-pressed={settings.frameInterpolationMethod === 'frameHold'}>
               <span className="font-orb text-[10px]">FRAME HOLD / DUPLICATION</span><span>Holds the latest 60 Hz pose between simulation ticks; no in-between motion is synthesized.</span>
             </button>
           </div>}
-          <p className="text-[10px] text-cyan-200/45 py-1">Both methods use a fixed 60 Hz simulation for player, enemies, and camera. Linear mode adds a one-tick presentation delay; no AI or optical-flow generation is claimed.</p>
+          <p className="text-[10px] text-cyan-200/45 py-1">Both methods keep the fixed 60 Hz simulation. Linear mode blends full actor poses and adds a one-tick presentation delay; long frame stalls reset the blend history. Motion-vector blur remains a separate, genuine trail effect.</p>
           <Row label="Motion-Vector Trail Blur">{tog('motionBlur', 'Motion-vector trail blur')}</Row>
           <Row label="Shutter / Trail Length">{num('motionBlurStrength', 0.4, 0.86, 0.02, v => `${Math.round(v * 100)}%`)}</Row>
           <p className="text-[10px] text-cyan-200/45 py-1">Per-frame camera, mesh, instanced, lightning-ribbon, and particle vectors drive a depth-tested shutter trail. No accumulated after-image.</p>

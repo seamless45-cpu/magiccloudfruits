@@ -26,8 +26,8 @@ export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSetting
 export const defaultSettings = (): GraphicsSettings => ({ preset: 'high', sandbox: false, resolution: 1, shadows: true, shadowRes: 2048, bloom: true, bloomStrength: 0.9, particles: 0.85, debris: 0.85, maxBolts: 200, fog: true, exposure: 1.05, shake: 1, positionShake: true, rotationShake: true, showFps: true, antialiasFxaa: true, frameInterpolation: false, frameInterpolationMethod: 'linear', motionBlur: false, motionBlurStrength: 0.72, lightningSegments: 18, lightningRealignInterval: 0.01, lightningJitter: 1, lightningBranches: 2, lightningJaggedness: 1, lightningWidth: 1, lightningHeight: 1, lightningImpactEffects: true, lightningImpactScale: 1, drawDistance: 40000, clouds: 1 });
 
 interface CdState { rem: number; total: number; charges: number; interval: number; regenT: number; holding: boolean }
-type Pose = { position: THREE.Vector3; rotation: THREE.Quaternion };
-type RenderPose = { player: Pose; enemies: Pose[]; camera: Pose };
+type Pose = { position: THREE.Vector3; rotation: THREE.Quaternion; scale: THREE.Vector3 };
+type RenderPose = { player: Pose; playerParts: Pose[]; enemies: Pose[]; enemyParts: Pose[][]; camera: Pose };
 
 export class Game {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera; composer: EffectComposer; bloom: UnrealBloomPass; fxaa: ShaderPass; motionVectors: MotionVectorPass; motionBlurPass: ShaderPass;
@@ -49,6 +49,8 @@ export class Game {
   stats = { kills: 0, dmg: 0, dmgWin: [] as { t: number; d: number }[] };
   fps = 60; fpsAcc = 0; fpsN = 0;
   private readonly interpolationStep = 1 / 60; private interpolationAccumulator = 0;
+  private interpolationPlayerParts: THREE.Object3D[] = [];
+  private interpolationEnemyParts: THREE.Object3D[][] = [];
   private interpolationPrevious: RenderPose | null = null; private interpolationCurrent: RenderPose | null = null;
   private settingsApplied = false; private bootFrameReported = false;
   private dynamicResolutionScale = 1; private dynamicResolutionClock = 0;
@@ -100,6 +102,8 @@ export class Game {
     for (let i = 0; i < 6; i++) this.enemies.push(new Enemy(this, 'runner'));
     for (let i = 0; i < 4; i++) this.enemies.push(new Enemy(this, 'ranged'));
     for (let i = 0; i < 2; i++) this.enemies.push(new Enemy(this, 'brute'));
+    this.interpolationPlayerParts = [this.player.rArm, this.player.lArm, this.player.sword, this.player.gun, ...this.player.legs];
+    this.interpolationEnemyParts = this.enemies.map(e => [...e.limbs, e.barGrp, e.cage, e.ice, e.star]);
     this.interpolationPrevious = this.createRenderPose(); this.interpolationCurrent = this.createRenderPose();
     this.captureRenderPose(this.interpolationPrevious); this.copyRenderPose(this.interpolationPrevious, this.interpolationCurrent);
     this.applySettings(settings);
@@ -654,44 +658,78 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
   }
 
   private createRenderPose(): RenderPose {
-    const pose = (): Pose => ({ position: new THREE.Vector3(), rotation: new THREE.Quaternion() });
-    return { player: pose(), enemies: this.enemies.map(() => pose()), camera: pose() };
+    const pose = (): Pose => ({ position: new THREE.Vector3(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) });
+    return {
+      player: pose(), playerParts: this.interpolationPlayerParts.map(() => pose()),
+      enemies: this.enemies.map(() => pose()), enemyParts: this.interpolationEnemyParts.map(parts => parts.map(() => pose())), camera: pose(),
+    };
   }
   private captureRenderPose(target: RenderPose) {
-    target.player.position.copy(this.player.mesh.position); target.player.rotation.copy(this.player.mesh.quaternion);
-    target.camera.position.copy(this.camera.position); target.camera.rotation.copy(this.camera.quaternion);
-    while (target.enemies.length < this.enemies.length) target.enemies.push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion() });
+    const capture = (object: THREE.Object3D, pose: Pose) => {
+      pose.position.copy(object.position); pose.rotation.copy(object.quaternion); pose.scale.copy(object.scale);
+    };
+    capture(this.player.mesh, target.player);
+    while (target.playerParts.length < this.interpolationPlayerParts.length) target.playerParts.push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) });
+    for (let i = 0; i < this.interpolationPlayerParts.length; i++) capture(this.interpolationPlayerParts[i], target.playerParts[i]);
+    capture(this.camera, target.camera);
+    while (target.enemies.length < this.enemies.length) target.enemies.push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) });
+    while (target.enemyParts.length < this.enemies.length) target.enemyParts.push([]);
     for (let i = 0; i < this.enemies.length; i++) {
-      target.enemies[i].position.copy(this.enemies[i].mesh.position);
-      target.enemies[i].rotation.copy(this.enemies[i].mesh.quaternion);
+      const enemy = this.enemies[i], movingParts = this.interpolationEnemyParts[i];
+      capture(enemy.mesh, target.enemies[i]);
+      while (target.enemyParts[i].length < movingParts.length) target.enemyParts[i].push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) });
+      for (let j = 0; j < movingParts.length; j++) capture(movingParts[j], target.enemyParts[i][j]);
     }
   }
   private copyRenderPose(from: RenderPose, to: RenderPose) {
-    to.player.position.copy(from.player.position); to.player.rotation.copy(from.player.rotation);
-    to.camera.position.copy(from.camera.position); to.camera.rotation.copy(from.camera.rotation);
-    while (to.enemies.length < from.enemies.length) to.enemies.push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion() });
+    const copy = (source: Pose, target: Pose) => {
+      target.position.copy(source.position); target.rotation.copy(source.rotation); target.scale.copy(source.scale);
+    };
+    copy(from.player, to.player);
+    while (to.playerParts.length < from.playerParts.length) to.playerParts.push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) });
+    for (let i = 0; i < from.playerParts.length; i++) copy(from.playerParts[i], to.playerParts[i]);
+    copy(from.camera, to.camera);
+    while (to.enemies.length < from.enemies.length) to.enemies.push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) });
+    while (to.enemyParts.length < from.enemyParts.length) to.enemyParts.push([]);
     for (let i = 0; i < from.enemies.length; i++) {
-      to.enemies[i].position.copy(from.enemies[i].position); to.enemies[i].rotation.copy(from.enemies[i].rotation);
+      copy(from.enemies[i], to.enemies[i]);
+      while (to.enemyParts[i].length < (from.enemyParts[i]?.length ?? 0)) to.enemyParts[i].push({ position: new THREE.Vector3(), rotation: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) });
+      for (let j = 0; j < (from.enemyParts[i]?.length ?? 0); j++) copy(from.enemyParts[i][j], to.enemyParts[i][j]);
     }
+  }
+  private blendObjectPose(object: THREE.Object3D, a: Pose, b: Pose, alpha: number) {
+    object.position.lerpVectors(a.position, b.position, alpha);
+    object.quaternion.copy(a.rotation).slerp(b.rotation, alpha);
+    object.scale.lerpVectors(a.scale, b.scale, alpha);
+  }
+  private applyObjectPose(object: THREE.Object3D, pose: Pose) {
+    object.position.copy(pose.position); object.quaternion.copy(pose.rotation); object.scale.copy(pose.scale);
   }
   private blendRenderPose(alpha: number) {
     const a = this.interpolationPrevious!, b = this.interpolationCurrent!;
-    this.player.mesh.position.lerpVectors(a.player.position, b.player.position, alpha);
-    this.player.mesh.quaternion.copy(a.player.rotation).slerp(b.player.rotation, alpha);
-    for (let i = 0; i < Math.min(this.enemies.length, a.enemies.length, b.enemies.length); i++) {
-      this.enemies[i].mesh.position.lerpVectors(a.enemies[i].position, b.enemies[i].position, alpha);
-      this.enemies[i].mesh.quaternion.copy(a.enemies[i].rotation).slerp(b.enemies[i].rotation, alpha);
+    this.blendObjectPose(this.player.mesh, a.player, b.player, alpha);
+    for (let i = 0; i < Math.min(this.interpolationPlayerParts.length, a.playerParts.length, b.playerParts.length); i++) {
+      this.blendObjectPose(this.interpolationPlayerParts[i], a.playerParts[i], b.playerParts[i], alpha);
     }
-    this.camera.position.lerpVectors(a.camera.position, b.camera.position, alpha);
-    this.camera.quaternion.copy(a.camera.rotation).slerp(b.camera.rotation, alpha);
+    for (let i = 0; i < Math.min(this.enemies.length, a.enemies.length, b.enemies.length); i++) {
+      this.blendObjectPose(this.enemies[i].mesh, a.enemies[i], b.enemies[i], alpha);
+      const movingParts = this.interpolationEnemyParts[i];
+      for (let j = 0; j < Math.min(movingParts.length, a.enemyParts[i]?.length ?? 0, b.enemyParts[i]?.length ?? 0); j++) {
+        this.blendObjectPose(movingParts[j], a.enemyParts[i][j], b.enemyParts[i][j], alpha);
+      }
+    }
+    this.blendObjectPose(this.camera, a.camera, b.camera, alpha);
   }
   private restoreCurrentPose() {
     const pose = this.interpolationCurrent!;
-    this.player.mesh.position.copy(pose.player.position); this.player.mesh.quaternion.copy(pose.player.rotation);
+    this.applyObjectPose(this.player.mesh, pose.player);
+    for (let i = 0; i < Math.min(this.interpolationPlayerParts.length, pose.playerParts.length); i++) this.applyObjectPose(this.interpolationPlayerParts[i], pose.playerParts[i]);
     for (let i = 0; i < Math.min(this.enemies.length, pose.enemies.length); i++) {
-      this.enemies[i].mesh.position.copy(pose.enemies[i].position); this.enemies[i].mesh.quaternion.copy(pose.enemies[i].rotation);
+      this.applyObjectPose(this.enemies[i].mesh, pose.enemies[i]);
+      const movingParts = this.interpolationEnemyParts[i];
+      for (let j = 0; j < Math.min(movingParts.length, pose.enemyParts[i]?.length ?? 0); j++) this.applyObjectPose(movingParts[j], pose.enemyParts[i][j]);
     }
-    this.camera.position.copy(pose.camera.position); this.camera.quaternion.copy(pose.camera.rotation);
+    this.applyObjectPose(this.camera, pose.camera);
   }
 
   /** Lower internal pixel density after sustained low frame rates; recover slowly when headroom returns. */
@@ -722,7 +760,13 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const now = performance.now(); const frameDelta = Math.max(0, (now - this.last) / 1000); const dt = Math.min(0.05, frameDelta); this.last = now;
-    if (frameDelta > 0.25) this.motionVectors.resetHistory();
+    if (frameDelta > 0.25) {
+      this.motionVectors.resetHistory(); this.interpolationAccumulator = 0;
+      if (this.interpolationPrevious && this.interpolationCurrent) {
+        this.captureRenderPose(this.interpolationCurrent);
+        this.copyRenderPose(this.interpolationCurrent, this.interpolationPrevious);
+      }
+    }
     if (frameDelta < 0.25) {
       this.fpsAcc += Math.max(0.001, frameDelta); this.fpsN++;
       if (this.fpsAcc > 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }

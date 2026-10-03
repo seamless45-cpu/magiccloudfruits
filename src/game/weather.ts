@@ -4,9 +4,26 @@ import { rnd, V, addMat, explosion, lightningImpact } from './effects';
 import { ParticleSystem } from './particles';
 import { MicroburstFlow, MICROBURST_DOWNDRAFT_SPEED, MICROBURST_OUTFLOW_MAX, microburstPulse } from './fluids';
 
-const PUFF_GEO = new THREE.SphereGeometry(1, 12, 8);
+// A gently displaced, multi-scale puff keeps the shared instanced cloud geometry from reading as perfect marbles.
+function createCloudPuffGeometry() {
+  const geometry = new THREE.SphereGeometry(1, 12, 8);
+  const positions = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const direction = new THREE.Vector3();
+  for (let i = 0; i < positions.count; i++) {
+    direction.fromBufferAttribute(positions, i).normalize();
+    const broad = Math.sin(direction.x * 3.2 + direction.y * 1.8 + 0.7) * Math.cos(direction.z * 3.6 - direction.y * 2.1);
+    const lobes = Math.sin(direction.x * 6.1 - direction.z * 3.4) * Math.cos(direction.y * 5.2 + direction.z * 2.8);
+    const radius = 1 + broad * 0.105 + lobes * 0.035;
+    positions.setXYZ(i, direction.x * radius, direction.y * radius, direction.z * radius);
+  }
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+const PUFF_GEO = createCloudPuffGeometry();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color();
 const GUST_FRONT_SCALE = 3.72;
+const MICROBURST_PARTICLE_RATE = 1050 * 5; // Five times the prior 1,050/sec rate before density and pulse scaling.
 
 interface Puff { x: number; y: number; z: number; r: number; fy: number; stage: number; shade: number }
 export type CloudKind = 'cumulus' | 'cell' | 'stratus' | 'nimbo' | 'squall' | 'derecho' | 'supercell' | 'hail';
@@ -108,7 +125,7 @@ export class StormCloud implements Effect {
     let cloudTop = this.base;
     this.puffs.forEach((p, i) => {
       const s = Math.max(0, Math.min(1, (gr - p.stage) / 0.14));
-      const bulge = 1 + 0.04 * Math.sin(this.t * 0.8 + i);
+      const bulge = 1 + 0.055 * Math.sin(this.t * 0.62 + i * 1.71) + 0.02 * Math.sin(this.t * 0.97 + i * 0.47);
       let x = p.x, z = p.z;
       if (lineRot) { const nx = x * cr + z * sr, nz = -x * sr + z * cr; x = nx; z = nz; }
       else { const nx = x * cs - z * sn, nz = x * sn + z * cs; x = nx; z = nz; }
@@ -508,7 +525,7 @@ export class Microburst implements Effect {
       // stopping at the generic low-cloud height. The surface solver takes over at impact.
       const topY = Math.max(source.cloudTop, source.base + source.R * 0.5), emissionR = source.R * 1.05;
       const density = Math.max(0, Math.min(1, g.settings.particles));
-      this.particleAcc += dt * 1050 * density * (0.35 + pulse * 0.65);
+      this.particleAcc += dt * MICROBURST_PARTICLE_RATE * density * (0.35 + pulse * 0.65);
       const count = Math.floor(this.particleAcc); this.particleAcc -= count;
       for (let i = 0; i < count; i++) { const seq=++this.dustSeq,u=(seq*.6180339887498949+this.dustSeed)%1,v=(seq*.7548776662466927+this.dustSeed*.29)%1,w=(seq*.5698402909980532+this.dustSeed*.63)%1;
         const a=u*6.28318530718,r=Math.sqrt(v)*emissionR,x=emitter.x+Math.cos(a)*r,z=emitter.z+Math.sin(a)*r,y=topY*(.08+.92*w),localWind=g.windAt(V(x,y,z));
