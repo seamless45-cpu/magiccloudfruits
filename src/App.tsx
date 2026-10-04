@@ -12,6 +12,7 @@ type BeforeInstallPrompt = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 const fmt = (n: number) => (n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n.toFixed(0));
+const TARGET_LABELS: Record<string, string> = { normal: 'CLOUD WRAITH', elite: 'STORM ELITE', boss: 'APEX TITAN', runner: 'GALE STALKER', ranged: 'STORM CASTER', brute: 'CLOUDBREAKER' };
 const reportBoot = (progress: number, phase: string, message: string) => {
   (window as any).__arenaBootUpdate?.(progress, phase, message);
 };
@@ -79,7 +80,7 @@ const safeRequested = () => {
   return p.endsWith('/safe') || p.endsWith('/arena') || new URLSearchParams(location.search).has('safe');
 };
 
-const UPDATE_LOG_VERSION = '1.5.8';
+const UPDATE_LOG_VERSION = '1.5.9';
 const initialUpdateLogVisibility = () => {
   try { return localStorage.getItem('f1090seenUpdateLog') !== UPDATE_LOG_VERSION; }
   catch { return true; }
@@ -458,6 +459,17 @@ export default function App() {
             {item?.id === 'gblade' && <div className="mt-1.5"><div className="flex justify-between text-[9px] font-orb text-violet-200"><span>LIGHTNING CHARGE</span><span>{snap.charge.toFixed(0)}%</span></div><div className="hex-bar"><div className="h-full" style={{ width: `${snap.charge}%`, background: 'linear-gradient(90deg,#7a5cff,#e080ff)', boxShadow: '0 0 8px #b080ff' }} /></div></div>}
             {snap.buffs.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{snap.buffs.map(b => <span key={b.k} className="text-[9px] font-orb px-1.5 py-0.5 border border-rose-300/50 bg-rose-500/15 text-rose-100">{b.k.toUpperCase()} {b.rem.toFixed(1)}s</span>)}</div>}
           </div>
+          {snap.target && <section className={`target-lock-card sf-panel target-lock-${snap.target.kind}`} aria-label={`Target locked: ${TARGET_LABELS[snap.target.kind] ?? snap.target.kind}`}>
+            <div className="target-lock-top"><span><i /> NEURAL LOCK</span><b>#{String(snap.target.id).padStart(3, '0')}</b></div>
+            <div className="target-lock-title"><strong>{TARGET_LABELS[snap.target.kind] ?? snap.target.kind.toUpperCase()}</strong><span>{snap.target.distance.toFixed(0)}m</span></div>
+            <div className="target-lock-bar" role="progressbar" aria-label={`${TARGET_LABELS[snap.target.kind] ?? snap.target.kind} integrity`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.max(0, Math.min(100, snap.target.hp / snap.target.maxHp * 100)))}><i style={{ width: `${Math.max(0, Math.min(100, snap.target.hp / snap.target.maxHp * 100))}%` }} /></div>
+            <div className="target-lock-meta"><span>INTEGRITY</span><b>{Math.round(Math.max(0, Math.min(100, snap.target.hp / snap.target.maxHp * 100)))}%</b></div>
+          </section>}
+          {showGui && !guiClosing && snap.combo > 1 && <div key={snap.combo} className={`stormchain-sigil stormchain-tier-${Math.min(4, Math.floor(snap.combo / 5) + 1)}`} role="status" aria-live="polite" aria-atomic="true">
+            <div className="stormchain-kicker"><i />CHAIN LOCKED <span>PEAK ×{snap.comboPeak}</span></div>
+            <div className="stormchain-main"><strong>×{snap.combo}</strong><span>{snap.combo >= 20 ? 'REALITY FRACTURE' : snap.combo >= 10 ? 'STORM DOMINION' : snap.combo >= 5 ? 'OVERDRIVE CHAIN' : 'STORMCHAIN'}</span></div>
+            <div className="stormchain-meter"><i style={{ width: `${Math.max(0, Math.min(100, snap.comboTimer / snap.comboWindow * 100))}%` }} /></div>
+          </div>}
           {help && !touch && (
             <div data-panel="controls" className={`sf-panel p-2.5 w-full text-[10.5px] leading-snug pointer-events-auto ui-scroll min-h-0 ${helpClosing ? 'ui-panel-closing' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && helpClosing) { setHelp(false); setHelpClosing(false); } }}>
               <div className="flex justify-between font-orb text-[10px] text-cyan-200 mb-1"><span>CONTROLS</span><button className="sf-btn px-1" onClick={toggleHelp} data-ui-sound="close">✕</button></div>
@@ -501,8 +513,12 @@ export default function App() {
           {!item && <div className="absolute left-1/2 -translate-x-1/2 font-orb text-[10px] text-cyan-200/70 sf-glow" style={{ bottom: 'calc(var(--hud-bottom) + 4px)' }}>SELECT A FRUIT OR SWORD FROM INVENTORY {touch ? '' : '(1-9, 0, -)'}</div>}
           {touch && item && <div className="mobile-tap-hint absolute left-1/2 -translate-x-1/2 font-orb text-[9px] text-cyan-100/75" style={{ bottom: 'calc(var(--hud-bottom) + 4px)' }}>TAP SCREEN TO ATTACK</div>}
           {touch && <MobileControls game={game} />}
-          {/* crosshair */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 opacity-60"><div className="absolute left-1/2 top-0 bottom-0 w-px bg-cyan-300" /><div className="absolute top-1/2 left-0 right-0 h-px bg-cyan-300" /></div>
+          {/* Reactive sight: opens into a four-corner lock when a hostile sits under the reticle. */}
+          <div className={`combat-reticle absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ${snap.target ? 'combat-reticle-locked' : ''}`} aria-hidden="true">
+            <i className="reticle-core" /><span className="reticle-corner reticle-nw" /><span className="reticle-corner reticle-ne" />
+            <span className="reticle-corner reticle-sw" /><span className="reticle-corner reticle-se" />
+            {snap.target && <b>LOCK</b>}
+          </div>
         </div>
       )}
       {showTitle && !fatal && (
@@ -517,7 +533,7 @@ export default function App() {
                 </div>
               </div>
               <div className="menu-head-controls">
-                <div className="menu-release font-orb"><i aria-hidden="true" />BUILD 1.5.8 <span>LIVE</span></div>
+                <div className="menu-release font-orb"><i aria-hidden="true" />BUILD 1.5.9 <span>LIVE</span></div>
                 <button className={`menu-install font-orb ${installPromptReady ? 'is-ready' : ''}`} type="button" onClick={installApp} disabled={appInstalled} aria-label={appInstalled ? 'MagicCloud is already installed' : installPromptReady ? 'Install MagicCloud app' : 'Show instructions to install MagicCloud'} aria-describedby={installMessage ? 'menu-install-note' : undefined} data-ui-sound="open">
                   <span className="menu-install-icon" aria-hidden="true">{appInstalled ? '✓' : '↓'}</span>
                   <span>{appInstalled ? 'INSTALLED' : 'INSTALL APP'}</span>
@@ -553,7 +569,7 @@ export default function App() {
                 <div className="menu-utility-grid">
                   <button className="menu-utility sf-btn" type="button" onClick={openSettings} data-ui-sound="open"><b>02</b><span>SETTINGS</span><i aria-hidden="true">⚙</i></button>
                   <button className="menu-utility sf-btn" type="button" onClick={toggleMenuControls} aria-expanded={showMenuControls} data-ui-sound="toggle"><b>03</b><span>CONTROLS</span><i aria-hidden="true">⌘</i></button>
-                  <button className="menu-utility menu-update-utility sf-btn" type="button" onClick={openUpdates} aria-label={releaseNotesUnseen ? 'Open new update notes, version 1.5.8' : 'Open update log'} title={releaseNotesUnseen ? 'New release notes · v1.5.8' : 'Release notes · v1.5.8'} data-ui-sound="open"><b>04</b><span>UPDATE LOG</span><i className={releaseNotesUnseen ? 'menu-new-badge' : ''} aria-hidden="true">{releaseNotesUnseen ? 'NEW' : '✦'}</i></button>
+                  <button className="menu-utility menu-update-utility sf-btn" type="button" onClick={openUpdates} aria-label={releaseNotesUnseen ? 'Open new update notes, version 1.5.9' : 'Open update log'} title={releaseNotesUnseen ? 'New release notes · v1.5.9' : 'Release notes · v1.5.9'} data-ui-sound="open"><b>04</b><span>UPDATE LOG</span><i className={releaseNotesUnseen ? 'menu-new-badge' : ''} aria-hidden="true">{releaseNotesUnseen ? 'NEW' : '✦'}</i></button>
                   <button className={`menu-utility sf-btn ${soundEnabled ? 'on' : ''}`} type="button" onClick={toggleSound} disabled={!game} aria-pressed={soundEnabled} data-ui-sound="none"><b>05</b><span>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</span><i aria-hidden="true">{soundEnabled ? '♫' : '×'}</i></button>
                 </div>
               </nav>

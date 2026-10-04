@@ -1,6 +1,7 @@
 import type { AnimationEvent, CSSProperties } from 'react';
 
 const PATCHES = [
+  { tag: 'AURORA // OVERDRIVE', title: 'Vortex sky, resonance halo, and Stormchain combat HUD', detail: 'The night sky now breathes with animated nebulae and twinkling stars. A weapon-colored resonance halo responds to charge, kills erupt in chromatic shockwaves, and target integrity plus kill-chain feedback stay live in the HUD.' },
   { tag: 'WEATHER // MICROBURST', title: 'Wider cloud and 50× stronger outflow', detail: 'Doubled the cloud and cold-pool footprint and boosted sampled wind fivefold beyond the previous 10× scale. Live-particle indexed draws, lower cloud-update cadence, and rate-limited storm mist help heavy weather run lighter.' },
   { tag: 'LIGHTNING', title: 'Explosive ground-strike impacts', detail: 'Lightning impacts now bloom into a bright flash, expanding ground ring, and radial sparks for storm strikes and direct bolts. Impact bursts can be switched off or resized in Settings without changing damage.' },
   { tag: 'SETTINGS + DISPLAY', title: 'Tabbed controls and fullscreen deployment', detail: 'Reorganized the long settings sheet into Core, Visuals, Lightning, and Audio sections. Entering the arena requests fullscreen from the deployment click; if the browser declines, play continues windowed.' },
@@ -34,9 +35,9 @@ export function UpdateLog({ closing, onClose, onExited }: { closing: boolean; on
       <section data-panel="updates" className={`update-log-panel sf-panel relative z-[1] w-full max-w-[620px] max-h-[88vh] overflow-hidden p-5 sm:p-7 ${closing ? 'ui-panel-closing' : ''}`} aria-labelledby="update-log-title" aria-modal="true" role="dialog">
         <header className="flex items-start justify-between gap-4 border-b border-emerald-200/20 pb-4">
           <div>
-            <div className="font-orb text-[9px] tracking-[.28em] text-emerald-200/75">FIELD BULLETIN // 02 OCT 2026</div>
+            <div className="font-orb text-[9px] tracking-[.28em] text-emerald-200/75">FIELD BULLETIN // 04 OCT 2026</div>
             <h2 id="update-log-title" className="mt-1 font-orb text-xl sm:text-2xl tracking-[.12em] text-white">UPDATE LOG</h2>
-            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.8</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
+            <div className="mt-2 flex items-center gap-2"><span className="update-version font-orb">v1.5.9</span><span className="text-[9px] tracking-[.16em] text-white/45">ARENA SYSTEMS ONLINE</span></div>
           </div>
           <button className="sf-btn px-3 py-2 font-orb text-xs" onClick={onClose} data-ui-sound="close" aria-label="Close update log">CLOSE ×</button>
         </header>

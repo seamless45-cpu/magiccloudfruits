@@ -12,10 +12,11 @@ import { Bolt, boltStats, type BoltOpts } from './lightning';
 import { Enemy } from './enemies';
 import type { Effect, HitOpts, GraphicsSettings, ItemDef } from './types';
 import { ITEMS } from './items';
-import { V, rnd, slashMesh, Timed, Projectile, GEO, lightningImpact } from './effects';
+import { V, rnd, slashMesh, Timed, Projectile, GEO, lightningImpact, shockwave } from './effects';
 
 export const SKILL_KEYS = ['z', 'x', 'c', 'v', 'b', 'f', 'g', 'n', 'm', 'l', 'k', 'j'];
 export const MAX_ZOOM = 900, MIN_ZOOM = 4;
+const COMBO_WINDOW = 3.6;
 
 export const PRESETS: Record<GraphicsSettings['preset'], Partial<GraphicsSettings>> = {
   low: { resolution: 0.6, shadows: false, shadowRes: 1024, bloom: false, particles: 0.35, debris: 0.35, maxBolts: 60, clouds: 0.5, antialiasFxaa: false, drawDistance: 12000 },
@@ -47,10 +48,28 @@ export class Game {
   buffs: Record<string, number> = {};
   lightningCharge = 50; chargeT = 0;
   stats = { kills: 0, dmg: 0, dmgWin: [] as { t: number; d: number }[] };
+  combo = 0; comboTimer = 0; comboPeak = 0;
   fps = 60; fpsAcc = 0; fpsN = 0;
   private readonly interpolationStep = 1 / 60; private interpolationAccumulator = 0;
   private interpolationPlayerParts: THREE.Object3D[] = [];
   private interpolationEnemyParts: THREE.Object3D[][] = [];
+  private skyMaterial: THREE.ShaderMaterial | null = null;
+  private skyGeometry: THREE.BufferGeometry | null = null;
+  private readonly arenaEffectGeometries: THREE.BufferGeometry[] = [];
+  private readonly arenaEffectMaterials: THREE.Material[] = [];
+  private operatorAura: THREE.Group | null = null;
+  private operatorAuraRings: { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial; baseOpacity: number; phase: number; accent: number; baseScale: THREE.Vector3 }[] = [];
+  private operatorAuraShards: THREE.InstancedMesh | null = null;
+  private readonly operatorAuraBaseColor = new THREE.Color(0x59edff);
+  private readonly operatorAuraAccentColor = new THREE.Color(0xb86dff);
+  private readonly operatorAuraMatrix = new THREE.Matrix4();
+  private readonly operatorAuraPosition = new THREE.Vector3();
+  private readonly operatorAuraRotation = new THREE.Quaternion();
+  private readonly operatorAuraScale = new THREE.Vector3();
+  private readonly operatorAuraEuler = new THREE.Euler();
+  private operatorAuraShardMaterial: THREE.MeshBasicMaterial | null = null;
+  private operatorAuraGeometries: THREE.BufferGeometry[] = [];
+  private operatorAuraMaterials: THREE.Material[] = [];
   private interpolationPrevious: RenderPose | null = null; private interpolationCurrent: RenderPose | null = null;
   private settingsApplied = false; private bootFrameReported = false;
   private dynamicResolutionScale = 1; private dynamicResolutionClock = 0;
@@ -119,12 +138,45 @@ export class Game {
     const sc = this.sun.shadow.camera as THREE.OrthographicCamera; sc.left = -120; sc.right = 120; sc.top = 120; sc.bottom = -120; sc.far = 600; this.sun.shadow.bias = -0.0004;
     this.scene.add(this.sun, this.sun.target);
     this.flashLight = new THREE.PointLight(0xffffff, 0, 400, 1.2); this.scene.add(this.flashLight);
-    // sky dome
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
+    // The sky is a live aurora shader: slowly folding nebula bands and independently twinkling stars.
+    this.skyMaterial = new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { uTime: { value: 0 } },
       vertexShader: 'varying vec3 vp; void main(){ vp=position; vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.); gl_Position=p.xyww; }',
-      fragmentShader: 'varying vec3 vp; float starHash(vec3 p){ return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453); } void main(){ vec3 d=normalize(vp); float h=max(d.y,0.); vec3 zenith=vec3(.012,.022,.075), upper=vec3(.026,.12,.24), horizon=vec3(.14,.28,.39), violet=vec3(.17,.055,.31); float haze=pow(1.-h,3.2); vec3 col=mix(horizon,upper,smoothstep(0.,.38,h)); col=mix(col,zenith,smoothstep(.24,.9,h)); col=mix(col,violet,clamp(haze*.14,0.,.16)); vec3 sunDir=normalize(vec3(.43,.75,.50)); float mu=dot(d,sunDir); float halo=pow(max(mu,0.),22.)*.17+pow(max(mu,0.),110.)*.48; float disc=1.-smoothstep(.99988,.99995,mu); col+=vec3(.55,.88,1.)*(halo+disc*1.25); float ribbonCenter=.34+.055*sin(d.x*7.+d.z*11.)+.03*sin(d.x*21.-d.z*4.); float ribbon=exp(-pow((d.y-ribbonCenter)*18.,2.)); float ribbon2=exp(-pow((d.y-(ribbonCenter+.095))*25.,2.)); float spectrum=.5+.5*sin(d.x*16.+d.z*23.); col+=mix(vec3(.02,.34,.55),vec3(.32,.055,.58),spectrum)*(ribbon*.27+ribbon2*.12); vec3 starCell=floor(d*210.); float star=step(.9992,starHash(starCell)); col+=vec3(.55,.84,1.)*star*smoothstep(.08,.24,h)*.72; float under=clamp(-d.y,0.,1.); col=mix(col,horizon*.38,under*.55); gl_FragColor=vec4(col,1.); }' }));
+      fragmentShader: `
+        varying vec3 vp; uniform float uTime;
+        float starHash(vec3 p){ return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453); }
+        void main(){
+          vec3 d=normalize(vp); float h=max(d.y,0.);
+          vec3 zenith=vec3(.008,.014,.052), upper=vec3(.018,.075,.19), horizon=vec3(.12,.24,.37), violet=vec3(.12,.035,.25);
+          float haze=pow(1.-h,3.2); vec3 col=mix(horizon,upper,smoothstep(0.,.38,h));
+          col=mix(col,zenith,smoothstep(.24,.9,h)); col=mix(col,violet,clamp(haze*.14,0.,.16));
+          vec3 sunDir=normalize(vec3(.43,.75,.50)); float mu=dot(d,sunDir);
+          float halo=pow(max(mu,0.),22.)*.17+pow(max(mu,0.),110.)*.48;
+          float disc=1.-smoothstep(.99988,.99995,mu); col+=vec3(.55,.88,1.)*(halo+disc*1.25);
+          float t=uTime;
+          float ribbonCenter=.34+.055*sin(d.x*7.+d.z*11.+t*.026)+.03*sin(d.x*21.-d.z*4.-t*.018);
+          ribbonCenter+=.018*sin(d.x*15.+d.z*9.+t*.055);
+          float ribbon=exp(-pow((d.y-ribbonCenter)*18.,2.));
+          float ribbon2=exp(-pow((d.y-(ribbonCenter+.095+.012*sin(t*.04+d.x*8.)))*25.,2.));
+          float spectrum=.5+.5*sin(d.x*16.+d.z*23.+t*.035);
+          vec3 aurora=mix(vec3(.015,.30,.58),vec3(.42,.045,.62),spectrum);
+          col+=aurora*(ribbon*.34+ribbon2*.15);
+          float fold=sin(d.x*8.3+d.z*3.1+t*.021+sin(d.z*7.2-t*.017))*cos(d.z*8.7-d.x*4.1-t*.018);
+          float nebula=smoothstep(.24,.88,.52+fold*.42);
+          float nebulaMask=smoothstep(.02,.3,h)*(1.-smoothstep(.74,.98,h));
+          vec3 cloudTone=mix(vec3(.018,.095,.27),vec3(.3,.035,.33),.5+.5*sin(d.x*9.-d.z*6.+t*.018));
+          col+=cloudTone*nebula*nebulaMask*.2;
+          vec3 starCell=floor(d*210.); float star=step(.9992,starHash(starCell));
+          float sparkle=.72+.28*sin(t*2.7+starHash(starCell+vec3(17.))*6.28318);
+          col+=vec3(.55,.84,1.)*star*smoothstep(.08,.24,h)*.78*sparkle;
+          float under=clamp(-d.y,0.,1.); col=mix(col,horizon*.32,under*.55);
+          gl_FragColor=vec4(col,1.);
+        }`
+    });
+    this.skyGeometry = new THREE.SphereGeometry(1, 32, 16);
+    const sky = new THREE.Mesh(this.skyGeometry, this.skyMaterial);
     sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = -10;
-    sky.onBeforeRender = () => { sky.position.copy(this.camera.position); sky.updateMatrixWorld(true); };
+    sky.onBeforeRender = () => { this.skyMaterial!.uniforms.uTime.value = this.time; sky.position.copy(this.camera.position); sky.updateMatrixWorld(true); };
     this.scene.add(sky);
     // Alien alloy terrain: cool mineral patches under a subtle, distance-faded tactical lattice.
     const gmat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
@@ -225,16 +277,27 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
     }
     beaconMesh.instanceMatrix.needsUpdate = true; beaconMesh.frustumCulled = false; this.scene.add(beaconMesh);
     this.arenaField = new THREE.Group();
-    const ringMats = [
-      new THREE.MeshBasicMaterial({ color: 0x34eaff, transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false }),
-      new THREE.MeshBasicMaterial({ color: 0xc16dff, transparent: true, opacity: 0.24, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false }),
-    ];
-    for (let i = 0; i < 16; i++) {
-      const radius = 1294 + (i % 4) * 5, arc = 0.24 + (i % 3) * 0.08;
-      const segment = new THREE.Mesh(new THREE.TorusGeometry(radius, i % 4 === 0 ? 1.1 : 0.55, 4, 48, arc), ringMats[i % 2]);
-      segment.rotation.x = Math.PI / 2; segment.rotation.y = i * Math.PI / 8;
-      segment.position.y = 0.32 + (i % 2) * 0.12; segment.frustumCulled = false; this.arenaField.add(segment);
+    const circuitColors = [0x36eaff, 0x8a79ff, 0xdb72ff, 0x63ffc9];
+    for (let i = 0; i < 24; i++) {
+      const baseOpacity = i % 4 === 0 ? 0.42 : 0.23;
+      const mat = new THREE.MeshBasicMaterial({ color: circuitColors[i % circuitColors.length], transparent: true, opacity: baseOpacity, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false });
+      const radius = 1292 + (i % 5) * 4, arc = 0.22 + (i % 3) * 0.055;
+      const segmentGeometry = new THREE.TorusGeometry(radius, i % 4 === 0 ? 1.25 : 0.58, 4, 48, arc);
+      this.arenaEffectGeometries.push(segmentGeometry); this.arenaEffectMaterials.push(mat);
+      const segment = new THREE.Mesh(segmentGeometry, mat);
+      segment.rotation.x = Math.PI / 2; segment.rotation.y = i * Math.PI / 12;
+      segment.position.y = 0.28 + (i % 3) * 0.08; segment.frustumCulled = false;
+      segment.userData.pulseBase = baseOpacity; segment.userData.pulsePhase = i * 0.71;
+      this.arenaField.add(segment);
     }
+    const railGeo = new THREE.TorusGeometry(1290, 0.42, 4, 256).rotateX(Math.PI / 2);
+    this.arenaEffectGeometries.push(railGeo);
+    const railMats = [
+      new THREE.MeshBasicMaterial({ color: 0x43eaff, transparent: true, opacity: 0.075, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+      new THREE.MeshBasicMaterial({ color: 0xa975ff, transparent: true, opacity: 0.055, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+    ];
+    this.arenaEffectMaterials.push(...railMats);
+    railMats.forEach((mat, i) => { const rail = new THREE.Mesh(railGeo, mat); rail.position.y = 0.18 + i * 0.26; rail.frustumCulled = false; this.arenaField!.add(rail); });
     this.scene.add(this.arenaField);
     // Violet mesas silhouette the alien horizon beyond the playable containment ring.
     const mesaGeo = new THREE.DodecahedronGeometry(1,1), mesaMat = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:1, flatShading:true });
@@ -266,11 +329,67 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
     P.sword.position.set(0, -0.72, 0.1); P.sword.rotation.x = Math.PI / 2; P.rArm.add(P.sword);
     P.gun.position.set(0, -0.7, 0.18); P.rArm.add(P.gun);
     P.mesh.add(body, chest, core, neck, head, crest, shoulders, visor, P.rArm, P.lArm, l1, l2); P.legs = [l1, l2]; this.scene.add(P.mesh);
+    this.buildOperatorAura(P.mesh);
     // aim reticle
     this.aimRing = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.9, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x70f4ff, transparent: true, opacity: 0.78, depthWrite: false })); this.scene.add(this.aimRing);
     const lg = new THREE.BufferGeometry().setFromPoints([V(), V()]);
     this.aimLine = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0x61eaff, dashSize: 1, gapSize: 1, transparent: true, opacity: 0.4 })); this.aimLine.frustumCulled = false; this.scene.add(this.aimLine);
   }
+  private buildOperatorAura(parent: THREE.Group) {
+    const group = new THREE.Group(); group.name = 'operator-resonance'; group.position.y = 0.025;
+    const floorGeo = new THREE.TorusGeometry(1, 0.014, 4, 80).rotateX(Math.PI / 2);
+    const haloGeo = new THREE.TorusGeometry(1, 0.012, 4, 80);
+    const ringSpecs = [
+      { geo: floorGeo, color: 0x59edff, opacity: 0.32, phase: 0, accent: 0, pos: V(0, 0.01, 0), scale: V(1.12, 1.12, 1.12), rot: V() },
+      { geo: floorGeo, color: 0xa478ff, opacity: 0.2, phase: 2.2, accent: 1, pos: V(0, 0.055, 0), scale: V(0.82, 0.82, 0.82), rot: V(0, Math.PI / 4, 0) },
+      { geo: haloGeo, color: 0x83eaff, opacity: 0.22, phase: 0.8, accent: 0, pos: V(0, 1.05, 0), scale: V(0.56, 0.9, 0.56), rot: V(0, 0, 0) },
+      { geo: haloGeo, color: 0xd989ff, opacity: 0.16, phase: 2.8, accent: 1, pos: V(0, 1.05, 0), scale: V(0.56, 0.9, 0.56), rot: V(0, Math.PI / 2, 0) },
+    ];
+    this.operatorAuraGeometries.push(floorGeo, haloGeo);
+    for (const spec of ringSpecs) {
+      const material = new THREE.MeshBasicMaterial({ color: spec.color, transparent: true, opacity: spec.opacity, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+      const mesh = new THREE.Mesh(spec.geo, material); mesh.position.copy(spec.pos); mesh.scale.copy(spec.scale); mesh.rotation.set(spec.rot.x, spec.rot.y, spec.rot.z); mesh.frustumCulled = false;
+      group.add(mesh); this.operatorAuraRings.push({ mesh, material, baseOpacity: spec.opacity, phase: spec.phase, accent: spec.accent, baseScale: spec.scale.clone() });
+      this.operatorAuraMaterials.push(material);
+    }
+    const shardGeometry = new THREE.OctahedronGeometry(0.052, 0);
+    const shardMaterial = new THREE.MeshBasicMaterial({ color: 0x8ef7ff, transparent: true, opacity: 0.78, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+    const shards = new THREE.InstancedMesh(shardGeometry, shardMaterial, 9); shards.frustumCulled = false; shards.renderOrder = 6;
+    this.operatorAuraGeometries.push(shardGeometry); this.operatorAuraMaterials.push(shardMaterial);
+    this.operatorAuraShards = shards; this.operatorAuraShardMaterial = shardMaterial; group.add(shards);
+    parent.add(group); this.operatorAura = group;
+  }
+  private updateOperatorAura(dt: number) {
+    if (!this.operatorAura) return;
+    const charge = Math.max(0, Math.min(1, this.lightningCharge / 100));
+    const base = this.operatorAuraBaseColor.set(this.item ? this.item.color : 0x59edff);
+    const violet = this.operatorAuraAccentColor;
+    this.operatorAura.rotation.y += dt * (0.18 + charge * 0.74);
+    for (let i = 0; i < this.operatorAuraRings.length; i++) {
+      const ring = this.operatorAuraRings[i], pulse = 0.78 + Math.sin(this.time * (1.6 + i * 0.17) + ring.phase) * 0.22;
+      ring.material.color.copy(ring.accent ? violet : base);
+      ring.material.opacity = ring.baseOpacity * (0.55 + charge * 0.6) * pulse;
+      const scalePulse = 1 + Math.sin(this.time * (1.25 + i * 0.12) + ring.phase) * (0.012 + charge * 0.012);
+      ring.mesh.scale.copy(ring.baseScale).multiplyScalar(scalePulse);
+    }
+    if (this.operatorAuraShardMaterial) {
+      this.operatorAuraShardMaterial.color.copy(base).lerp(violet, 0.3 + charge * 0.35);
+      this.operatorAuraShardMaterial.opacity = 0.42 + charge * 0.38;
+    }
+    if (this.operatorAuraShards) {
+      const matrix = this.operatorAuraMatrix, position = this.operatorAuraPosition, rotation = this.operatorAuraRotation, scale = this.operatorAuraScale, euler = this.operatorAuraEuler;
+      for (let i = 0; i < this.operatorAuraShards.count; i++) {
+        const a = this.time * (0.5 + (i % 3) * 0.13) + i * Math.PI * 2 / this.operatorAuraShards.count;
+        const r = 0.82 + (i % 3) * 0.11, y = 0.36 + (i % 4) * 0.39 + Math.sin(this.time * 1.8 + i) * 0.08;
+        position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+        rotation.setFromEuler(euler.set(this.time * 0.9 + i, a, this.time * 1.3 - i * 0.4));
+        const shardScale = (1.6 + charge * 2.2) * (0.78 + 0.22 * Math.sin(this.time * 2.4 + i));
+        scale.setScalar(shardScale); matrix.compose(position, rotation, scale); this.operatorAuraShards.setMatrixAt(i, matrix);
+      }
+      this.operatorAuraShards.instanceMatrix.needsUpdate = true;
+    }
+  }
+
   setHeld(item: ItemDef | null) {
     const P = this.player; P.sword.clear(); P.gun.clear();
     if (!item) return;
@@ -599,10 +718,26 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
     if (this.damageIndicators.length > 28) this.damageIndicators.splice(0, this.damageIndicators.length - 28);
   }
   kill(e: Enemy) {
-    if (e.dead) return; e.dead = true; e.deadT = 0; e.hp = 0; this.stats.kills++;
+    if (e.dead) return;
+    this.combo = this.comboTimer > 0 ? this.combo + 1 : 1;
+    this.comboPeak = Math.max(this.comboPeak, this.combo); this.comboTimer = COMBO_WINDOW;
+    e.dead = true; e.deadT = 0; e.hp = 0; this.stats.kills++;
     this.audio.enemyDown(e.scale, e.kind === 'boss');
     this.lightningCharge = Math.min(100, this.lightningCharge + 10);
-    for (let i = 0; i < 16; i++) this.fx.spawn(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z, rnd(-6, 6), rnd(2, 10), rnd(-6, 6), 0x66ffe0, 0.5 * e.scale, rnd(0.4, 0.9), { grav: 10 });
+    const colors: Record<Enemy['kind'], number> = { normal: 0x54eaff, elite: 0xb77aff, boss: 0xff57c8, runner: 0xff795e, ranged: 0x69adff, brute: 0xffc45d };
+    const color = colors[e.kind], radius = e.kind === 'boss' ? 5.2 : Math.max(1.8, e.scale * 1.75);
+    shockwave(this, e.pos.clone(), radius, e.kind === 'boss' ? 1.05 : 0.58, color, e.kind === 'boss' ? 0.42 : 0.3, false);
+    const sparks = e.kind === 'boss' ? 36 : e.kind === 'elite' || e.kind === 'brute' ? 24 : 18;
+    for (let i = 0; i < sparks; i++) {
+      const angle = i * Math.PI * 2 / sparks + rnd(-0.08, 0.08), speed = rnd(3.5, 8.5) * Math.sqrt(e.scale);
+      this.fx.spawn(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z, Math.cos(angle) * speed, rnd(2, 9) * Math.sqrt(e.scale), Math.sin(angle) * speed,
+        i % 4 === 0 ? 0xffffff : color, 0.42 * e.scale, rnd(0.45, 0.95), { grav: 9, drag: 0.2 });
+    }
+    if (this.combo === 2 || this.combo === 5 || (this.combo >= 10 && this.combo % 10 === 0)) {
+      const title = this.combo >= 20 ? 'REALITY FRACTURE' : this.combo >= 10 ? 'STORM DOMINION' : this.combo >= 5 ? 'OVERDRIVE CHAIN' : 'STORMCHAIN';
+      const accent = this.combo >= 10 ? '#ff78d3' : this.combo >= 5 ? '#bd91ff' : '#79f2ff';
+      this.audio.uiSound('skill', Math.min(11, this.combo)); this.toast(`${title} · ×${this.combo}`, accent);
+    }
   }
   onEnemyLand(e: any) { if (e.onLand) { const f = e.onLand; e.onLand = null; f(e); } }
   enemyAttack(e: Enemy) {
@@ -817,8 +952,15 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
     this.time += dt;
     for (const indicator of this.damageIndicators) indicator.age += dt;
     this.damageIndicators = this.damageIndicators.filter(indicator => indicator.age < 0.9);
+    if (this.comboTimer > 0) { this.comboTimer = Math.max(0, this.comboTimer - dt); if (this.comboTimer === 0) this.combo = 0; }
     for (const cloud of this.cloudGroups) { cloud.position.x += dt * cloud.userData.drift; cloud.position.z += Math.sin(this.time * 0.08 + cloud.userData.phase) * dt * 0.7; cloud.rotation.y += dt * 0.002; }
-    if (this.arenaField) this.arenaField.rotation.y += dt * 0.012;
+    if (this.arenaField) {
+      this.arenaField.rotation.y += dt * 0.02;
+      for (const arc of this.arenaField.children) if (arc.userData.pulseBase !== undefined) {
+        ((arc as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = arc.userData.pulseBase * (0.66 + 0.34 * Math.sin(this.time * 2.15 + arc.userData.pulsePhase));
+      }
+    }
+    this.updateOperatorAura(dt);
     if (this.paused) { const P = this.player, tgt = V(P.pos.x, P.pos.y + 1.6, P.pos.z), cp = Math.cos(this.cam.pitch), sp = Math.sin(this.cam.pitch);
       if (this.firstPerson) { this.camera.position.set(P.pos.x, P.pos.y + 1.62, P.pos.z); this.camera.lookAt(this.camera.position.clone().add(V(-Math.sin(this.cam.yaw) * cp, -sp, -Math.cos(this.cam.yaw) * cp))); }
       else { this.camera.position.set(tgt.x + Math.sin(this.cam.yaw) * cp * this.cam.dist, tgt.y + sp * this.cam.dist, tgt.z + Math.cos(this.cam.yaw) * cp * this.cam.dist); this.camera.lookAt(tgt); }
@@ -911,11 +1053,13 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
   }
   snapshot() {
     const P = this.player; const dps = this.stats.dmgWin.reduce((a, b) => a + b.d, 0) / 3;
-    const ne = this.nearest(P.pos);
+    const ne = this.nearest(P.pos), target = this.nearest(this.aim, 46);
     return {
       hp: P.hp, maxHp: P.maxHp, kills: this.stats.kills, dps, total: this.stats.dmg, fps: this.fps,
       aimDist: Math.hypot(this.aim.x - P.pos.x, this.aim.z - P.pos.z), aim3D: this.aim.distanceTo(P.pos), camDist: this.camera.position.distanceTo(V(P.pos.x, P.pos.y + 1.6, P.pos.z)), zoomTarget: this.cam.targetDist,
       nearest: ne ? ne.pos.distanceTo(P.pos) : 0, alive: this.enemies.filter(e => !e.dead).length, equipped: this.equipped,
+      combo: this.combo, comboTimer: this.comboTimer, comboWindow: COMBO_WINDOW, comboPeak: this.comboPeak,
+      target: target ? { id: target.id, kind: target.kind, hp: Math.max(0, target.hp), maxHp: target.maxHp, distance: target.pos.distanceTo(P.pos) } : null,
       buffs: Object.entries(this.buffs).filter(([, v]) => v > this.time).map(([k, v]) => ({ k, rem: v - this.time })),
       charge: this.lightningCharge, bolts: boltStats.active, effects: this.effects.length, invincible: P.invincible > 0, pos: [P.pos.x, P.pos.z],
       damageIndicators: this.damageIndicators.flatMap((indicator) => {
@@ -930,9 +1074,13 @@ diffuseColor.rgb+=vec3(.012,.15,.23)*(minorLine*.16+majorLine*.38)*gridFade;`);
     window.removeEventListener('resize', this.resize); window.removeEventListener('keydown', this.onKeyDown); window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('pointermove', this.onPointerMove); window.removeEventListener('pointerup', this.onPointerUp);
     this.audio.dispose();
-    // Restore instanced source geometries before their owners dispose them; MotionVectorPass
-    // owns only the per-mesh history clones it adds for previous-instance transforms.
+    // Restore motion-vector geometry state before disposing the operator's custom instances.
     this.motionVectors.dispose(); this.hail.dispose();
+    this.operatorAuraGeometries.forEach(geometry => geometry.dispose());
+    this.operatorAuraMaterials.forEach(material => material.dispose());
+    this.skyGeometry?.dispose(); this.skyMaterial?.dispose();
+    this.arenaEffectGeometries.forEach(geometry => geometry.dispose());
+    this.arenaEffectMaterials.forEach(material => material.dispose());
     for (const pass of this.composer.passes as Array<any>) if (pass !== this.motionVectors) pass.dispose?.();
     this.composer.dispose(); this.renderer.dispose(); this.renderer.domElement.remove();
   }
