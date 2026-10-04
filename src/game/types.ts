@@ -40,6 +40,7 @@ export interface GraphicsSettings {
   particles: number; debris: number; maxBolts: number; fog: boolean; exposure: number;
   shake: number; positionShake: boolean; rotationShake: boolean; showFps: boolean; antialiasFxaa: boolean;
   frameInterpolation: boolean; frameInterpolationMethod: 'linear' | 'frameHold'; motionBlur: boolean; motionBlurStrength: number;
-  lightningSegments: number; lightningJitter: number; lightningBranches: number; lightningJaggedness: number; lightningWidth: number; lightningHeight: number;
+  lightningSegments: number; lightningRealignInterval: number; lightningJitter: number; lightningBranches: number; lightningJaggedness: number; lightningWidth: number; lightningHeight: number;
+  lightningImpactEffects: boolean; lightningImpactScale: number;
   drawDistance: number; clouds: number;
 }

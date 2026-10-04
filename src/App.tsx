@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type AnimationEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent, type AnimationEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { Game, PRESETS, defaultSettings } from './game/Game';
 import type { GraphicsSettings } from './game/types';
 import type { UiSoundKind } from './game/audio';
@@ -7,7 +7,12 @@ import { Inventory, Settings, MobileControls, ZoomControl } from './ui/Panels';
 import { UpdateLog } from './ui/UpdateLog';
 
 type Snap = ReturnType<Game['snapshot']>;
+type BeforeInstallPrompt = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+};
 const fmt = (n: number) => (n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n.toFixed(0));
+const TARGET_LABELS: Record<string, string> = { normal: 'CLOUD WRAITH', elite: 'STORM ELITE', boss: 'APEX TITAN', runner: 'GALE STALKER', ranged: 'STORM CASTER', brute: 'CLOUDBREAKER' };
 const reportBoot = (progress: number, phase: string, message: string) => {
   (window as any).__arenaBootUpdate?.(progress, phase, message);
 };
@@ -47,12 +52,15 @@ const clampSettings = (raw: unknown): GraphicsSettings => {
     frameInterpolationMethod: s.frameInterpolationMethod === 'frameHold' ? 'frameHold' : 'linear',
     motionBlur: bool(s.motionBlur, d.motionBlur),
     motionBlurStrength: num(s.motionBlurStrength, 0.4, 0.86, d.motionBlurStrength),
-    lightningSegments: num(s.lightningSegments, 6, 36, d.lightningSegments),
+    lightningSegments: num(s.lightningSegments, 6, 48, d.lightningSegments),
+    lightningRealignInterval: num(s.lightningRealignInterval, 0.005, 0.1, d.lightningRealignInterval),
     lightningJitter: num(s.lightningJitter, 0, 2.5, d.lightningJitter),
     lightningBranches: num(s.lightningBranches, 0, 6, d.lightningBranches),
     lightningJaggedness: num(s.lightningJaggedness, 0.1, 3, d.lightningJaggedness),
     lightningWidth: num(s.lightningWidth, 0.4, 2.5, d.lightningWidth),
     lightningHeight: num(s.lightningHeight, 0.5, 2.5, d.lightningHeight),
+    lightningImpactEffects: bool(s.lightningImpactEffects, d.lightningImpactEffects),
+    lightningImpactScale: num(s.lightningImpactScale, 0.5, 2.5, d.lightningImpactScale),
     drawDistance: num(s.drawDistance, 1000, 60000, d.drawDistance),
     clouds: num(s.clouds, 0.3, 1.5, d.clouds),
   };
@@ -72,6 +80,12 @@ const safeRequested = () => {
   return p.endsWith('/safe') || p.endsWith('/arena') || new URLSearchParams(location.search).has('safe');
 };
 
+const UPDATE_LOG_VERSION = '1.5.9';
+const initialUpdateLogVisibility = () => {
+  try { return localStorage.getItem('f1090seenUpdateLog') !== UPDATE_LOG_VERSION; }
+  catch { return true; }
+};
+
 const initialSettings = (): GraphicsSettings => {
   try {
     if (safeRequested()) return safeSettings();
@@ -82,6 +96,15 @@ const initialSettings = (): GraphicsSettings => {
   }
 };
 
+const initialMasterVolume = () => {
+  try {
+    const stored = localStorage.getItem('f1090masterVolume');
+    if (stored === null) return 1;
+    const value = Number(stored);
+    return Number.isFinite(value) ? Math.max(0, Math.min(2, value)) : 1;
+  } catch { return 1; }
+};
+
 export default function App() {
   const host = useRef<HTMLDivElement>(null); const overlay = useRef<HTMLDivElement>(null);
   const [game, setGame] = useState<Game | null>(null);
@@ -89,7 +112,8 @@ export default function App() {
   const [settings, setSettings] = useState<GraphicsSettings>(initialSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [closingSettings, setClosingSettings] = useState(false);
-  const [showUpdates, setShowUpdates] = useState(false);
+  const [showUpdates, setShowUpdates] = useState(initialUpdateLogVisibility);
+  const [releaseNotesUnseen, setReleaseNotesUnseen] = useState(initialUpdateLogVisibility);
   const [closingUpdates, setClosingUpdates] = useState(false);
   const [showTitle, setShowTitle] = useState(true);
   const [leavingTitle, setLeavingTitle] = useState(false);
@@ -97,17 +121,20 @@ export default function App() {
   const [guiClosing, setGuiClosing] = useState(false);
   const [help, setHelp] = useState(true);
   const [helpClosing, setHelpClosing] = useState(false);
+  const [showMenuControls, setShowMenuControls] = useState(false);
   const settingsOpenRef = useRef(showSettings); settingsOpenRef.current = showSettings;
   const settingsClosingRef = useRef(closingSettings); settingsClosingRef.current = closingSettings;
   const helpOpenRef = useRef(help); helpOpenRef.current = help;
   const helpClosingRef = useRef(helpClosing); helpClosingRef.current = helpClosing;
   const [showTelemetry, setShowTelemetry] = useState(true);
-  const [toasts, setToasts] = useState<{ id: number; m: string; c: string }[]>([]);
+  const [closingTelemetry, setClosingTelemetry] = useState(false);
+  const [toasts, setToasts] = useState<{ id: number; m: string; c: string; leaving: boolean }[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(() => !!document.fullscreenElement || !!(document as any).webkitFullscreenElement);
   const [fullscreenError, setFullscreenError] = useState('');
   const [musicName, setMusicName] = useState('');
+  const [masterVolume, setMasterVolumeValue] = useState<number>(initialMasterVolume);
   const [musicVolume, setMusicVolumeValue] = useState(0.35);
   const [musicRate, setMusicRateValue] = useState(1);
   const [musicDuration, setMusicDuration] = useState(0);
@@ -115,9 +142,53 @@ export default function App() {
   const [musicTrimEnd, setMusicTrimEndValue] = useState(0);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicError, setMusicError] = useState('');
+  const [installPromptReady, setInstallPromptReady] = useState(false);
+  const [appInstalled, setAppInstalled] = useState(false);
+  const [installMessage, setInstallMessage] = useState('');
+  const installPrompt = useRef<BeforeInstallPrompt | null>(null);
   const lastControlSoundAt = useRef(0);
   const musicRequestId = useRef(0);
-  const toggleSound = () => { const next=!soundEnabled; game?.audio.setEnabled(next); setSoundEnabled(next); if (next) game?.audio.uiSound('toggle'); };
+  const toggleSound = () => { const next=!soundEnabled; if (!next) game?.audio.uiSound('toggle'); game?.audio.setEnabled(next); setSoundEnabled(next); if (next) game?.audio.uiSound('toggle'); };
+  useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || !!(navigator as Navigator & { standalone?: boolean }).standalone;
+    setAppInstalled(isStandalone);
+    const onBeforeInstallPrompt = (event: Event) => {
+      const installEvent = event as BeforeInstallPrompt;
+      if (typeof installEvent.prompt !== 'function') return;
+      event.preventDefault();
+      installPrompt.current = installEvent;
+      (window as any).__magicCloudInstallPrompt = installEvent;
+      setInstallPromptReady(true);
+    };
+    const onAppInstalled = () => {
+      installPrompt.current = null;
+      (window as any).__magicCloudInstallPrompt = null;
+      setInstallPromptReady(false);
+      setAppInstalled(true);
+      setInstallMessage('MagicCloud is installed. Launch it from your apps any time.');
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt as EventListener);
+    window.addEventListener('appinstalled', onAppInstalled);
+    const earlyInstallPrompt = (window as any).__magicCloudInstallPrompt as BeforeInstallPrompt | null;
+    if (!isStandalone && earlyInstallPrompt && typeof earlyInstallPrompt.prompt === 'function') {
+      installPrompt.current = earlyInstallPrompt;
+      setInstallPromptReady(true);
+    }
+
+    const localSecureHost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+    const viteDevEntry = !!document.querySelector('script[src*="/src/main.tsx"]');
+    if (!viteDevEntry && 'serviceWorker' in navigator && (window.isSecureContext || localSecureHost)) {
+      const workerUrl = new URL('./sw.js', window.location.href);
+      const scopeUrl = new URL('./', window.location.href);
+      navigator.serviceWorker.register(workerUrl, { scope: scopeUrl.pathname })
+        .catch(error => console.info('[MagicCloud] Offline support is unavailable on this origin.', error));
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt as EventListener);
+      window.removeEventListener('appinstalled', onAppInstalled);
+    };
+  }, []);
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(!!document.fullscreenElement || !!(document as any).webkitFullscreenElement);
     document.addEventListener('fullscreenchange', syncFullscreen);
@@ -142,7 +213,9 @@ export default function App() {
       }
       setFullscreenError('');
     } catch (error) {
-      setFullscreenError(error instanceof Error ? error.message : 'Fullscreen could not be changed.');
+      const message = error instanceof Error ? error.message : 'Fullscreen could not be changed.';
+      setFullscreenError(message);
+      game?.toast('FULLSCREEN UNAVAILABLE — CONTINUING WINDOWED', '#ffd28b');
     }
   };
   const loadMusicFile = (file: File) => {
@@ -158,7 +231,13 @@ export default function App() {
       if (requestId === musicRequestId.current) setMusicError(error instanceof Error ? error.message : 'This media file could not be played.');
     });
   };
+  const changeMasterVolume = (value: number) => {
+    const next = Math.max(0, Math.min(2, Number.isFinite(value) ? value : 1));
+    setMasterVolumeValue(next); game?.audio.setMasterVolume(next);
+    try { localStorage.setItem('f1090masterVolume', String(next)); } catch { /* optional preference persistence */ }
+  };
   const changeMusicVolume = (value: number) => { const next = Math.max(0, Math.min(1, value)); setMusicVolumeValue(next); game?.audio.setMusicVolume(next); };
+  useEffect(() => { game?.audio.setMasterVolume(masterVolume); }, [game, masterVolume]);
   const changeMusicRate = (value: number) => { const next = Math.max(0.5, Math.min(1.5, value)); setMusicRateValue(next); game?.audio.setMusicPlaybackRate(next); };
   const changeMusicTrimStart = (value: number) => {
     const start = Math.max(0, Math.min(musicDuration - 0.1, Math.round(value * 10) / 10));
@@ -177,7 +256,37 @@ export default function App() {
   };
   const enterArena = () => {
     if (!game || leavingTitle) return;
-    game.audio.unlock(); game.paused = false; setLeavingTitle(true);
+    // Fullscreen is user-gesture gated by browsers, so request it on the deployment click.
+    // A denial is non-fatal: continue into the arena in a normal window.
+    if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) void toggleFullscreen();
+    game.audio.unlock(); game.audio.setArenaMode(true); game.paused = false; setLeavingTitle(true);
+  };
+  const installApp = async () => {
+    setInstallMessage('');
+    if (appInstalled) return;
+    const promptEvent = installPrompt.current;
+    if (!promptEvent) {
+      const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      setInstallMessage(isIos
+        ? 'On iPhone or iPad: open Share, then choose “Add to Home Screen”.'
+        : 'In Chrome, open ⋮ and choose “Install MagicCloud” (or “Install page as app”).');
+      return;
+    }
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      setInstallMessage(choice.outcome === 'accepted'
+        ? 'Install accepted. MagicCloud will appear in your apps.'
+        : 'Install dismissed. You can install later from the browser menu.');
+      if (choice.outcome === 'accepted') setAppInstalled(true);
+    } catch (error) {
+      console.info('[MagicCloud] The browser install prompt could not be opened.', error);
+      setInstallMessage('Open the browser menu and choose “Install MagicCloud” to add the app.');
+    } finally {
+      installPrompt.current = null;
+      (window as any).__magicCloudInstallPrompt = null;
+      setInstallPromptReady(false);
+    }
   };
   const onUiClickCapture = (e: MouseEvent<HTMLDivElement>) => {
     const button = (e.target as HTMLElement).closest('button');
@@ -202,10 +311,35 @@ export default function App() {
   const finishSettingsClose = () => { setShowSettings(false); setClosingSettings(false); };
   const openUpdates = () => { setClosingUpdates(false); setShowUpdates(true); };
   const closeUpdates = () => { if (showUpdates) setClosingUpdates(true); };
-  const finishUpdatesClose = () => { setShowUpdates(false); setClosingUpdates(false); };
+  const finishUpdatesClose = () => {
+    setShowUpdates(false); setClosingUpdates(false); setReleaseNotesUnseen(false);
+    try { localStorage.setItem('f1090seenUpdateLog', UPDATE_LOG_VERSION); } catch { /* optional release-note preference */ }
+  };
   const toggleHelp = () => { if (help && !helpClosing) setHelpClosing(true); else { setHelpClosing(false); setHelp(true); } };
+  const toggleMenuControls = () => setShowMenuControls(value => !value);
   const toggleGui = () => { if (showGui) { setGuiClosing(true); if (showSettings) closeSettings(); } else { setShowGui(true); setGuiClosing(false); } };
   const onGuiCloseAnimationEnd = (e: AnimationEvent<HTMLDivElement>) => { if (e.target === e.currentTarget && guiClosing) { setShowGui(false); setGuiClosing(false); } };
+  const toggleTelemetry = () => {
+    if (showTelemetry) setClosingTelemetry(value => !value);
+    else { setClosingTelemetry(false); setShowTelemetry(true); }
+  };
+  const onTelemetryAnimationEnd = (e: AnimationEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && closingTelemetry && e.animationName === 'ui-panel-retract') {
+      setShowTelemetry(false); setClosingTelemetry(false);
+    }
+  };
+  const moveMenuCard = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const x = Math.max(-0.5, Math.min(0.5, (e.clientX - box.left) / box.width - 0.5));
+    const y = Math.max(-0.5, Math.min(0.5, (e.clientY - box.top) / box.height - 0.5));
+    e.currentTarget.style.setProperty('--menu-tilt-x', `${(x * 3.2).toFixed(2)}deg`);
+    e.currentTarget.style.setProperty('--menu-tilt-y', `${(-y * 3.2).toFixed(2)}deg`);
+  };
+  const resetMenuCard = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.currentTarget.style.setProperty('--menu-tilt-x', '0deg');
+    e.currentTarget.style.setProperty('--menu-tilt-y', '0deg');
+  };
 
   useEffect(() => {
     // Keep the HTML safety loader in place until Game reports its first successful render.
@@ -221,7 +355,7 @@ export default function App() {
     window.addEventListener('arena-ready', onReady, { once: true });
     if ((window as any).__arenaBootReady) finish();
     if (fatal) {
-      reportBoot((window as any).__arenaBootProgress ?? 6, 'ERROR', 'Renderer could not start · showing diagnostics');
+      reportBoot((window as any).__arenaBootProgress ?? 0, 'ERROR', 'Renderer could not start · showing diagnostics');
       finish();
     }
     return () => window.removeEventListener('arena-ready', onReady);
@@ -229,7 +363,7 @@ export default function App() {
 
   useEffect(() => {
     // Pre-flight: three.js r150+ needs WebGL2. Report precisely what is missing instead of a black screen.
-    reportBoot(34, 'GPU CHECK', 'Checking WebGL2 support');
+    reportBoot(24, 'GPU CHECK', 'Checking WebGL2 support');
     const probe = document.createElement('canvas');
     const gl2 = probe.getContext('webgl2') as WebGL2RenderingContext | null;
     if (!gl2) {
@@ -237,7 +371,7 @@ export default function App() {
       setFatal(`WebGL2 context unavailable (WebGL1 ${gl1 ? 'present' : 'absent'}) · ${navigator.userAgent}`);
       return;
     }
-    reportBoot(52, 'GPU READY', 'WebGL2 available · preparing the arena renderer');
+    reportBoot(42, 'GPU READY', 'WebGL2 available · preparing the arena renderer');
     try { (gl2.getExtension('WEBGL_lose_context') as { loseContext?: () => void } | null)?.loseContext?.(); } catch { /* ignore */ }
     const onErr = (e: ErrorEvent) => setFatal(f => f ?? `Uncaught error: ${e.message || 'unknown'} (${e.filename}:${e.lineno})`);
     const onRej = (e: PromiseRejectionEvent) => setFatal(f => f ?? `Unhandled rejection: ${String((e as PromiseRejectionEvent).reason)}`);
@@ -249,12 +383,26 @@ export default function App() {
       return;
     }
     g.onFatal = m => setFatal(`Render loop stopped — ${m}`);
-    reportBoot(78, 'WORLD BUILT', 'Arena systems assembled · waiting for first frame');
+    reportBoot(76, 'WORLD BUILT', 'Arena systems assembled · waiting for first frame');
     setGame(g); (window as any).game = g;
     let tid = 0;
-    g.onToast = (m, c) => { const id = ++tid; setToasts(t => [...t.slice(-4), { id, m, c }]); setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2200); };
+    g.onToast = (m, c) => {
+      const id = ++tid;
+      setToasts(t => [...t.slice(-4), { id, m, c, leaving: false }]);
+      setTimeout(() => setToasts(t => t.map(x => x.id === id ? { ...x, leaving: true } : x)), 1850);
+      setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2150);
+    };
     const iv = setInterval(() => setSnap(g.snapshot()), 100);
-    let raf = 0; const ov = () => { raf = requestAnimationFrame(ov); if (overlay.current) { overlay.current.style.background = g.overlay.color; overlay.current.style.opacity = String(Math.min(0.85, g.overlay.a)); } }; ov();
+    let raf = 0, lastOverlayColor = '', lastOverlayOpacity = -1;
+    const ov = () => {
+      raf = requestAnimationFrame(ov);
+      const el = overlay.current;
+      if (!el) return;
+      if (g.overlay.color !== lastOverlayColor) { el.style.background = g.overlay.color; lastOverlayColor = g.overlay.color; }
+      const opacity = Math.min(0.85, g.overlay.a);
+      if (Math.abs(opacity - lastOverlayOpacity) > 0.002) { el.style.opacity = String(opacity); lastOverlayOpacity = opacity; }
+    };
+    ov();
     const kd = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === 'o' || e.key === 'O') {
         if (settingsOpenRef.current && !settingsClosingRef.current) { g.audio.uiSound('close'); setClosingSettings(true); }
@@ -299,7 +447,7 @@ export default function App() {
           </div>
           {/* Left rail: vitals and controls stack in one column, so they cannot overlap */}
           <div className="absolute left-2 top-2 hud-rail-left w-[250px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
-          <div data-panel="vitals" className="sf-panel p-2.5 w-full shrink-0 pointer-events-auto">
+          <div data-panel="vitals" className={`sf-panel p-2.5 w-full shrink-0 pointer-events-auto ${snap.hp / snap.maxHp <= 0.25 ? 'hp-critical' : ''}`}>
             <div className="flex justify-between items-baseline"><span className="font-orb text-[11px] sf-glow text-cyan-200">MAGIC CLOUD // OPERATOR</span>{settings.sandbox && <span className="text-[9px] font-orb text-emerald-200 sandbox-tag">SANDBOX</span>}{snap.invincible && <span className="text-[9px] font-orb text-yellow-200">INVULN</span>}</div>
             <div className="hex-bar mt-1.5"><div className="h-full" style={{ width: `${(snap.hp / snap.maxHp) * 100}%`, background: 'linear-gradient(90deg,#16ffb0,#33e0ff)', boxShadow: '0 0 10px #33e0ff' }} /></div>
             <div className="flex justify-between text-[10px] mt-0.5 font-orb text-cyan-100/80"><span>HP {fmt(snap.hp)} / {fmt(snap.maxHp)}</span><span>{((snap.hp / snap.maxHp) * 100).toFixed(0)}%</span></div>
@@ -311,6 +459,17 @@ export default function App() {
             {item?.id === 'gblade' && <div className="mt-1.5"><div className="flex justify-between text-[9px] font-orb text-violet-200"><span>LIGHTNING CHARGE</span><span>{snap.charge.toFixed(0)}%</span></div><div className="hex-bar"><div className="h-full" style={{ width: `${snap.charge}%`, background: 'linear-gradient(90deg,#7a5cff,#e080ff)', boxShadow: '0 0 8px #b080ff' }} /></div></div>}
             {snap.buffs.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{snap.buffs.map(b => <span key={b.k} className="text-[9px] font-orb px-1.5 py-0.5 border border-rose-300/50 bg-rose-500/15 text-rose-100">{b.k.toUpperCase()} {b.rem.toFixed(1)}s</span>)}</div>}
           </div>
+          {snap.target && <section className={`target-lock-card sf-panel target-lock-${snap.target.kind}`} aria-label={`Target locked: ${TARGET_LABELS[snap.target.kind] ?? snap.target.kind}`}>
+            <div className="target-lock-top"><span><i /> NEURAL LOCK</span><b>#{String(snap.target.id).padStart(3, '0')}</b></div>
+            <div className="target-lock-title"><strong>{TARGET_LABELS[snap.target.kind] ?? snap.target.kind.toUpperCase()}</strong><span>{snap.target.distance.toFixed(0)}m</span></div>
+            <div className="target-lock-bar" role="progressbar" aria-label={`${TARGET_LABELS[snap.target.kind] ?? snap.target.kind} integrity`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.max(0, Math.min(100, snap.target.hp / snap.target.maxHp * 100)))}><i style={{ width: `${Math.max(0, Math.min(100, snap.target.hp / snap.target.maxHp * 100))}%` }} /></div>
+            <div className="target-lock-meta"><span>INTEGRITY</span><b>{Math.round(Math.max(0, Math.min(100, snap.target.hp / snap.target.maxHp * 100)))}%</b></div>
+          </section>}
+          {showGui && !guiClosing && snap.combo > 1 && <div key={snap.combo} className={`stormchain-sigil stormchain-tier-${Math.min(4, Math.floor(snap.combo / 5) + 1)}`} role="status" aria-live="polite" aria-atomic="true">
+            <div className="stormchain-kicker"><i />CHAIN LOCKED <span>PEAK ×{snap.comboPeak}</span></div>
+            <div className="stormchain-main"><strong>×{snap.combo}</strong><span>{snap.combo >= 20 ? 'REALITY FRACTURE' : snap.combo >= 10 ? 'STORM DOMINION' : snap.combo >= 5 ? 'OVERDRIVE CHAIN' : 'STORMCHAIN'}</span></div>
+            <div className="stormchain-meter"><i style={{ width: `${Math.max(0, Math.min(100, snap.comboTimer / snap.comboWindow * 100))}%` }} /></div>
+          </div>}
           {help && !touch && (
             <div data-panel="controls" className={`sf-panel p-2.5 w-full text-[10.5px] leading-snug pointer-events-auto ui-scroll min-h-0 ${helpClosing ? 'ui-panel-closing' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && helpClosing) { setHelp(false); setHelpClosing(false); } }}>
               <div className="flex justify-between font-orb text-[10px] text-cyan-200 mb-1"><span>CONTROLS</span><button className="sf-btn px-1" onClick={toggleHelp} data-ui-sound="close">✕</button></div>
@@ -325,8 +484,8 @@ export default function App() {
           </div>
           {/* Right rail: telemetry, skills and zoom stack in one column, so they cannot overlap */}
           <div className="absolute right-2 top-2 hud-rail-right w-[236px] max-sm:w-[44vw] flex flex-col gap-2 pointer-events-none" style={{ bottom: 'var(--hud-bottom)' }}>
-          <button className="telemetry-toggle sf-btn self-end pointer-events-auto font-orb" onClick={() => setShowTelemetry(v => !v)} aria-expanded={showTelemetry} aria-label={showTelemetry ? 'Hide range telemetry' : 'Show range telemetry'}>{showTelemetry ? 'RANGE ▾' : 'RANGE ▸'}</button>
-          {showTelemetry && <div data-panel="telemetry" className="sf-panel telemetry-panel p-2 w-full text-[9px] shrink-0 pointer-events-auto">
+          <button className="telemetry-toggle sf-btn self-end pointer-events-auto font-orb" onClick={toggleTelemetry} aria-expanded={showTelemetry && !closingTelemetry} aria-label={showTelemetry && !closingTelemetry ? 'Hide range telemetry' : 'Show range telemetry'}>{showTelemetry && !closingTelemetry ? 'RANGE ▾' : 'RANGE ▸'}</button>
+          {showTelemetry && <div data-panel="telemetry" className={`sf-panel telemetry-panel p-2 w-full text-[9px] shrink-0 pointer-events-auto ${closingTelemetry ? 'ui-panel-closing' : ''}`} onAnimationEnd={onTelemetryAnimationEnd}>
             <div className="telemetry-head"><span className="font-orb text-[10px] sf-glow text-cyan-200">FIELD TELEMETRY</span>{settings.showFps && <span className="font-orb telemetry-fps" style={{ color:snap.fps>45?'#a8d8a4':snap.fps>25?'#e5d49f':'#d99183' }}>{snap.fps} FPS · {snap.bolts}B · {snap.effects}FX</span>}</div>
             <div className="telemetry-grid">
               <div className="telemetry-cell"><span>AIM GND</span><b>{snap.aimDist.toFixed(1)}m</b></div>
@@ -340,12 +499,12 @@ export default function App() {
               <button className="sf-btn font-orb" onClick={openSettings} data-ui-sound="open" title="Settings" aria-label="Settings">SET</button>
               <button className={`sf-btn font-orb ${game.firstPerson ? 'on' : ''}`} onClick={() => game.toggleFirstPerson()} title="Toggle first/third person" aria-label="Toggle camera">{game.firstPerson?'FP':'TP'}</button>
               <button className="sf-btn font-orb" onClick={toggleHelp} data-ui-sound="toggle" title="Controls" aria-label="Controls">HELP</button>
-              <button className={`sf-btn font-orb ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} title={soundEnabled?'Mute weather audio':'Enable weather audio'} aria-label={soundEnabled?'Mute weather audio':'Enable weather audio'}>SND</button>
+              <button className={`sf-btn font-orb ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} data-ui-sound="none" title={soundEnabled?'Mute all game audio':'Enable all game audio'} aria-label={soundEnabled?'Mute all game audio':'Enable all game audio'}>SND</button>
             </div>
           </div>}
           {/* Toasts */}
           <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1">
-            {toasts.map(t => <div key={t.id} className="toast-in sf-panel px-4 py-1 font-orb text-[11px] tracking-widest" style={{ color: t.c, textShadow: `0 0 10px ${t.c}` }}>{t.m}</div>)}
+            {toasts.map(t => <div key={t.id} className={`toast-in sf-panel px-4 py-1 font-orb text-[11px] tracking-widest ${t.leaving ? 'toast-out' : ''}`} style={{ color: t.c, textShadow: `0 0 10px ${t.c}` }}>{t.m}</div>)}
           </div>
           <SkillBar game={game} equipped={snap.equipped} touch={touch} />
           <ZoomControl game={game} zoom={snap.zoomTarget} />
@@ -354,47 +513,75 @@ export default function App() {
           {!item && <div className="absolute left-1/2 -translate-x-1/2 font-orb text-[10px] text-cyan-200/70 sf-glow" style={{ bottom: 'calc(var(--hud-bottom) + 4px)' }}>SELECT A FRUIT OR SWORD FROM INVENTORY {touch ? '' : '(1-9, 0, -)'}</div>}
           {touch && item && <div className="mobile-tap-hint absolute left-1/2 -translate-x-1/2 font-orb text-[9px] text-cyan-100/75" style={{ bottom: 'calc(var(--hud-bottom) + 4px)' }}>TAP SCREEN TO ATTACK</div>}
           {touch && <MobileControls game={game} />}
-          {/* crosshair */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 opacity-60"><div className="absolute left-1/2 top-0 bottom-0 w-px bg-cyan-300" /><div className="absolute top-1/2 left-0 right-0 h-px bg-cyan-300" /></div>
-        </div>
-      )}
-      {showTitle && !fatal && (
-        <div className={`title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto ${leavingTitle ? 'title-screen-exit' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && leavingTitle) setShowTitle(false); }}>
-          <div className="title-card main-menu-card sf-panel w-full max-w-[780px] p-5 sm:p-8">
-            <header className="menu-header flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3"><div className="title-mark"><span>MC</span><i /></div><div><p className="font-orb text-[9px] tracking-[.3em] text-cyan-100/60">OPEN FIELD // OPERATIONS</p><p className="mt-1 text-[10px] text-cyan-100/40">COMBAT SIMULATION · EST. 2026</p></div></div>
-              <div className="menu-release font-orb text-[9px]">BUILD 1.5.0 <span>●</span></div>
-            </header>
-            <div className="title-rule my-5" />
-            <div className="menu-columns grid grid-cols-1 md:grid-cols-[1.1fr_.9fr] gap-6 md:gap-8">
-              <section className="menu-brief min-w-0">
-                <p className="menu-kicker font-orb text-[9px] tracking-[.28em] text-amber-200/80">FIELD COMMAND // READY</p>
-                <h1 className="mt-3 font-orb text-4xl sm:text-6xl font-bold leading-none tracking-[.08em] text-white sf-glow">MAGIC<br/><span className="menu-title-second">CLOUD</span></h1>
-                <p className="mt-4 max-w-sm text-sm leading-relaxed text-cyan-50/65">Choose your power. Read the weather. Take the arena.</p>
-                <div className="menu-readouts mt-6 grid grid-cols-3 gap-2">
-                  <div><b>FIELD</b><span>OPEN</span></div><div><b>WEATHER</b><span>LIVE</span></div><div><b>HOSTILES</b><span>ACTIVE</span></div>
-                </div>
-                <div className="menu-threat-strip mt-3 flex items-center gap-2"><span className="menu-threat-lamp"/><span>NEW THREATS IDENTIFIED</span><b>STALKER · CASTER · BRUTE</b></div>
-                {help && <p className={`menu-control-note mt-5 text-[9px] leading-relaxed text-cyan-100/45 ${helpClosing ? 'ui-panel-closing' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && helpClosing) { setHelp(false); setHelpClosing(false); } }}>WASD MOVE · SHIFT RUN · SPACE JUMP · RMB ORBIT · LMB ATTACK · Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</p>}
-              </section>
-              <nav className="menu-actions flex flex-col gap-2" aria-label="Main menu">
-                <p className="font-orb mb-1 text-[9px] tracking-[.2em] text-cyan-100/45">SELECT OPERATION</p>
-                <button className="play-btn menu-enter w-full px-4 py-4 text-left" onClick={enterArena} data-ui-sound="transition" disabled={!game || leavingTitle}>
-                  <span className="menu-action-index">01 / DEPLOY</span><strong className="block mt-1 font-orb text-base tracking-[.16em]">{leavingTitle ? 'ENTERING ARENA' : 'ENTER ARENA'} <span className="float-right">↗</span></strong><small className="mt-1 block text-[9px] tracking-[.08em]">DROP INTO THE OPEN FIELD</small>
-                </button>
-                <div className="menu-utility-grid grid grid-cols-2 gap-2">
-                  <button className="menu-utility sf-btn" onClick={openSettings} data-ui-sound="open"><b>02</b><span>SETTINGS</span><i>↗</i></button>
-                  <button className="menu-utility sf-btn" onClick={toggleHelp} data-ui-sound="toggle"><b>03</b><span>CONTROLS</span><i>↗</i></button>
-                  <button className="menu-utility sf-btn" onClick={openUpdates} data-ui-sound="open"><b>04</b><span>UPDATE LOG</span><i>↗</i></button>
-                  <button className={`menu-utility sf-btn ${soundEnabled ? 'on' : ''}`} onClick={toggleSound} disabled={!game} data-ui-sound="toggle"><b>05</b><span>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</span><i>{soundEnabled ? '♫' : '×'}</i></button>
-                </div>
-              </nav>
-            </div>
-            <footer className="menu-footer mt-5 flex items-center justify-between gap-3"><span>ARENA SYSTEMS · SANDBOX AVAILABLE IN SETTINGS</span><span>ALL SYSTEMS {game ? 'ONLINE' : 'BOOTING'}</span></footer>
+          {/* Reactive sight: opens into a four-corner lock when a hostile sits under the reticle. */}
+          <div className={`combat-reticle absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ${snap.target ? 'combat-reticle-locked' : ''}`} aria-hidden="true">
+            <i className="reticle-core" /><span className="reticle-corner reticle-nw" /><span className="reticle-corner reticle-ne" />
+            <span className="reticle-corner reticle-sw" /><span className="reticle-corner reticle-se" />
+            {snap.target && <b>LOCK</b>}
           </div>
         </div>
       )}
-      {showSettings && showGui && <Settings settings={settings} closing={closingSettings} onChange={changeSettings} onClose={closeSettings} onExited={finishSettingsClose} isFullscreen={isFullscreen} fullscreenError={fullscreenError} onToggleFullscreen={toggleFullscreen} musicAvailable={!!game} musicName={musicName} musicVolume={musicVolume} musicRate={musicRate} musicPlaying={musicPlaying} musicError={musicError} musicDuration={musicDuration} musicTrimStart={musicTrimStart} musicTrimEnd={musicTrimEnd} onMusicFile={loadMusicFile} onMusicVolume={changeMusicVolume} onMusicRate={changeMusicRate} onMusicTrimStart={changeMusicTrimStart} onMusicTrimEnd={changeMusicTrimEnd} onToggleMusic={toggleMusic} />}
+      {showTitle && !fatal && (
+        <div className={`title-screen absolute inset-0 z-40 grid place-items-center p-5 pointer-events-auto ${leavingTitle ? 'title-screen-exit' : ''}`} onAnimationEnd={e => { if (e.target === e.currentTarget && e.animationName === 'ui-title-shutdown' && leavingTitle) setShowTitle(false); }}>
+          <div className="title-card main-menu-card sf-panel" onPointerMove={moveMenuCard} onPointerLeave={resetMenuCard}>
+            <header className="menu-header">
+              <div className="menu-branding">
+                <div className="title-mark" aria-hidden="true"><span>MC</span><i /></div>
+                <div className="menu-brand-copy">
+                  <p className="menu-overline font-orb">MAGICCLOUD <span>//</span> FIELD OPERATIONS</p>
+                  <h1 className="menu-wordmark font-orb">MAGIC<span className="menu-title-second">CLOUD</span></h1>
+                </div>
+              </div>
+              <div className="menu-head-controls">
+                <div className="menu-release font-orb"><i aria-hidden="true" />BUILD 1.5.9 <span>LIVE</span></div>
+                <button className={`menu-install font-orb ${installPromptReady ? 'is-ready' : ''}`} type="button" onClick={installApp} disabled={appInstalled} aria-label={appInstalled ? 'MagicCloud is already installed' : installPromptReady ? 'Install MagicCloud app' : 'Show instructions to install MagicCloud'} aria-describedby={installMessage ? 'menu-install-note' : undefined} data-ui-sound="open">
+                  <span className="menu-install-icon" aria-hidden="true">{appInstalled ? '✓' : '↓'}</span>
+                  <span>{appInstalled ? 'INSTALLED' : 'INSTALL APP'}</span>
+                  <i aria-hidden="true">{installPromptReady ? '↗' : ''}</i>
+                </button>
+              </div>
+            </header>
+
+            <div className="menu-hairline" aria-hidden="true"><i /></div>
+
+            <div className="menu-columns">
+              <section className="menu-brief" aria-label="Arena briefing">
+                <div className="menu-live-line font-orb"><span className="menu-live-orb" />WEATHER LINK ACTIVE <b>FIELD 01</b></div>
+                <p className="menu-tagline font-orb">MASTER THE STORM.<br /><span>OWN THE ARENA.</span></p>
+                <p className="menu-copy">Elemental power. Living weather. One open battlefield.</p>
+                <div className="menu-readouts" aria-label="Arena status">
+                  <div><b>FIELD</b><span><i />OPEN</span></div>
+                  <div><b>WEATHER</b><span><i />LIVE</span></div>
+                  <div><b>HOSTILES</b><span className="menu-hot"><i />ACTIVE</span></div>
+                </div>
+                <div className="menu-threat-strip"><span>THREAT INDEX</span><b>STALKER <i>·</i> CASTER <i>·</i> BRUTE</b></div>
+              </section>
+
+              <nav className="menu-actions" aria-label="Main menu">
+                <div className="menu-nav-heading font-orb"><span>SELECT OPERATION</span><b>01 — 04</b></div>
+                <button className="play-btn menu-enter" type="button" onClick={enterArena} data-ui-sound="transition" disabled={!game || leavingTitle}>
+                  <span className="menu-action-index">01 / DEPLOY</span>
+                  <strong>{leavingTitle ? 'ENTERING ARENA' : 'DROP INTO ARENA'}</strong>
+                  <small>BREACH THE CONTAINMENT FIELD</small>
+                  <i aria-hidden="true">↗</i>
+                </button>
+                {fullscreenError && <p className="menu-fullscreen-note" role="status" aria-live="polite">Fullscreen unavailable; continuing windowed. {fullscreenError}</p>}
+                <div className="menu-utility-grid">
+                  <button className="menu-utility sf-btn" type="button" onClick={openSettings} data-ui-sound="open"><b>02</b><span>SETTINGS</span><i aria-hidden="true">⚙</i></button>
+                  <button className="menu-utility sf-btn" type="button" onClick={toggleMenuControls} aria-expanded={showMenuControls} data-ui-sound="toggle"><b>03</b><span>CONTROLS</span><i aria-hidden="true">⌘</i></button>
+                  <button className="menu-utility menu-update-utility sf-btn" type="button" onClick={openUpdates} aria-label={releaseNotesUnseen ? 'Open new update notes, version 1.5.9' : 'Open update log'} title={releaseNotesUnseen ? 'New release notes · v1.5.9' : 'Release notes · v1.5.9'} data-ui-sound="open"><b>04</b><span>UPDATE LOG</span><i className={releaseNotesUnseen ? 'menu-new-badge' : ''} aria-hidden="true">{releaseNotesUnseen ? 'NEW' : '✦'}</i></button>
+                  <button className={`menu-utility sf-btn ${soundEnabled ? 'on' : ''}`} type="button" onClick={toggleSound} disabled={!game} aria-pressed={soundEnabled} data-ui-sound="none"><b>05</b><span>{soundEnabled ? 'SOUND ON' : 'SOUND OFF'}</span><i aria-hidden="true">{soundEnabled ? '♫' : '×'}</i></button>
+                </div>
+              </nav>
+            </div>
+
+            {showMenuControls && <div className="menu-control-note" id="menu-control-note"><b>CONTROLS</b><span>WASD MOVE · SHIFT SPRINT · SPACE JUMP · RMB ORBIT · LMB ATTACK</span><span>Z/X/C/V/B/F/G/N/M/L/K/J SKILLS</span></div>}
+            {installMessage && <div className="menu-install-note" id="menu-install-note" role="status" aria-live="polite"><span>{installMessage}</span><button type="button" aria-label="Dismiss install message" onClick={() => setInstallMessage('')}>×</button></div>}
+            <footer className="menu-footer font-orb"><span><i />ARENA SYSTEMS · {game ? 'ONLINE' : 'BOOTING'}</span><span>WASD <i>·</i> SPACE <i>·</i> RMB ORBIT</span></footer>
+          </div>
+        </div>
+      )}
+      {showSettings && showGui && <Settings settings={settings} closing={closingSettings} onChange={changeSettings} onClose={closeSettings} onExited={finishSettingsClose} isFullscreen={isFullscreen} fullscreenError={fullscreenError} onToggleFullscreen={toggleFullscreen} musicAvailable={!!game} musicName={musicName} masterVolume={masterVolume} onMasterVolume={changeMasterVolume} musicVolume={musicVolume} musicRate={musicRate} musicPlaying={musicPlaying} musicError={musicError} musicDuration={musicDuration} musicTrimStart={musicTrimStart} musicTrimEnd={musicTrimEnd} onMusicFile={loadMusicFile} onMusicVolume={changeMusicVolume} onMusicRate={changeMusicRate} onMusicTrimStart={changeMusicTrimStart} onMusicTrimEnd={changeMusicTrimEnd} onToggleMusic={toggleMusic} />}
       {showUpdates && showTitle && <UpdateLog closing={closingUpdates} onClose={closeUpdates} onExited={finishUpdatesClose} />}
       {game && snap && !showTitle && (
         <button className={`gui-toggle ${showGui ? 'gui-toggle-visible' : 'gui-toggle-hidden'}`} onClick={toggleGui} data-ui-sound={showGui ? "close" : "open"} aria-label={showGui ? 'Hide interface' : 'Show interface'} title={showGui ? 'Hide interface' : 'Show interface'}>

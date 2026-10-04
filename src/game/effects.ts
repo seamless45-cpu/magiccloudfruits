@@ -97,6 +97,32 @@ export function explosion(g: any, pos: THREE.Vector3, r: number, s: ExplosionSty
   g.shake(pos, s.shake ?? Math.min(25, 1.5 + r * 0.12), 0.45);
 }
 
+/** Compact radial flash, expanding ground ring, and sparks for a lightning ground strike. */
+export function lightningImpact(g: any, pos: THREE.Vector3, color = 0xddeeff, radius = 6) {
+  const r = Math.max(1, Math.min(40, radius));
+  const group = new THREE.Group(); group.position.set(pos.x, 0, pos.z);
+  const flash = new THREE.Mesh(GEO.sphereLo, addMat(0xffffff, 1));
+  const halo = new THREE.Mesh(GEO.sphereLo, addMat(color, 0.68));
+  const ring = new THREE.Mesh(GEO.ring, addMat(color, 0.95)); ring.position.y = 0.08;
+  group.add(flash, halo, ring);
+  g.add(new Timed(g, group, 0.52, (k, t) => {
+    const spread = 1 - Math.pow(1 - Math.min(1, t / 0.14), 3), fade = Math.pow(1 - k, 1.35);
+    flash.scale.setScalar(r * (0.08 + spread * 0.36));
+    (flash.material as THREE.MeshBasicMaterial).opacity = fade;
+    halo.scale.set(r * (0.12 + spread * 0.88), r * (0.1 + spread * 0.43), r * (0.12 + spread * 0.88));
+    (halo.material as THREE.MeshBasicMaterial).opacity = 0.58 * fade;
+    ring.scale.setScalar(r * (0.12 + spread * 1.05));
+    (ring.material as THREE.MeshBasicMaterial).opacity = 0.92 * fade;
+  }));
+
+  const sparks = Math.max(14, Math.min(44, Math.round(14 + r * 1.1)));
+  for (let i = 0; i < sparks; i++) {
+    const angle = (i / sparks) * Math.PI * 2 + rnd(-0.12, 0.12), speed = rnd(r * 1.1, r * 2.1);
+    g.fx.spawn(pos.x, 0.35, pos.z, Math.cos(angle) * speed, rnd(5, 15), Math.sin(angle) * speed,
+      i % 3 === 0 ? 0xffffff : color, rnd(0.3, 0.58), rnd(0.24, 0.52), { grav: rnd(12, 20), drag: 0.25 });
+  }
+}
+
 export function shockwave(g: any, pos: THREE.Vector3, r: number, dur = 0.7, color = 0xffffff, opacity = 0.45, dome = true) {
   const grp = new THREE.Group(); grp.position.set(pos.x, 0.05, pos.z);
   const d = new THREE.Mesh(dome ? GEO.dome : GEO.sphere, alphaMat(color, opacity));

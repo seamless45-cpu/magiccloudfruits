@@ -15,7 +15,7 @@
  * No dependencies and no assumptions about the working directory.
  */
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,6 +55,22 @@ for (const target of targets) {
   copyFileSync(built, target);
   const kb = Math.round(readFileSync(target).length / 1024);
   console.log(`published ${path.relative(root, target)} (${kb} KB)`);
+}
+
+// The HTML remains single-file; these small static resources power installability and offline launch.
+const staticAssets = readdirSync(path.join(root, "dist")).filter((name) => name !== "dev.html");
+for (const directory of [root, docsDir]) {
+  for (const asset of staticAssets) {
+    const source = path.join(root, "dist", asset);
+    if (!existsSync(source)) {
+      console.error(`Missing PWA asset in build output: dist/${asset}`);
+      process.exit(1);
+    }
+    const destination = path.join(directory, asset);
+    mkdirSync(path.dirname(destination), { recursive: true });
+    cpSync(source, destination, { recursive: true, force: true });
+    console.log(`published ${path.relative(root, destination)}`);
+  }
 }
 
 console.log(`\nGitHub Pages:   https://seamless45-cpu.github.io/magiccloudfruits/`);
